@@ -33,7 +33,7 @@ parser.add_argument('--thrift-port', help='Thrift server port for table updates'
 parser.add_argument('--num-hosts', help='Number of hosts by subnet',
                     type=int, action="store", default=1)
 parser.add_argument('--num-subnet', help='Number of field site',
-                    type=int, action="store",default=2)
+                    type=int, action="store",default=3)
 parser.add_argument('--mode', choices=['l2', 'l3'], type=str, default='l3')
 parser.add_argument('--json', help='Path to JSON config file',
                     type=str, action="store", required=True)
@@ -136,8 +136,6 @@ def main():
                 print "%s\t%s"% (sw_addr[n], sw_mac[n])
                 h.setARP(sw_addr[n], sw_mac[n])
                 h.setDefaultRoute("dev eth0 via %s" % sw_addr[n])
-
-    #TODO Switch connection
 
     h = net.get('mtu')
     h.describe()

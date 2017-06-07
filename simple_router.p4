@@ -95,6 +95,14 @@ header_type tcp_t {
 
 header tcp_t tcp;
 
+header_type miss_tag_t {
+    fields {
+        value : 8;
+    }
+}
+
+header miss_tag_t miss_tag;
+
 
 header_type flow_meta_t {
     fields {
@@ -183,6 +191,11 @@ parser parse_modbus_dst {
 
 parser parse_modbus {
     extract(modbus);
+    return parse_miss_tag;
+}
+
+parser parse_miss_tag {
+    extract(miss_tag);
     return ingress;
 }
 
@@ -213,6 +226,7 @@ table ipv4_lpm {
     actions {
         set_nhop;
         _drop;
+        _no_op;
     }
     size: 1024;
 }
@@ -228,6 +242,7 @@ table forward {
     actions {
         set_dmac;
         _drop;
+        _no_op;
     }
     size: 512;
 }
@@ -247,12 +262,26 @@ table send_frame {
     size: 256;
 }
 
-//action compute_flow_id(base,nport) {
+//action compute_flow_id(base, nport) {
 //    modify_field_with_hash_based_offset(flow_meta.flow_id,base,flow_tuple,nport);
 //}
 
 action _no_op() {
     no_op();
+}
+
+action add_miss_tag(value, egress_port) {
+    add_header(miss_tag);
+
+    // Set type of tag
+    modify_field(miss_tag.value, value);
+    
+    // Set egress port to reach IDS
+    modify_field(standard_metadata.egress_spec, egress_port);
+}
+
+action redirect_packet(egress_port) {
+    modify_field(standard_metadata.egress_spec, egress_port);
 }
 
 table flow_id {
@@ -266,6 +295,7 @@ table flow_id {
     actions {
         _drop;
         _no_op;
+        add_miss_tag;
         //compute_flow_id;
     }
     size : 100;
@@ -278,20 +308,36 @@ table modbus {
     actions {
         _drop;
         _no_op;
+        add_miss_tag;
     }
     size : 100;
+}
+
+table miss_tag_table {
+    reads {
+        miss_tag.value : exact;
+    }
+    actions {
+        _drop;
+        redirect_packet;
+    }
 }
 
 //Called by the parser
 control ingress {
     if(valid(ipv4) and ipv4.ttl > 0) {
         apply(ipv4_lpm);
-        apply(flow_id);
-        if(tcp.dstPort == 5020 or tcp.srcPort == 5020){
-            if(tcp.syn == 1 or tcp.fin == 1 or (tcp.ack == 1 and tcp.psh == 0)) {
-                
-            } else {
-                apply(modbus);
+        // Check if tag header present
+        if(valid(miss_tag)){
+            apply(miss_tag_table);
+        } else {
+            apply(flow_id);
+            if (tcp.dstPort == 5020 or tcp.srcPort == 5020){
+                if(tcp.syn == 1 or tcp.fin == 1 or (tcp.ack == 1 and tcp.psh == 0)) {
+                    //nothing to do here                
+                } else {
+                    apply(modbus);
+                }
             }
         }
         apply(forward);
