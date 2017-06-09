@@ -7,7 +7,7 @@ int handler(struct nfq_q_handle *myQueue, struct nfgenmsg *msg, struct nfq_data 
     int id = 0;
     struct nfqnl_msg_packet_hdr *header;
 
-    if( header = nfq_get_msg_packet_hdr(pkt) )
+    if( (header = nfq_get_msg_packet_hdr(pkt)) )
         id = ntohl(header->packet_id);
 
     unsigned char *pktData;
