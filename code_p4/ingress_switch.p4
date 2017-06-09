@@ -33,6 +33,8 @@ control ingress {
             }
         }
         apply(forward);
+    } else if (valid(arp)) {
+        apply(arp_response);
     }
 }
 

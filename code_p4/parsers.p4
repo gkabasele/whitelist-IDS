@@ -15,8 +15,14 @@ parser parse_ethernet {
     extract(ethernet);
     return select(latest.etherType) {
         ETHERTYPE_IPV4 : parse_ipv4;
+        ETHERTYPE_ARP  : parse_arp;
         default: ingress;
     }
+}
+
+parser parse_arp {
+    extract(arp);
+    return ingress;
 }
 
 parser parse_ipv4 {

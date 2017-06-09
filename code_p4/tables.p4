@@ -19,12 +19,22 @@ action rewrite_mac(smac) {
     modify_field(ethernet.srcAddr, smac);
 }
 
-//action compute_flow_id(base, nport) {
-//    modify_field_with_hash_based_offset(flow_meta.flow_id,base,flow_tuple,nport);
-//}
 
 action _no_op() {
     no_op();
+}
+
+action respond_arp(dmac) {
+    modify_field(tmp_arp.ipAddr, arp.dstAddr);
+    modify_field(tmp_arp.hwAddr, arp.srcMac);
+
+    modify_field(arp.dstMac, arp.srcMac);
+    modify_field(arp.dstAddr, arp.srcAddr);
+
+    modify_field(arp.srcMac, dmac);
+    modify_field(arp.srcAddr, tmp_arp.ipAddr);
+
+    modify_field(standard_metadata.egress_spec, standard_metadata.ingress_port);
 }
 
 action add_miss_tag(value, egress_port) {
@@ -39,6 +49,16 @@ action add_miss_tag(value, egress_port) {
 
 action redirect_packet(egress_port) {
     modify_field(standard_metadata.egress_spec, egress_port);
+}
+
+table arp_response {
+    reads {
+        arp.dstAddr : exact;
+    }
+    actions {
+        respond_arp;
+        _drop;
+    }
 }
 
 

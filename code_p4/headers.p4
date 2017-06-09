@@ -27,6 +27,21 @@ header_type ipv4_t {
 
 header ipv4_t ipv4;
 
+header_type arp_t {
+    fields {
+        hwType : 16;
+        protoType : 16;
+        hwSize : 8;
+        protoSize: 8;
+        opcode : 16; // req or res 
+        srcMac : 48;
+        srcAddr : 32;
+        dstMac : 48;
+        dstAddr : 32;
+    }
+}
+
+header arp_t arp;
 
 field_list ipv4_checksum_list {
         ipv4.version;
@@ -116,4 +131,11 @@ header_type routing_metadata_t {
 }
 metadata routing_metadata_t routing_metadata;
 
+header_type tmp_t {
+    fields {
+        ipAddr : 32;
+        hwAddr : 48;
+    }
+}
 
+metadata tmp_t tmp_arp;
