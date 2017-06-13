@@ -105,7 +105,8 @@ header miss_tag_t miss_tag;
 
 header_type flow_meta_t {
     fields {
-        flow_id : 16;
+        expected_sport : 16;
+        expected_dport : 16;
     }
 }
 

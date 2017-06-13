@@ -51,6 +51,11 @@ action redirect_packet(egress_port) {
     modify_field(standard_metadata.egress_spec, egress_port);
 }
 
+action add_expected_port(sport, dport) {
+    modify_field(flow_meta.expected_sport, sport);
+    modify_field(flow_meta.expected_dport, dport);
+}
+
 table arp_response {
     reads {
         arp.dstAddr : exact;
@@ -108,15 +113,30 @@ table flow_id {
         ipv4.srcAddr : exact;
         ipv4.dstAddr : exact;
         ipv4.protocol : exact;
-        tcp.srcPort : exact;
-        tcp.dstPort : exact;
+       // tcp.srcPort : exact;
+       // tcp.dstPort : exact;
+    }
+    actions {
+        _drop;
+        _no_op;
+        add_miss_tag;
+        add_expected_port;
+    }
+    size : 100;
+}
+
+// table for expected port given ip addresses
+table ex_port {
+    reads {
+        flow_meta.expected_sport: exact;
+        flow_meta.expected_dport: exact;
     }
     actions {
         _drop;
         _no_op;
         add_miss_tag;
     }
-    size : 100;
+    size: 100;
 }
 
 

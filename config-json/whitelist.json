@@ -244,8 +244,32 @@
             "max_length": null
         },
         {
-            "name": "miss_tag_t",
+            "name": "udp_t",
             "id": 5,
+            "fields": [
+                [
+                    "srcPort",
+                    16
+                ],
+                [
+                    "dstPort",
+                    16
+                ],
+                [
+                    "len",
+                    16
+                ],
+                [
+                    "checksum",
+                    16
+                ]
+            ],
+            "length_exp": null,
+            "max_length": null
+        },
+        {
+            "name": "miss_tag_t",
+            "id": 6,
             "fields": [
                 [
                     "value",
@@ -256,8 +280,24 @@
             "max_length": null
         },
         {
+            "name": "flow_meta_t",
+            "id": 7,
+            "fields": [
+                [
+                    "expected_sport",
+                    16
+                ],
+                [
+                    "expected_dport",
+                    16
+                ]
+            ],
+            "length_exp": null,
+            "max_length": null
+        },
+        {
             "name": "modbus_t",
-            "id": 6,
+            "id": 8,
             "fields": [
                 [
                     "transId",
@@ -285,7 +325,7 @@
         },
         {
             "name": "routing_metadata_t",
-            "id": 7,
+            "id": 9,
             "fields": [
                 [
                     "nhop_ipv4",
@@ -301,7 +341,7 @@
         },
         {
             "name": "tmp_t",
-            "id": 8,
+            "id": 10,
             "fields": [
                 [
                     "ipAddr",
@@ -348,26 +388,38 @@
             "metadata": false
         },
         {
-            "name": "miss_tag",
+            "name": "udp",
             "id": 5,
+            "header_type": "udp_t",
+            "metadata": false
+        },
+        {
+            "name": "miss_tag",
+            "id": 6,
             "header_type": "miss_tag_t",
             "metadata": false
         },
         {
+            "name": "flow_meta",
+            "id": 7,
+            "header_type": "flow_meta_t",
+            "metadata": true
+        },
+        {
             "name": "modbus",
-            "id": 6,
+            "id": 8,
             "header_type": "modbus_t",
             "metadata": false
         },
         {
             "name": "routing_metadata",
-            "id": 7,
+            "id": 9,
             "header_type": "routing_metadata_t",
             "metadata": true
         },
         {
             "name": "tmp_arp",
-            "id": 8,
+            "id": 10,
             "header_type": "tmp_t",
             "metadata": true
         }
@@ -466,6 +518,12 @@
                             "value": "0x06",
                             "mask": null,
                             "next_state": "parse_tcp"
+                        },
+                        {
+                            "type": "hexstr",
+                            "value": "0x11",
+                            "mask": null,
+                            "next_state": "parse_udp"
                         },
                         {
                             "type": "default",
@@ -590,8 +648,32 @@
                     ]
                 },
                 {
-                    "name": "parse_arp",
+                    "name": "parse_udp",
                     "id": 7,
+                    "parser_ops": [
+                        {
+                            "op": "extract",
+                            "parameters": [
+                                {
+                                    "type": "regular",
+                                    "value": "udp"
+                                }
+                            ]
+                        }
+                    ],
+                    "transition_key": [],
+                    "transitions": [
+                        {
+                            "type": "default",
+                            "value": null,
+                            "mask": null,
+                            "next_state": null
+                        }
+                    ]
+                },
+                {
+                    "name": "parse_arp",
+                    "id": 8,
                     "parser_ops": [
                         {
                             "op": "extract",
@@ -627,54 +709,16 @@
                 "ipv4",
                 "tcp",
                 "modbus",
-                "miss_tag"
+                "miss_tag",
+                "udp"
             ]
         }
     ],
     "meter_arrays": [],
     "actions": [
         {
-            "name": "redirect_packet",
-            "id": 0,
-            "runtime_data": [
-                {
-                    "name": "egress_port",
-                    "bitwidth": 9
-                }
-            ],
-            "primitives": [
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "standard_metadata",
-                                "egress_spec"
-                            ]
-                        },
-                        {
-                            "type": "runtime_data",
-                            "value": 0
-                        }
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "_no_op",
-            "id": 1,
-            "runtime_data": [],
-            "primitives": [
-                {
-                    "op": "no_op",
-                    "parameters": []
-                }
-            ]
-        },
-        {
             "name": "respond_arp",
-            "id": 2,
+            "id": 0,
             "runtime_data": [
                 {
                     "name": "dmac",
@@ -815,65 +859,19 @@
             ]
         },
         {
-            "name": "add_miss_tag",
-            "id": 3,
-            "runtime_data": [
-                {
-                    "name": "value",
-                    "bitwidth": 8
-                },
-                {
-                    "name": "egress_port",
-                    "bitwidth": 9
-                }
-            ],
+            "name": "_drop",
+            "id": 1,
+            "runtime_data": [],
             "primitives": [
                 {
-                    "op": "add_header",
-                    "parameters": [
-                        {
-                            "type": "header",
-                            "value": "miss_tag"
-                        }
-                    ]
-                },
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "miss_tag",
-                                "value"
-                            ]
-                        },
-                        {
-                            "type": "runtime_data",
-                            "value": 0
-                        }
-                    ]
-                },
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "standard_metadata",
-                                "egress_spec"
-                            ]
-                        },
-                        {
-                            "type": "runtime_data",
-                            "value": 1
-                        }
-                    ]
+                    "op": "drop",
+                    "parameters": []
                 }
             ]
         },
         {
             "name": "set_nhop",
-            "id": 4,
+            "id": 2,
             "runtime_data": [
                 {
                     "name": "nhop_ipv4",
@@ -936,6 +934,45 @@
             ]
         },
         {
+            "name": "_no_op",
+            "id": 3,
+            "runtime_data": [],
+            "primitives": [
+                {
+                    "op": "no_op",
+                    "parameters": []
+                }
+            ]
+        },
+        {
+            "name": "redirect_packet",
+            "id": 4,
+            "runtime_data": [
+                {
+                    "name": "egress_port",
+                    "bitwidth": 9
+                }
+            ],
+            "primitives": [
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "standard_metadata",
+                                "egress_spec"
+                            ]
+                        },
+                        {
+                            "type": "runtime_data",
+                            "value": 0
+                        }
+                    ]
+                }
+            ]
+        },
+        {
             "name": "set_dmac",
             "id": 5,
             "runtime_data": [
@@ -992,13 +1029,107 @@
             ]
         },
         {
-            "name": "_drop",
+            "name": "add_expected_port",
             "id": 7,
-            "runtime_data": [],
+            "runtime_data": [
+                {
+                    "name": "sport",
+                    "bitwidth": 16
+                },
+                {
+                    "name": "dport",
+                    "bitwidth": 16
+                }
+            ],
             "primitives": [
                 {
-                    "op": "drop",
-                    "parameters": []
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "flow_meta",
+                                "expected_sport"
+                            ]
+                        },
+                        {
+                            "type": "runtime_data",
+                            "value": 0
+                        }
+                    ]
+                },
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "flow_meta",
+                                "expected_dport"
+                            ]
+                        },
+                        {
+                            "type": "runtime_data",
+                            "value": 1
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "add_miss_tag",
+            "id": 8,
+            "runtime_data": [
+                {
+                    "name": "value",
+                    "bitwidth": 8
+                },
+                {
+                    "name": "egress_port",
+                    "bitwidth": 9
+                }
+            ],
+            "primitives": [
+                {
+                    "op": "add_header",
+                    "parameters": [
+                        {
+                            "type": "header",
+                            "value": "miss_tag"
+                        }
+                    ]
+                },
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "miss_tag",
+                                "value"
+                            ]
+                        },
+                        {
+                            "type": "runtime_data",
+                            "value": 0
+                        }
+                    ]
+                },
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "standard_metadata",
+                                "egress_spec"
+                            ]
+                        },
+                        {
+                            "type": "runtime_data",
+                            "value": 1
+                        }
+                    ]
                 }
             ]
         }
@@ -1138,6 +1269,45 @@
                     "actions": [
                         "_drop",
                         "_no_op",
+                        "add_miss_tag",
+                        "add_expected_port"
+                    ],
+                    "next_tables": {
+                        "__HIT__": "ex_port",
+                        "__MISS__": "_condition_2"
+                    },
+                    "base_default_next": "_condition_2"
+                },
+                {
+                    "name": "ex_port",
+                    "id": 4,
+                    "match_type": "exact",
+                    "type": "simple",
+                    "max_size": 100,
+                    "with_counters": false,
+                    "direct_meters": null,
+                    "support_timeout": false,
+                    "key": [
+                        {
+                            "match_type": "exact",
+                            "target": [
+                                "flow_meta",
+                                "expected_sport"
+                            ],
+                            "mask": null
+                        },
+                        {
+                            "match_type": "exact",
+                            "target": [
+                                "flow_meta",
+                                "expected_dport"
+                            ],
+                            "mask": null
+                        }
+                    ],
+                    "actions": [
+                        "_drop",
+                        "_no_op",
                         "add_miss_tag"
                     ],
                     "next_tables": {
@@ -1149,7 +1319,7 @@
                 },
                 {
                     "name": "modbus",
-                    "id": 4,
+                    "id": 5,
                     "match_type": "exact",
                     "type": "simple",
                     "max_size": 100,
@@ -1180,7 +1350,7 @@
                 },
                 {
                     "name": "miss_tag_table",
-                    "id": 5,
+                    "id": 6,
                     "match_type": "exact",
                     "type": "simple",
                     "max_size": 16384,
@@ -1431,7 +1601,7 @@
             "tables": [
                 {
                     "name": "send_frame",
-                    "id": 6,
+                    "id": 7,
                     "match_type": "exact",
                     "type": "simple",
                     "max_size": 256,

@@ -688,7 +688,7 @@ class Controller():
             raise UIn_ResourceError(type_name, name)
         return array[name]
 
-    def table_add_entry(self, table_name, action_name, match_key, action_params):
+    def table_add_entry(self, table_name, action_name, match_key, action_params, prio):
         "Add entry to a match table: table_add <table name> <action name> <match fields> => <action parameters> [priority]"
         table = self.get_res("table", table_name, TABLES)
         if action_name not in table.actions:
@@ -698,7 +698,7 @@ class Controller():
         
         if table.match_type in {MatchType.TERNARY, MatchType.RANGE}:
             try:
-                priority = int(args.pop(-1))
+                priority = prio
             except:
                 raise UIn_Error(
                     "Table is ternary, but could not extract a valid priority from args"
@@ -729,7 +729,19 @@ class Controller():
         
         print "Entry has been added with handle", entry_handle
 
-    
+    def table_default_entry(self, table_name, action_name, action_params):
+        table = self.get_res("table", table_name, TABLES)
+        if action_name not in table.actions:
+            raise UIn_Error(
+                "Table %s has no action %s" % (table_name, action_name)
+            )
+        action = ACTIONS[action_name]
+        if len(action_params) != action.num_params():
+            raise UIn_Error(
+                "Action %s needs %d parameters" % (action_name, action.num_params())
+            )
+        runtime_data = parse_runtime_data(action, action_params)
+        self.client.bm_mt_set_default_action(0, table_name, action_name, runtime_data)
 
 def load_json_config(standard_client=None, json_path=None):
     load_json_str(utils.get_json_config(standard_client, json_path))
@@ -742,9 +754,38 @@ def main():
     ) 
     load_json_config(standard_client)
     controller = Controller(standard_client, mc_client)
+    controller.table_default_entry('send_frame','_drop',[])
+    controller.table_default_entry('forward','_no_op',[])
+    controller.table_default_entry('ipv4_lpm','_no_op',[])
+    controller.table_default_entry('flow_id','add_miss_tag',['10','4'])
+    controller.table_default_entry('modbus','add_miss_tag',['20','4'])
+    controller.table_default_entry('miss_tag_table','_drop',[])
+    controller.table_default_entry('arp_response','_drop',[])
 
-    controller.table_add_entry('modbus', '_no_op',['1'],[])
-    controller.table_add_entry('ipv4_lpm', 'set_nhop', ['10.0.10.1/32'],['10.0.10.1','1'])
+    controller.table_add_entry('send_frame', 'rewrite_mac', ['1'], ['00:aa:bb:cc:dd:ee'], 0)
+    controller.table_add_entry('send_frame', 'rewrite_mac', ['2'], ['00:aa:bb:cc:dd:ee'], 0)
+    controller.table_add_entry('send_frame', 'rewrite_mac', ['3'], ['00:aa:bb:cc:dd:ee'], 0)
+    controller.table_add_entry('send_frame', 'rewrite_mac', ['4'], ['00:aa:bb:cc:dd:ee'], 0)
+
+    controller.table_add_entry('forward', 'set_dmac', ['10.0.10.1'], ['00:05:00:00:00:00'], 0)
+    controller.table_add_entry('forward', 'set_dmac', ['10.0.20.1'], ['00:04:00:00:01:00'], 0)
+    controller.table_add_entry('forward', 'set_dmac', ['10.0.30.1'], ['00:04:00:00:02:00'], 0)
+
+    controller.table_add_entry('ipv4_lpm', 'set_nhop', ['10.0.10.1/32'],['10.0.10.1','1'], 0)
+    controller.table_add_entry('ipv4_lpm', 'set_nhop', ['10.0.20.1/32'],['10.0.20.1','1'], 0)
+    controller.table_add_entry('ipv4_lpm', 'set_nhop', ['10.0.30.1/32'],['10.0.30.1','1'], 0)
+
+    controller.table_add_entry('flow_id', '_no_op', ['10.0.10.1', '10.0.20.1', '6', '3000', '5020'], [], 0)
+    controller.table_add_entry('flow_id', '_no_op', ['10.0.20.1', '10.0.10.1', '6', '5020', '3000'], [], 0)
+
+    controller.table_add_entry('modbus', '_no_op',['1'],[],0)
+    controller.table_add_entry('modbus', '_no_op',['5'],[],0)
+
+    controller.table_add_entry('miss_tag_table', 'redirect_packet', ['10'], ['4'], 0)
+    controller.table_add_entry('miss_tag_table', 'redirect_packet', ['20'], ['4'], 0)
+
+    controller.table_add_entry('arp_response', 'respond_arp', ['10.0.10.10'], ['00:aa:bb:cc:dd:ee'], 0)
+
 
 if __name__ == '__main__':
     main()

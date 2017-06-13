@@ -23,7 +23,11 @@ control ingress {
         if(valid(miss_tag)){
             apply(miss_tag_table);
         } else {
-            apply(flow_id);
+            apply(flow_id){
+                hit{
+                    apply(ex_port);
+                }
+            }
             if (tcp.dstPort == 5020 or tcp.srcPort == 5020){
                 if(tcp.syn == 1 or tcp.fin == 1 or (tcp.ack == 1 and tcp.psh == 0)) {
                     //nothing to do here                
