@@ -81,6 +81,19 @@ header_type tcp_t {
 
 header tcp_t tcp;
 
+header_type udp_t {
+    fields {
+        srcPort : 16;
+        dstPort : 16;
+        len : 16;
+        checksum : 16;
+    }
+
+
+}
+
+header udp_t udp;
+
 header_type miss_tag_t {
     fields {
         value : 8;

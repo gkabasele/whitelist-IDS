@@ -108,17 +108,17 @@ table flow_id {
         ipv4.srcAddr : exact;
         ipv4.dstAddr : exact;
         ipv4.protocol : exact;
-        //tcp.srcPort : exact;
-        //tcp.dstPort : exact;
+        tcp.srcPort : exact;
+        tcp.dstPort : exact;
     }
     actions {
         _drop;
         _no_op;
         add_miss_tag;
-        //compute_flow_id;
     }
     size : 100;
 }
+
 
 table modbus {
     reads {

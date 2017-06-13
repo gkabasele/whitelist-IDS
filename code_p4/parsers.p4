@@ -28,9 +28,16 @@ parser parse_arp {
 parser parse_ipv4 {
     extract(ipv4);
     return select(latest.protocol) {
-       IP_PROTOCOLS_TCP : parse_tcp;
-       default: ingress; 
+        IP_PROTOCOLS_TCP : parse_tcp;
+        IP_PROTOCOLS_UDP : parse_udp; 
+        default: ingress; 
     }
+}
+
+parser parse_udp {
+    extract(udp);
+    //TODO check DNP protocols
+    return ingress;
 }
 
 parser parse_tcp {
