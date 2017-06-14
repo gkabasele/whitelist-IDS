@@ -663,8 +663,56 @@ def parse_bool(s):
         pass
     raise UIn_Error("Invalid bool parameter")
 
+def create_switches(filename):
+
+    json_data=open(filename)
+    topo = json.load(json_data)
+    switches = []
+    for sw in topo['switches']:
+        sw_id = sw['id']
+        ip_addr = sw['ip_address']
+        port = sw['port']
+        resp = sw['resp_network']
+        routing_table = sw['routing_table']
+        arp_table = sw['arp_table']
+        ids_port = sw['ids_port']
+        interfaces = sw['interfaces']
+    
+        switch = Switch(sw_id, 
+                        ip_addr,
+                        port, 
+                        resp,
+                        interfaces,
+                        ids_port, 
+                        routing_table,
+                        arp_table)
+        switches.append(switch)
+    
+    json_data.close() 
+    return switches
+
+class Switch():
+    '''
+        sw_id : Id of the switch
+        ip_address: IP address used by the thrift server
+        port : port used by thrift server
+        resp : list of address that the switch handles
+        interface: list of interface the switch (name:mac)
+        ids_port: port to reach the ids
+        routing_table : dest ip : port
+    '''
+    def __init__(self, sw_id, ip_addr, port, resp, interfaces, ids_port, routing_table, arp_table):
+        self.sw_id = sw_id
+        self.ip_address = ip_addr
+        self.port = port
+        self.resp = resp
+        self.interfaces = interfaces
+        self.ids_port = port
+        self.routing_table = routing_table
+        self.arp_table = arp_table
 
 class Controller():
+
 
     @staticmethod
     def get_thrift_services(pre_type):
@@ -680,7 +728,12 @@ class Controller():
         return services
 
     def __init__(self, standard_client, mc_client=None):
-        self.client = standard_client
+        self.clients = {}
+        self.switches = {}
+
+    def add_client(self, id_client, standard_client, switch):
+        self.clients[id_client] = standard_client
+        self.switches[id_client] = switch
         self.mc_client = mc_client
 
     def get_res(self, type_name, name, array):
@@ -753,6 +806,7 @@ def main():
          Controller.get_thrift_services(PreType.SimplePre)
     ) 
     load_json_config(standard_client)
+
     controller = Controller(standard_client, mc_client)
     controller.table_default_entry('send_frame','_drop',[])
     controller.table_default_entry('forward','_no_op',[])
