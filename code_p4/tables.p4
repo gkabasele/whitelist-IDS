@@ -52,6 +52,8 @@ action redirect_packet(egress_port) {
 }
 
 action add_expected_port(sport, dport) {
+    modify_field(flow_meta.dstAddr, ipv4.dstAddr);
+    modify_field(flow_meta.srcAddr, ipv4.srcAddr);
     modify_field(flow_meta.expected_sport, sport);
     modify_field(flow_meta.expected_dport, dport);
 }
@@ -128,6 +130,8 @@ table flow_id {
 // table for expected port given ip addresses
 table ex_port {
     reads {
+        flow_meta.srcAddr : exact;
+        flow_meta.dstAddr : exact;
         flow_meta.expected_sport: exact;
         flow_meta.expected_dport: exact;
     }

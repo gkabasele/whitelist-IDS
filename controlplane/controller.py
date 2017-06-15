@@ -3,6 +3,8 @@ import sys
 import struct
 import json
 import inspect
+from netaddr import IPNetwork
+from scapy.all import *
 
 from functools import wraps
 import  bmpy_utils as utils
@@ -17,6 +19,45 @@ try:
     from bm_runtime.simple_pre_lag import SimplePreLAG
 except:
     pass
+
+class ModbusHeader(Packet):
+    name="ModbusHeader"
+    fields_desc=[
+        ShortField("transactionID",0),
+        ShortField("protocolID",0),
+        ShortField("length",6),
+        ByteField("unitID",0),
+        ByteField("funcode",1)
+    ]
+
+bind_layers(TCP, ModbusHeader, dport=5020)
+bind_layers(TCP, ModbusHeader, sport=5020)
+
+# Table name
+SEND_FRAME = 'send_frame'
+FORWARD = 'forward'
+IPV4_LPM = 'ipv4_lpm'
+FLOW_ID = 'flow_id'
+MODBUS = 'modbus'
+EX_PORT = 'ex_port'
+MISS_TAG= 'miss_tag_table'
+ARP_RESP = 'arp_response'
+
+# Action name
+DROP = '_drop'
+NO_OP = '_no_op'
+ADD_TAG = 'add_miss_tag'
+REWRITE = 'rewrite_mac'
+DMAC = 'set_dmac'
+NHOP = 'set_nhop'
+ADD_PORT = 'add_expected_port'
+REDIRECT = 'redirect_packet'
+RESP = 'respond_arp'
+
+# TAG MISS
+IP_MISS = 10
+PORT_MISS = 20
+FUN_MISS = 30
 
 def enum(type_name, *sequential, **named):
     enums = dict(zip(sequential, range(len(sequential))), **named)
@@ -37,6 +78,7 @@ def enum(type_name, *sequential, **named):
 PreType = enum('PreType', 'None', 'SimplePre', 'SimplePreLAG')
 MeterType = enum('MeterType', 'packets', 'bytes')
 TableType = enum('TableType', 'simple', 'indirect', 'indirect_ws')
+
 
 def bytes_to_string(byte_array):
     form = 'B' * len(byte_array)
@@ -703,13 +745,24 @@ class Switch():
     '''
     def __init__(self, sw_id, ip_addr, port, resp, interfaces, ids_port, routing_table, arp_table):
         self.sw_id = sw_id
-        self.ip_address = ip_addr
+        self.ip_address = IPNetwork(ip_addr)
         self.port = port
-        self.resp = resp
+        self.resp = []
+        for network in resp:
+            ip_network = IPNetwork(network)
+            self.resp.append(ip_network)
         self.interfaces = interfaces
         self.ids_port = port
         self.routing_table = routing_table
         self.arp_table = arp_table
+
+    def is_responsible(self,ip_addr):
+        r = False
+        for network in self.resp:
+            no_resp = (network.cidr == ip_addr.cidr)
+            if no_resp:
+                break
+        return r
 
 class Controller():
 
@@ -727,9 +780,10 @@ class Controller():
 
         return services
 
-    def __init__(self, standard_client, mc_client=None):
+    def __init__(self):
         self.clients = {}
         self.switches = {}
+        self.history = {}
 
     def add_client(self, id_client, standard_client, switch):
         self.clients[id_client] = standard_client
@@ -741,7 +795,7 @@ class Controller():
             raise UIn_ResourceError(type_name, name)
         return array[name]
 
-    def table_add_entry(self, table_name, action_name, match_key, action_params, prio):
+    def table_add_entry(self, client,table_name, action_name, match_key, action_params, prio=0):
         "Add entry to a match table: table_add <table name> <action name> <match fields> => <action parameters> [priority]"
         table = self.get_res("table", table_name, TABLES)
         if action_name not in table.actions:
@@ -767,7 +821,6 @@ class Controller():
                 "Table %s needs %d key fields" % (table_name, table.num_key_fields())
             )
         
-        #runtime_data = self.parse_runtime_data(action, action_params)
         runtime_data = parse_runtime_data(action, action_params)
         
         match_key = parse_match_key(table, match_key)
@@ -775,14 +828,14 @@ class Controller():
         print "Adding entry to", MatchType.to_str(table.match_type), "match table", table_name
         
         
-        entry_handle = self.client.bm_mt_add_entry(
+        entry_handle = client.bm_mt_add_entry(
             0, table_name, match_key, action_name, runtime_data,
             BmAddEntryOptions(priority = priority)
         )
         
         print "Entry has been added with handle", entry_handle
 
-    def table_default_entry(self, table_name, action_name, action_params):
+    def table_default_entry(self, client,table_name, action_name, action_params):
         table = self.get_res("table", table_name, TABLES)
         if action_name not in table.actions:
             raise UIn_Error(
@@ -794,7 +847,121 @@ class Controller():
                 "Action %s needs %d parameters" % (action_name, action.num_params())
             )
         runtime_data = parse_runtime_data(action, action_params)
-        self.client.bm_mt_set_default_action(0, table_name, action_name, runtime_data)
+        client.bm_mt_set_default_action(0, table_name, action_name, runtime_data)
+
+    def add_flow_id_entry(self, client, srcip, dstip, proto, sport, dport):
+        self.table_add_entry(client, FLOW_ID, ADD_PORT,[str(srcip.ip), str(dstip.ip), proto],[sport, dport])
+
+    def add_modbus_entry(self, client, funcode):
+        self.table_add_entry(client, MODBUS, NO_OP, [funcode],[])
+
+    def add_ex_port_entry(self, client, srcip, dstip, sport, dport):
+        self.table_add_entry(client, EX_PORT, NO_OP, [str(srcip.ip), str(dstip.ip),sport, dport],[])
+    
+    def add_send_frame_entry(self, client, port, mac):
+        self.table_add_entry(client, SEND_FRAME, REWRITE, [port],[mac])
+    
+    def add_ipv4_entry(self, client, ip_addr, port):
+        self.table_add_entry(client, IPV4_LPM, NHOP, [str(ip_addr)], [str(ip_addr.ip), port])
+
+    def add_forward_entry(self, client, ip_addr, mac):
+        self.table_add_entry(client, FORWARD, DMAC, [str(ip_addr)],[port]) 
+    
+    def add_miss_tag_entry(self, client, tag, port):
+        self.table_add_entry(client, MISS_TAG, REDIRECT, [tag],[mac])
+
+    def add_arp_resp_entry(self, client, ip_addr, mac):
+        self.table_add_entry(client, ARP_RESP, RESP, [ip_addr],[mac])
+
+
+    def get_resp_switch(self, srcip, dstip, protocol, sport, dport):
+        #List of switch where the flow is passing
+        resp_switch = [] 
+        for switch in self.switches: 
+            sw = self.switches[switch]
+            if sw.is_responsible(src) or sw.is_responsible(dst):
+                resp_switch.append(sw)
+        return resp_switch
+               
+    def deploy_flow_id_rules(self, resp_sw, srcip, dstip, protocol, sport, dport):
+        for sw in resp_sw:
+            client = self.clients[sw.sw_id]
+            self.add_flow_id_entry(client, srcip, dstip, protocol, sport, dport)
+            self.add_flow_id_entry(client, dstip, srcip, protocol, dport, sport) 
+
+    def deploy_modbus_rules(self, resp_sw, funcode):
+        for sw in resp_sw:
+            client = self.clients[sw.sw_id]
+            self.add_modbus_entry(client, funcode)
+
+    def deploy_ex_port_rules(self, resp_sw, srcip, dstip, sport, dport):
+        for sw in resp_sw:
+            client = self.clients[sw.sw_id]
+            self.add_ex_port_entry(client, srcip, dstip, sport, dport)
+
+    def dessiminate_rules(self, filename):
+        IP_PROTO_TCP = 6
+        PSH = 0x08
+        ACK = 0x10
+        SYN = 0x02
+        capture = rdpcap(filename)    
+        for pkt in capture:
+            srcip = pkt[IP].src
+            dstip = pkt[IP].dst
+            proto = pkt[IP].proto
+            if proto == IP_PROTO_TCP:
+                sport = pkt[TCP].sport
+                dport = pkt[TCP].dport
+                if not(self.history.has_key((srcip, dstip, proto, sport, dport)) or \
+                        self.history.has_key((dstip, srcip, proto, dport, sport))):
+
+                    resp_switch = self.get_resp_switch(srcip, dstip, proto, sport, dport)  
+                
+                    self.history[(srcip, dstip, proto, sport, dport)] = resp_switch
+                    self.history[(dstip, srcip, proto, dport, sport)] = resp_switch
+                    self.deploy_flow_id_rules(resp_switch, srcip, dstip, proto, sport, dport)
+                    self.deploy_ex_port_rules(resp_switch, srcip, dstip, sport, dport)
+
+                flags = pkt[TCP].flags
+                if (flags & PSH & ACK) and (sport = 5020 or dport = 5020):
+                    funcode = pkt[ModbusHeader].funcode 
+                    if not self.history.has_key(funcode):
+                        resp_switch = self.history[(srcip, dstip, proto, sport, dport)]
+                        self.deploy_modbus_rules(resp_sw, funcode)
+                        self.history[funcode]=True
+
+    def setup_default_entry(self):
+        for switch in self.switches:
+            sw = self.switches[switch]
+            client = self.clients[sw.sw_id]
+            self.table_default_entry(client, SEND_FRAME, DROP, [])
+            self.table_default_entry(client, FORWARD, NO_HOP, [])
+            self.table_default_entry(client, IPV4_LPM, NO_HOP, [])
+            self.table_default_entry(client, FLOW_ID, ADD_TAG, [IP_MISS, sw.ids_port])
+            self.table_default_entry(client, EX_PORT, ADD_TAG, [PORT_MISS, sw.ids_port])
+            self.table_default_entry(client, MODBUS, ADD_TAG, [FUN_MISS, sw.ids_port])
+            self.table_default_entry(client, MISS_TAG, DROP, [])
+            self.table_default_entry(client, ARP_RESP, DROP, [])
+
+            for interface in sw.interfaces:
+                port = int(interface)
+                mac = sw.interfaces[interface]
+                self.add_send_frame_entry(client, port, mac) 
+
+            for arp_entry in sw.arp_table:
+                mac = sw.arp_table[arp_entry]
+                self.add_forward_entry(client, arp_entry, mac) 
+
+            for ip_addr in self.routing_table:
+                port = self.routing_table[ip_addr]
+                self.add_ipv4_entry(client, ip_addr, port)
+            for tag in [IP_MISS, PORT_MISS, FUN_MISS)]:
+                sw.add_miss_tag_entry(client, [tag], [sw.ids_port]) 
+            ip_addr = sw.ip_address
+            mac = sw.interfaces["1"]
+            self.add_arp_resp_entry(client, ip_addr, mac)
+
+
 
 def load_json_config(standard_client=None, json_path=None):
     load_json_str(utils.get_json_config(standard_client, json_path))
