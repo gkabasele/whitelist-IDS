@@ -20,7 +20,7 @@ control ingress {
     if(valid(ipv4) and ipv4.ttl > 0) {
         apply(ipv4_lpm);
         // Check if tag header present
-        if(valid(miss_tag)){
+        if(ipv4.protocol == 0x00c8){
             apply(miss_tag_table);
         } else {
             apply(flow_id){

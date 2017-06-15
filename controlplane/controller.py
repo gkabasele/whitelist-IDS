@@ -55,9 +55,9 @@ REDIRECT = 'redirect_packet'
 RESP = 'respond_arp'
 
 # TAG MISS
-IP_MISS = 10
-PORT_MISS = 20
-FUN_MISS = 30
+IP_MISS = '10'
+PORT_MISS = '20'
+FUN_MISS = '30'
 
 def enum(type_name, *sequential, **named):
     enums = dict(zip(sequential, range(len(sequential))), **named)
@@ -713,6 +713,7 @@ def create_switches(filename):
     for sw in topo['switches']:
         sw_id = sw['id']
         ip_addr = sw['ip_address']
+        real_ip = sw['real_ip']
         port = sw['port']
         resp = sw['resp_network']
         routing_table = sw['routing_table']
@@ -722,6 +723,7 @@ def create_switches(filename):
     
         switch = Switch(sw_id, 
                         ip_addr,
+                        real_ip,
                         port, 
                         resp,
                         interfaces,
@@ -743,9 +745,10 @@ class Switch():
         ids_port: port to reach the ids
         routing_table : dest ip : port
     '''
-    def __init__(self, sw_id, ip_addr, port, resp, interfaces, ids_port, routing_table, arp_table):
+    def __init__(self, sw_id, ip_addr, real_ip, port, resp, interfaces, ids_port, routing_table, arp_table):
         self.sw_id = sw_id
         self.ip_address = IPNetwork(ip_addr)
+        self.real_ip = real_ip
         self.port = port
         self.resp = []
         for network in resp:
@@ -788,7 +791,17 @@ class Controller():
     def add_client(self, id_client, standard_client, switch):
         self.clients[id_client] = standard_client
         self.switches[id_client] = switch
-        self.mc_client = mc_client
+
+    def setup_connection(self, switches):
+        once = True
+        for sw in switches:
+            standard_client, mc_client = thrift_connect(
+                str(sw.ip_address.ip), int(sw.port), Controller.get_thrift_services(PreType.SimplePre)
+            ) 
+            if once:
+                load_json_config(standard_client)
+                once = False
+            self.add_client(sw.sw_id, standard_client, sw)  
 
     def get_res(self, type_name, name, array):
         if name not in array:
@@ -865,10 +878,10 @@ class Controller():
         self.table_add_entry(client, IPV4_LPM, NHOP, [str(ip_addr)], [str(ip_addr.ip), port])
 
     def add_forward_entry(self, client, ip_addr, mac):
-        self.table_add_entry(client, FORWARD, DMAC, [str(ip_addr)],[port]) 
+        self.table_add_entry(client, FORWARD, DMAC, [str(ip_addr)],[mac]) 
     
     def add_miss_tag_entry(self, client, tag, port):
-        self.table_add_entry(client, MISS_TAG, REDIRECT, [tag],[mac])
+        self.table_add_entry(client, MISS_TAG, REDIRECT, [tag],[port])
 
     def add_arp_resp_entry(self, client, ip_addr, mac):
         self.table_add_entry(client, ARP_RESP, RESP, [ip_addr],[mac])
@@ -923,7 +936,7 @@ class Controller():
                     self.deploy_ex_port_rules(resp_switch, srcip, dstip, sport, dport)
 
                 flags = pkt[TCP].flags
-                if (flags & PSH & ACK) and (sport = 5020 or dport = 5020):
+                if (flags & PSH & ACK) and (sport == 5020 or dport == 5020):
                     funcode = pkt[ModbusHeader].funcode 
                     if not self.history.has_key(funcode):
                         resp_switch = self.history[(srcip, dstip, proto, sport, dport)]
@@ -935,8 +948,8 @@ class Controller():
             sw = self.switches[switch]
             client = self.clients[sw.sw_id]
             self.table_default_entry(client, SEND_FRAME, DROP, [])
-            self.table_default_entry(client, FORWARD, NO_HOP, [])
-            self.table_default_entry(client, IPV4_LPM, NO_HOP, [])
+            self.table_default_entry(client, FORWARD, NO_OP, [])
+            self.table_default_entry(client, IPV4_LPM, NO_OP, [])
             self.table_default_entry(client, FLOW_ID, ADD_TAG, [IP_MISS, sw.ids_port])
             self.table_default_entry(client, EX_PORT, ADD_TAG, [PORT_MISS, sw.ids_port])
             self.table_default_entry(client, MODBUS, ADD_TAG, [FUN_MISS, sw.ids_port])
@@ -944,21 +957,25 @@ class Controller():
             self.table_default_entry(client, ARP_RESP, DROP, [])
 
             for interface in sw.interfaces:
-                port = int(interface)
-                mac = sw.interfaces[interface]
-                self.add_send_frame_entry(client, port, mac) 
+                for iname in interface:
+                    port = iname
+                    mac = interface[iname]     
+                    self.add_send_frame_entry(client, port, mac) 
 
             for arp_entry in sw.arp_table:
-                mac = sw.arp_table[arp_entry]
-                self.add_forward_entry(client, arp_entry, mac) 
+                for ip_addr in arp_entry:
+                    mac = arp_entry[ip_addr]
+                    self.add_forward_entry(client, ip_addr, mac) 
 
-            for ip_addr in self.routing_table:
-                port = self.routing_table[ip_addr]
-                self.add_ipv4_entry(client, ip_addr, port)
-            for tag in [IP_MISS, PORT_MISS, FUN_MISS)]:
-                sw.add_miss_tag_entry(client, [tag], [sw.ids_port]) 
-            ip_addr = sw.ip_address
-            mac = sw.interfaces["1"]
+            for route in sw.routing_table:
+                for dest in route:
+                    port = route[dest]
+                    self.add_ipv4_entry(client, IPNetwork(dest), port)
+
+            for tag in [IP_MISS, PORT_MISS, FUN_MISS]:
+                self.add_miss_tag_entry(client, tag, sw.ids_port) 
+            ip_addr = sw.real_ip
+            mac = sw.interfaces[0]["1"]
             self.add_arp_resp_entry(client, ip_addr, mac)
 
 
@@ -967,46 +984,14 @@ def load_json_config(standard_client=None, json_path=None):
     load_json_str(utils.get_json_config(standard_client, json_path))
 
 
-def main():
-    standard_client, mc_client = thrift_connect(
-         'localhost', 9090,
-         Controller.get_thrift_services(PreType.SimplePre)
-    ) 
-    load_json_config(standard_client)
+def main(filename):
+    switches = create_switches(filename) 
 
-    controller = Controller(standard_client, mc_client)
-    controller.table_default_entry('send_frame','_drop',[])
-    controller.table_default_entry('forward','_no_op',[])
-    controller.table_default_entry('ipv4_lpm','_no_op',[])
-    controller.table_default_entry('flow_id','add_miss_tag',['10','4'])
-    controller.table_default_entry('modbus','add_miss_tag',['20','4'])
-    controller.table_default_entry('miss_tag_table','_drop',[])
-    controller.table_default_entry('arp_response','_drop',[])
-
-    controller.table_add_entry('send_frame', 'rewrite_mac', ['1'], ['00:aa:bb:cc:dd:ee'], 0)
-    controller.table_add_entry('send_frame', 'rewrite_mac', ['2'], ['00:aa:bb:cc:dd:ee'], 0)
-    controller.table_add_entry('send_frame', 'rewrite_mac', ['3'], ['00:aa:bb:cc:dd:ee'], 0)
-    controller.table_add_entry('send_frame', 'rewrite_mac', ['4'], ['00:aa:bb:cc:dd:ee'], 0)
-
-    controller.table_add_entry('forward', 'set_dmac', ['10.0.10.1'], ['00:05:00:00:00:00'], 0)
-    controller.table_add_entry('forward', 'set_dmac', ['10.0.20.1'], ['00:04:00:00:01:00'], 0)
-    controller.table_add_entry('forward', 'set_dmac', ['10.0.30.1'], ['00:04:00:00:02:00'], 0)
-
-    controller.table_add_entry('ipv4_lpm', 'set_nhop', ['10.0.10.1/32'],['10.0.10.1','1'], 0)
-    controller.table_add_entry('ipv4_lpm', 'set_nhop', ['10.0.20.1/32'],['10.0.20.1','1'], 0)
-    controller.table_add_entry('ipv4_lpm', 'set_nhop', ['10.0.30.1/32'],['10.0.30.1','1'], 0)
-
-    controller.table_add_entry('flow_id', '_no_op', ['10.0.10.1', '10.0.20.1', '6', '3000', '5020'], [], 0)
-    controller.table_add_entry('flow_id', '_no_op', ['10.0.20.1', '10.0.10.1', '6', '5020', '3000'], [], 0)
-
-    controller.table_add_entry('modbus', '_no_op',['1'],[],0)
-    controller.table_add_entry('modbus', '_no_op',['5'],[],0)
-
-    controller.table_add_entry('miss_tag_table', 'redirect_packet', ['10'], ['4'], 0)
-    controller.table_add_entry('miss_tag_table', 'redirect_packet', ['20'], ['4'], 0)
-
-    controller.table_add_entry('arp_response', 'respond_arp', ['10.0.10.10'], ['00:aa:bb:cc:dd:ee'], 0)
-
+    controller = Controller()
+    controller.setup_connection(switches) 
+    controller.setup_default_entry()
+    #load_json_config(standard_client)
 
 if __name__ == '__main__':
-    main()
+    filename = sys.argv[1]
+    main(filename)

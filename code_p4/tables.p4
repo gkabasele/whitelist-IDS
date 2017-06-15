@@ -39,6 +39,8 @@ action respond_arp(dmac) {
 
 action add_miss_tag(value, egress_port) {
     add_header(miss_tag);
+    // Change protocol to specify presence of tag
+    modify_field(ipv4.protocol, 0x00c8);
 
     // Set type of tag
     modify_field(miss_tag.value, value);
