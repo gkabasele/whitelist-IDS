@@ -4,7 +4,10 @@ import struct
 import json
 import inspect
 from netaddr import IPNetwork
+from netaddr import IPAddress
 from scapy.all import *
+
+import argparse
 
 from functools import wraps
 import  bmpy_utils as utils
@@ -761,9 +764,10 @@ class Switch():
 
     def is_responsible(self,ip_addr):
         r = False
-        for network in self.resp:
-            no_resp = (network.cidr == ip_addr.cidr)
-            if no_resp:
+        ip = IPAddress(ip_addr)
+        for subnet in self.resp:
+            if ip in subnet:
+                r = True
                 break
         return r
 
@@ -863,13 +867,13 @@ class Controller():
         client.bm_mt_set_default_action(0, table_name, action_name, runtime_data)
 
     def add_flow_id_entry(self, client, srcip, dstip, proto, sport, dport):
-        self.table_add_entry(client, FLOW_ID, ADD_PORT,[str(srcip.ip), str(dstip.ip), proto],[sport, dport])
+        self.table_add_entry(client, FLOW_ID, ADD_PORT,[srcip, dstip, proto],[sport, dport])
 
     def add_modbus_entry(self, client, funcode):
         self.table_add_entry(client, MODBUS, NO_OP, [funcode],[])
 
     def add_ex_port_entry(self, client, srcip, dstip, sport, dport):
-        self.table_add_entry(client, EX_PORT, NO_OP, [str(srcip.ip), str(dstip.ip),sport, dport],[])
+        self.table_add_entry(client, EX_PORT, NO_OP, [srcip, dstip, sport, dport],[])
     
     def add_send_frame_entry(self, client, port, mac):
         self.table_add_entry(client, SEND_FRAME, REWRITE, [port],[mac])
@@ -887,12 +891,12 @@ class Controller():
         self.table_add_entry(client, ARP_RESP, RESP, [ip_addr],[mac])
 
 
-    def get_resp_switch(self, srcip, dstip, protocol, sport, dport):
+    def get_resp_switch(self, srcip, dstip):
         #List of switch where the flow is passing
         resp_switch = [] 
         for switch in self.switches: 
             sw = self.switches[switch]
-            if sw.is_responsible(src) or sw.is_responsible(dst):
+            if sw.is_responsible(srcip) or sw.is_responsible(dstip):
                 resp_switch.append(sw)
         return resp_switch
                
@@ -911,6 +915,7 @@ class Controller():
         for sw in resp_sw:
             client = self.clients[sw.sw_id]
             self.add_ex_port_entry(client, srcip, dstip, sport, dport)
+            self.add_ex_port_entry(client, dstip, srcip, dport, sport)
 
     def dessiminate_rules(self, filename):
         IP_PROTO_TCP = 6
@@ -921,14 +926,14 @@ class Controller():
         for pkt in capture:
             srcip = pkt[IP].src
             dstip = pkt[IP].dst
-            proto = pkt[IP].proto
-            if proto == IP_PROTO_TCP:
-                sport = pkt[TCP].sport
-                dport = pkt[TCP].dport
+            if pkt[IP].proto == IP_PROTO_TCP:
+                proto = str(pkt[IP].proto)
+                sport = str(pkt[TCP].sport)
+                dport = str(pkt[TCP].dport)
                 if not(self.history.has_key((srcip, dstip, proto, sport, dport)) or \
                         self.history.has_key((dstip, srcip, proto, dport, sport))):
 
-                    resp_switch = self.get_resp_switch(srcip, dstip, proto, sport, dport)  
+                    resp_switch = self.get_resp_switch(srcip, dstip)  
                 
                     self.history[(srcip, dstip, proto, sport, dport)] = resp_switch
                     self.history[(dstip, srcip, proto, dport, sport)] = resp_switch
@@ -984,14 +989,19 @@ def load_json_config(standard_client=None, json_path=None):
     load_json_str(utils.get_json_config(standard_client, json_path))
 
 
-def main(filename):
-    switches = create_switches(filename) 
+def main(sw_config, capture):
+    switches = create_switches(sw_config) 
 
     controller = Controller()
     controller.setup_connection(switches) 
-    controller.setup_default_entry()
-    #load_json_config(standard_client)
+    #controller.setup_default_entry()
+    controller.dessiminate_rules(capture)
+
+    #TODO wait for event
 
 if __name__ == '__main__':
-    filename = sys.argv[1]
-    main(filename)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--conf', action='store', dest='conf' ,help='file containing descriptio of switch')
+    parser.add_argument('--capture', action='store', dest='capture',help='training set capture for the whitelist')
+    args = parser.parse_args()
+    main(args.conf, args.capture)
