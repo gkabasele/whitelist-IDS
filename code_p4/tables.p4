@@ -148,6 +148,8 @@ table ex_port {
 
 table modbus {
     reads {
+        ipv4.srcAddr : exact;
+        ipv4.dstAddr : exact;
         modbus.funcode: exact;
     }
     actions {

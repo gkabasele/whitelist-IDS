@@ -869,8 +869,8 @@ class Controller():
     def add_flow_id_entry(self, client, srcip, dstip, proto, sport, dport):
         self.table_add_entry(client, FLOW_ID, ADD_PORT,[srcip, dstip, proto],[sport, dport])
 
-    def add_modbus_entry(self, client, funcode):
-        self.table_add_entry(client, MODBUS, NO_OP, [funcode],[])
+    def add_modbus_entry(self, client, srcip, dstip, funcode):
+        self.table_add_entry(client, MODBUS, NO_OP, [srcip, dstip, funcode],[])
 
     def add_ex_port_entry(self, client, srcip, dstip, sport, dport):
         self.table_add_entry(client, EX_PORT, NO_OP, [srcip, dstip, sport, dport],[])
@@ -906,10 +906,10 @@ class Controller():
             self.add_flow_id_entry(client, srcip, dstip, protocol, sport, dport)
             self.add_flow_id_entry(client, dstip, srcip, protocol, dport, sport) 
 
-    def deploy_modbus_rules(self, resp_sw, funcode):
+    def deploy_modbus_rules(self, resp_sw, srcip, dstip, funcode):
         for sw in resp_sw:
             client = self.clients[sw.sw_id]
-            self.add_modbus_entry(client, funcode)
+            self.add_modbus_entry(client, srcip, dstip, funcode)
 
     def deploy_ex_port_rules(self, resp_sw, srcip, dstip, sport, dport):
         for sw in resp_sw:
@@ -941,12 +941,12 @@ class Controller():
                     self.deploy_ex_port_rules(resp_switch, srcip, dstip, sport, dport)
 
                 flags = pkt[TCP].flags
-                if (flags & PSH & ACK) and (sport == 5020 or dport == 5020):
-                    funcode = pkt[ModbusHeader].funcode 
-                    if not self.history.has_key(funcode):
+                if (flags & PSH) and (flags & ACK) and (sport == "5020" or dport == "5020"):
+                    funcode = str(pkt[ModbusHeader].funcode)
+                    if not self.history.has_key((srcip, dstip, funcode)):
                         resp_switch = self.history[(srcip, dstip, proto, sport, dport)]
-                        self.deploy_modbus_rules(resp_sw, funcode)
-                        self.history[funcode]=True
+                        self.deploy_modbus_rules(resp_switch, srcip, dstip, funcode)
+                        self.history[(srcip, dstip, funcode)]=True
 
     def setup_default_entry(self):
         for switch in self.switches:
@@ -994,7 +994,7 @@ def main(sw_config, capture):
 
     controller = Controller()
     controller.setup_connection(switches) 
-    #controller.setup_default_entry()
+    controller.setup_default_entry()
     controller.dessiminate_rules(capture)
 
     #TODO wait for event
