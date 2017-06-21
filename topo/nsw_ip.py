@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
-from mininet.net import Mininet
-from mininet.topo import Topo
+from ipmininet.ipnet import IPNet
+from ipmininet.iptopo import IPTopo
 from mininet.log import setLogLevel, info
-from mininet.cli import CLI
-from mininet.node import Switch, Host
+from ipmininet.cli import IPCLI
+from mininet.node import Switch
 
 from p4_mininet import P4Switch, P4Host
 
@@ -44,48 +44,16 @@ parser.add_argument('--pcap-dump', help='Dump packets on interfaces to pcap file
 
 args = parser.parse_args()
 
-class Router(Host):
-    """ Defines a new router that is inside a network namespace so that the
-        individual routing entries don't collide
-    """
-    
-    def __init__(self, name, zebra_cfg, ospf_cfg, interfaces, *args, **kwargs):
-        Host.__init__(self, name, *args, **kwargs)
-        self.zebra_cfg = zebra_cfg
-        self.ospf_cfg = ospf_cfg
-        self.interfaces = interfaces
-
-    def config(self, **kwargs):
-        Host.config(self, **kwargs)
-        self.cmd('sysctl net.ipv4.ip_forward=1')
-
-        for intf, attrs in self.interfaces.items():
-            self.cmd('ip addr flush dev %s' %intf)
-            if 'mac' in attrs:
-                self.cmd('ip link set %s down' % intf)
-                self.cmd('ip link set %s address %s' % (intf, attrs['mac']))
-                self.cmd('ip link set %s up' % intf)
-            for addr in attrs['ipAddrs']:
-                self.cmd('ip addr add %s dev %s' % (addr, intf))
-
-        self.cmd('/usr/lib/quagga/zebra -d -f %s -z /tmp/zebra-%s.api -i /tmp/zebra-%s.pid' % (self.zebra_cfg, self.name, self.name))
-        self.cmd('/usr/lib/quagga/ospfd -d -f %s -z /tmp/ospfd-%s.api -i /tmp/ospfd-%s.pid' % (self.ospf_cfg, self.name, self.name))
-
-    def terminate(self):
-        self.cmd("ps -ax | egrep 'ospfd-%s.pid|zebra-%s.pid' | awk '{print $1}' | xargs kill" % (self.name, self.name))
-        Host.terminate
-
-
-        
-class MultiSwitchTopo(Topo):
-    "Single switch connected to n (< 256) hosts."
+   
+class MultiSwitchTopo(IPTopo):
+    """Backbone is a ring of router each connected to a field site containing a P4
+     Switch"""
     def __init__(self, sw_path, json_path, thrift_port, pcap_dump, n, n_sub, **opts):
         # Initialize topology and default options
-        Topo.__init__(self, **opts)
+        IPTopo.__init__(self, **opts)
         switches = {}
         routers = {}
-        DIR_PATH = "~/p4-tutorials/whitelist/mininet/topo/conf/"
-        
+
         sw_control = self.addSwitch('cc',
                                 sw_path = sw_path,
                                 json_path = json_path,
@@ -96,26 +64,8 @@ class MultiSwitchTopo(Topo):
                               ip = "10.0.10.1/24",
                               mac = '00:05:00:00:00:00' )
         self.addLink(host,sw_control)
-    
-        name = 'rcc'
 
-        eth1 = {'mac' : '00:00:00:00:00:01',
-                'ipAddrs' : ['10.0.10.20/24']} 
-        eth2 = {'mac': '00:00:00:00:00:02',
-                'ipAddrs' : ['10.0.210.1/24']} 
-        eth3 = {'mac' : '00:00:00:00:00:02',
-                'ipAddrs' : ['10.0.240.1/24']}
-
-        intfs = {'rcc-eth1': eth1,
-                 'rcc-eth2': eth2,
-                 'rcc-eth3': eth3}
-
-        zebra_conf = DIR_PATH+'zebra-rcc.conf'
-        ospf_conf = DIR_PATH+'ospfd-rcc.conf'
-                 
-        router_cc = self.addHost(name, cls=Router,zebra_cfg=zebra_conf,
-                                ospf_cfg=ospf_conf, interfaces=intfs) 
-
+        router_cc = self.addRouter('rcc')
         self.addLink(sw_control , router_cc)
 
         for i in xrange(n_sub):
@@ -127,27 +77,7 @@ class MultiSwitchTopo(Topo):
                                 thrift_port = thrift_port+(i+1),
                                 pcap_dump = pcap_dump,
                                 dpid = self.int2dpid(i+1))
-
-            eth1 = {'mac' : '00:00:00:00:0%d:01'%(i+1),
-                    'ipAddrs' : ['10.0.%d0.20/24'%(i+2)]} 
-
-            eth2 = {'mac': '00:00:00:00:0%d:02'%(i+1),
-                    'ipAddrs' : ['10.0.2%d0.1/24'%(i+1)]} 
-
-            eth3 = {'mac' : '00:00:00:00:0%d:03' %(i+1),
-                    'ipAddrs' : ['10.0.2%d0.1/24'%(i+2)]}
-
-            intfs = {'%s-eth1' % label_router: eth1,
-                     '%s-eth2' % label_router: eth2,
-                     '%s-eth3' % label_router: eth3}
-
-            zebra_conf = DIR_PATH+'zebra-%s.conf' % label_router
-            ospf_conf = DIR_PATH+'ospfd-%s.conf' % label_router
-                 
-            routers[(i+1)] = self.addHost(label_router, cls=Router,zebra_cfg=zebra_conf,
-                                ospf_cfg=ospf_conf, interfaces=intfs) 
-
-
+            routers[(i+1)] = self.addRouter(label_router) 
             
         for switch_id in switches:
             switch = switches[switch_id]
@@ -157,12 +87,12 @@ class MultiSwitchTopo(Topo):
                                 ip = "10.0.%s0.%d/24" % (switch_id + 1, h + 1),
                                 mac = '00:04:00:00:%02x:%02x' %(switch_id,h))
                 self.addLink(host, switch)
-            self.addLink(router, switch)
+            self.addLink(router, switch, igp_area='0.0.0.0')
 
-        self.addLink('rcc', 'r1') 
-        self.addLink('r1', 'r2') 
-        self.addLink('r2', 'r3') 
-        self.addLink('r3', 'rcc') 
+        self.addLink('rcc', 'r1', igp_area = '0.0.0.0') 
+        self.addLink('r1', 'r2', igp_area ='0.0.0.0') 
+        self.addLink('r2', 'r3', igp_area = '0.0.0.0') 
+        self.addLink('r3', 'rcc', igp_area = '0.0.0.0') 
 
     def int2dpid( self, dpid ):
         try:
@@ -175,10 +105,6 @@ class MultiSwitchTopo(Topo):
 
 
 def main():
-    os.system("rm -f /tmp/r*/log /tmp/r*.pid logs/*")
-    os.system("mn -c > /dev/null 2>&1")
-    os.system("killall -9 zebra ospfd > /dev/null 2>&1")
-    
 
     num_hosts = args.num_hosts
     num_subnet = args.num_subnet
@@ -190,12 +116,12 @@ def main():
                             args.pcap_dump,
                             num_hosts,
                             num_subnet)
-    net = Mininet(topo = topo,
+    net = IPNet(topo = topo,
                   host = P4Host,
                   switch = P4Switch,
                   controller = None)
     net.start()
-
+    
     #MTU connection    
     h =  net.get('mtu')
     sw_mac = "00:aa:bb:cc:dd:ee" 
@@ -240,7 +166,7 @@ def main():
 
     print "Ready !"
 
-    CLI( net )
+    IPCLI( net )
     net.stop()
 
 if __name__ == '__main__':
