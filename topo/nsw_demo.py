@@ -68,8 +68,8 @@ class Router(Host):
             for addr in attrs['ipAddrs']:
                 self.cmd('ip addr add %s dev %s' % (addr, intf))
 
-        self.cmd('/usr/lib/quagga/zebra -d -f %s -z /tmp/zebra-%s.api -i /tmp/zebra-%s.pid' % (self.zebra_cfg, self.name, self.name))
-        self.cmd('/usr/lib/quagga/ospfd -d -f %s -z /tmp/ospfd-%s.api -i /tmp/ospfd-%s.pid' % (self.ospf_cfg, self.name, self.name))
+        self.cmd('/usr/lib/quagga/zebra -f %s -z /tmp/zebra-%s.api -i /tmp/zebra-%s.pid -u root -k' % (self.zebra_cfg, self.name, self.name))
+        self.cmd('/usr/lib/quagga/ospfd -f %s -z /tmp/ospfd-%s.api -i /tmp/ospfd-%s.pid -u root' % (self.ospf_cfg, self.name, self.name))
 
     def terminate(self):
         self.cmd("ps -ax | egrep 'ospfd-%s.pid|zebra-%s.pid' | awk '{print $1}' | xargs kill" % (self.name, self.name))

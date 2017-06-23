@@ -19,7 +19,7 @@ from ipmininet.ipnet import IPNet
 from ipmininet.iptopo import IPTopo
 from mininet.log import setLogLevel, info
 from ipmininet.cli import IPCLI
-from mininet.node import Switch
+from mininet.node import Switch, Host
 
 from p4_mininet import P4Switch, P4Host
 
@@ -48,9 +48,14 @@ args = parser.parse_args()
 class MultiSwitchTopo(IPTopo):
     """Backbone is a ring of router each connected to a field site containing a P4
      Switch"""
-    def __init__(self, sw_path, json_path, thrift_port, pcap_dump, n, n_sub, **opts):
+    def build(self, *args, **kwargs):
         # Initialize topology and default options
-        IPTopo.__init__(self, **opts)
+        sw_path = kwargs.get('sw_path')
+        json_path = kwargs.get('json_path')
+        thrift_port = kwargs.get('thrift_port')
+        n_host = kwargs.get('n_host')
+        n_sub = kwargs.get('n_sub')
+
         switches = {}
         routers = {}
 
@@ -58,15 +63,12 @@ class MultiSwitchTopo(IPTopo):
                                 sw_path = sw_path,
                                 json_path = json_path,
                                 thrift_port = thrift_port,
-                                pcap_dump = pcap_dump,
                                 dpid = self.int2dpid(0))
-        host = self.addHost('mtu',
-                              ip = "10.0.10.1/24",
-                              mac = '00:05:00:00:00:00' )
-        self.addLink(host,sw_control)
+        host = self.addHost('mtu',mac = '00:05:00:00:00:00', ip="10.0.10.1" )
+        self.addLink(host,sw_control, params1={"ip":("10.0.10.1/24")}, params2={"ip":("10.0.10.10/24")})
 
         router_cc = self.addRouter('rcc')
-        self.addLink(sw_control , router_cc)
+        self.addLink(router_cc , sw_control, igp_passive=True, params1={"ip":("10.0.10.30/24")}, params2={"ip":("10.0.10.20/24")})
 
         for i in xrange(n_sub):
             label_sw = "s%d"%(i+1)
@@ -75,24 +77,30 @@ class MultiSwitchTopo(IPTopo):
                                 sw_path = sw_path,
                                 json_path = json_path,
                                 thrift_port = thrift_port+(i+1),
-                                pcap_dump = pcap_dump,
                                 dpid = self.int2dpid(i+1))
             routers[(i+1)] = self.addRouter(label_router) 
             
         for switch_id in switches:
             switch = switches[switch_id]
             router = routers[switch_id]
-            for h in xrange(n):
-                host = self.addHost('s%d-h%d' % (switch_id, h + 1),
-                                ip = "10.0.%s0.%d/24" % (switch_id + 1, h + 1),
-                                mac = '00:04:00:00:%02x:%02x' %(switch_id,h))
-                self.addLink(host, switch)
-            self.addLink(router, switch, igp_area='0.0.0.0')
+            for h in xrange(n_host):
+                host = self.addHost("s%d-h%d" % (switch_id, h + 1),
+                                mac = "00:04:00:00:%02x:%02x" %(switch_id,h),
+                                ip= "10.0.%d0.%d"%(switch_id+1 , h+1)) 
+                self.addLink(host, switch, 
+                                params1={"ip":("10.0.%d0.%d/24"%(switch_id +1, h+1))}, 
+                                params2={"ip":("10.0.%d0.10/24" % (switch_id+1))})
 
-        self.addLink('rcc', 'r1', igp_area = '0.0.0.0') 
-        self.addLink('r1', 'r2', igp_area ='0.0.0.0') 
-        self.addLink('r2', 'r3', igp_area = '0.0.0.0') 
-        self.addLink('r3', 'rcc', igp_area = '0.0.0.0') 
+            self.addLink(router, switch, igp_passive=True,
+                            params1={"ip":("10.0.%d0.30/24"%(switch_id + 1))},
+                            params2={"ip":("10.0.%d0.20/24"%(switch_id + 1))})
+
+        self.addLink('rcc', 'r1', igp_area = "0.0.0.0", params1={"ip":("10.0.100.1/24")},params2={"ip":("10.0.100.2/24")}) 
+        self.addLink('r1', 'r2', igp_area = "0.0.0.0", params1={"ip":("10.0.101.1/24")},params2={"ip":("10.0.101.2/24")}) 
+        self.addLink('r2', 'r3', igp_area = "0.0.0.0", params1={"ip":("10.0.102.1/24")},params2={"ip":("10.0.102.2/24")}) 
+        self.addLink('r3', 'rcc', igp_area = "0.0.0.0", params1={"ip":("10.0.103.1/24")},params2={"ip":("10.0.103.2/24")}) 
+
+        super(MultiSwitchTopo, self).build(*args, **kwargs)
 
     def int2dpid( self, dpid ):
         try:
@@ -110,16 +118,18 @@ def main():
     num_subnet = args.num_subnet
     mode = args.mode
 
-    topo = MultiSwitchTopo(args.behavioral_exe,
-                            args.json,
-                            args.thrift_port,
-                            args.pcap_dump,
-                            num_hosts,
-                            num_subnet)
-    net = IPNet(topo = topo,
-                  host = P4Host,
-                  switch = P4Switch,
-                  controller = None)
+    kwargs =  {"sw_path" : args.behavioral_exe,
+               "json_path" : args.json,
+               "thrift_port" : args.thrift_port,
+               "n_host": args.num_hosts,
+               "n_sub": args.num_subnet}
+
+    net = IPNet(topo = MultiSwitchTopo(**kwargs),
+                host = P4Host,
+                switch = P4Switch,
+                ipBase='10.0.0.0/16',
+                allocate_IPs = False,
+                controller = None)
     net.start()
     
     #MTU connection    
@@ -133,7 +143,7 @@ def main():
         print "Setting ARP entries for mtu"  
         print "%s\t%s"% (sw_addr, sw_mac)
         h.setARP(sw_mac, sw_addr)
-        h.setDefaultRoute("dev eth0 via %s" % sw_addr)
+        h.cmd("ip route add default dev eth0" )
 
     # Ingress and host connection
     for i in xrange(num_subnet):
@@ -151,7 +161,7 @@ def main():
                 print "Setting ARP entries for s%d-%d" % (sub_id, n+1) 
                 print "%s\t%s"% (sw_addr[n], sw_mac[n])
                 h.setARP(sw_addr[n], sw_mac[n])
-                h.setDefaultRoute("dev eth0 via %s" % sw_addr[n])
+                h.cmd("ip route add default dev eth0" )
 
     h = net.get('mtu')
     h.describe()
