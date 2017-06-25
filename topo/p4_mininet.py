@@ -98,6 +98,7 @@ class P4Switch(Switch):
         server is started at the end of the init process"""
         while True:
             if not os.path.exists(os.path.join("/proc", str(pid))):
+                print "PID does not exist"
                 return False
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(0.5)

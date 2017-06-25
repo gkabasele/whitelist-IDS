@@ -37,6 +37,10 @@ action respond_arp(dmac) {
     modify_field(standard_metadata.egress_spec, standard_metadata.ingress_port);
 }
 
+action forward_arp(port) {
+    modify_field(standard_metadata.egress_spec, port);
+}
+
 action add_miss_tag(value, egress_port) {
     add_header(miss_tag);
     // Change protocol to specify presence of tag
@@ -66,6 +70,7 @@ table arp_response {
     }
     actions {
         respond_arp;
+        forward_arp;
         _drop;
     }
 }

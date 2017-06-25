@@ -83,8 +83,6 @@ class MultiSwitchTopo(Topo):
         # Initialize topology and default options
         Topo.__init__(self, **opts)
         switches = {}
-        routers = {}
-        DIR_PATH = "~/p4-tutorials/whitelist/mininet/topo/conf/"
         
         sw_control = self.addSwitch('cc',
                                 sw_path = sw_path,
@@ -97,72 +95,27 @@ class MultiSwitchTopo(Topo):
                               mac = '00:05:00:00:00:00' )
         self.addLink(host,sw_control)
     
-        name = 'rcc'
-
-        eth1 = {'mac' : '00:00:00:00:00:01',
-                'ipAddrs' : ['10.0.10.20/24']} 
-        eth2 = {'mac': '00:00:00:00:00:02',
-                'ipAddrs' : ['10.0.210.1/24']} 
-        eth3 = {'mac' : '00:00:00:00:00:02',
-                'ipAddrs' : ['10.0.240.1/24']}
-
-        intfs = {'rcc-eth1': eth1,
-                 'rcc-eth2': eth2,
-                 'rcc-eth3': eth3}
-
-        zebra_conf = DIR_PATH+'zebra-rcc.conf'
-        ospf_conf = DIR_PATH+'ospfd-rcc.conf'
-                 
-        router_cc = self.addHost(name, cls=Router,zebra_cfg=zebra_conf,
-                                ospf_cfg=ospf_conf, interfaces=intfs) 
-
-        self.addLink(sw_control , router_cc)
-
         for i in xrange(n_sub):
             label_sw = "s%d"%(i+1)
-            label_router = "r%d"%(i+1)
             switches[(i+1)] = self.addSwitch(label_sw,
                                 sw_path = sw_path,
                                 json_path = json_path,
                                 thrift_port = thrift_port+(i+1),
                                 pcap_dump = pcap_dump,
                                 dpid = self.int2dpid(i+1))
-
-            eth1 = {'mac' : '00:00:00:00:0%d:01'%(i+1),
-                    'ipAddrs' : ['10.0.%d0.20/24'%(i+2)]} 
-
-            eth2 = {'mac': '00:00:00:00:0%d:02'%(i+1),
-                    'ipAddrs' : ['10.0.2%d0.1/24'%(i+1)]} 
-
-            eth3 = {'mac' : '00:00:00:00:0%d:03' %(i+1),
-                    'ipAddrs' : ['10.0.2%d0.1/24'%(i+2)]}
-
-            intfs = {'%s-eth1' % label_router: eth1,
-                     '%s-eth2' % label_router: eth2,
-                     '%s-eth3' % label_router: eth3}
-
-            zebra_conf = DIR_PATH+'zebra-%s.conf' % label_router
-            ospf_conf = DIR_PATH+'ospfd-%s.conf' % label_router
-                 
-            routers[(i+1)] = self.addHost(label_router, cls=Router,zebra_cfg=zebra_conf,
-                                ospf_cfg=ospf_conf, interfaces=intfs) 
-
-
             
         for switch_id in switches:
             switch = switches[switch_id]
-            router = routers[switch_id]
             for h in xrange(n):
                 host = self.addHost('s%d-h%d' % (switch_id, h + 1),
                                 ip = "10.0.%s0.%d/24" % (switch_id + 1, h + 1),
                                 mac = '00:04:00:00:%02x:%02x' %(switch_id,h))
                 self.addLink(host, switch)
-            self.addLink(router, switch)
 
-        self.addLink('rcc', 'r1') 
-        self.addLink('r1', 'r2') 
-        self.addLink('r2', 'r3') 
-        self.addLink('r3', 'rcc') 
+        self.addLink('cc', 's1') 
+        self.addLink('s1', 's2') 
+        self.addLink('s2', 's3') 
+        self.addLink('s3', 'cc') 
 
     def int2dpid( self, dpid ):
         try:

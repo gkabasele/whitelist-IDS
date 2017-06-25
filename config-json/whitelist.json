@@ -714,86 +714,19 @@
             "order": [
                 "ethernet",
                 "ipv4",
-                "tcp",
                 "arp",
+                "udp",
+                "tcp",
                 "modbus",
-                "miss_tag",
-                "udp"
+                "miss_tag"
             ]
         }
     ],
     "meter_arrays": [],
     "actions": [
         {
-            "name": "redirect_packet",
-            "id": 0,
-            "runtime_data": [
-                {
-                    "name": "egress_port",
-                    "bitwidth": 9
-                }
-            ],
-            "primitives": [
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "standard_metadata",
-                                "egress_spec"
-                            ]
-                        },
-                        {
-                            "type": "runtime_data",
-                            "value": 0
-                        }
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "_no_op",
-            "id": 1,
-            "runtime_data": [],
-            "primitives": [
-                {
-                    "op": "no_op",
-                    "parameters": []
-                }
-            ]
-        },
-        {
-            "name": "rewrite_mac",
-            "id": 2,
-            "runtime_data": [
-                {
-                    "name": "smac",
-                    "bitwidth": 48
-                }
-            ],
-            "primitives": [
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "ethernet",
-                                "srcAddr"
-                            ]
-                        },
-                        {
-                            "type": "runtime_data",
-                            "value": 0
-                        }
-                    ]
-                }
-            ]
-        },
-        {
             "name": "add_miss_tag",
-            "id": 3,
+            "id": 0,
             "runtime_data": [
                 {
                     "name": "value",
@@ -866,7 +799,7 @@
         },
         {
             "name": "set_dmac",
-            "id": 4,
+            "id": 1,
             "runtime_data": [
                 {
                     "name": "dmac",
@@ -893,26 +826,11 @@
             ]
         },
         {
-            "name": "_drop",
-            "id": 5,
-            "runtime_data": [],
-            "primitives": [
-                {
-                    "op": "drop",
-                    "parameters": []
-                }
-            ]
-        },
-        {
-            "name": "set_nhop",
-            "id": 6,
+            "name": "redirect_packet",
+            "id": 2,
             "runtime_data": [
                 {
-                    "name": "nhop_ipv4",
-                    "bitwidth": 32
-                },
-                {
-                    "name": "port",
+                    "name": "egress_port",
                     "bitwidth": 9
                 }
             ],
@@ -923,8 +841,89 @@
                         {
                             "type": "field",
                             "value": [
-                                "routing_metadata",
-                                "nhop_ipv4"
+                                "standard_metadata",
+                                "egress_spec"
+                            ]
+                        },
+                        {
+                            "type": "runtime_data",
+                            "value": 0
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "_no_op",
+            "id": 3,
+            "runtime_data": [],
+            "primitives": [
+                {
+                    "op": "no_op",
+                    "parameters": []
+                }
+            ]
+        },
+        {
+            "name": "add_expected_port",
+            "id": 4,
+            "runtime_data": [
+                {
+                    "name": "sport",
+                    "bitwidth": 16
+                },
+                {
+                    "name": "dport",
+                    "bitwidth": 16
+                }
+            ],
+            "primitives": [
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "flow_meta",
+                                "dstAddr"
+                            ]
+                        },
+                        {
+                            "type": "field",
+                            "value": [
+                                "ipv4",
+                                "dstAddr"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "flow_meta",
+                                "srcAddr"
+                            ]
+                        },
+                        {
+                            "type": "field",
+                            "value": [
+                                "ipv4",
+                                "srcAddr"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "flow_meta",
+                                "expected_sport"
                             ]
                         },
                         {
@@ -939,8 +938,8 @@
                         {
                             "type": "field",
                             "value": [
-                                "standard_metadata",
-                                "egress_spec"
+                                "flow_meta",
+                                "expected_dport"
                             ]
                         },
                         {
@@ -948,20 +947,32 @@
                             "value": 1
                         }
                     ]
-                },
+                }
+            ]
+        },
+        {
+            "name": "forward_arp",
+            "id": 5,
+            "runtime_data": [
                 {
-                    "op": "add_to_field",
+                    "name": "port",
+                    "bitwidth": 9
+                }
+            ],
+            "primitives": [
+                {
+                    "op": "modify_field",
                     "parameters": [
                         {
                             "type": "field",
                             "value": [
-                                "ipv4",
-                                "ttl"
+                                "standard_metadata",
+                                "egress_spec"
                             ]
                         },
                         {
-                            "type": "hexstr",
-                            "value": "-0x1"
+                            "type": "runtime_data",
+                            "value": 0
                         }
                     ]
                 }
@@ -969,7 +980,7 @@
         },
         {
             "name": "respond_arp",
-            "id": 7,
+            "id": 6,
             "runtime_data": [
                 {
                     "name": "dmac",
@@ -1110,16 +1121,12 @@
             ]
         },
         {
-            "name": "add_expected_port",
-            "id": 8,
+            "name": "rewrite_mac",
+            "id": 7,
             "runtime_data": [
                 {
-                    "name": "sport",
-                    "bitwidth": 16
-                },
-                {
-                    "name": "dport",
-                    "bitwidth": 16
+                    "name": "smac",
+                    "bitwidth": 48
                 }
             ],
             "primitives": [
@@ -1129,46 +1136,51 @@
                         {
                             "type": "field",
                             "value": [
-                                "flow_meta",
-                                "dstAddr"
+                                "ethernet",
+                                "srcAddr"
                             ]
                         },
                         {
-                            "type": "field",
-                            "value": [
-                                "ipv4",
-                                "dstAddr"
-                            ]
+                            "type": "runtime_data",
+                            "value": 0
                         }
                     ]
+                }
+            ]
+        },
+        {
+            "name": "_drop",
+            "id": 8,
+            "runtime_data": [],
+            "primitives": [
+                {
+                    "op": "drop",
+                    "parameters": []
+                }
+            ]
+        },
+        {
+            "name": "set_nhop",
+            "id": 9,
+            "runtime_data": [
+                {
+                    "name": "nhop_ipv4",
+                    "bitwidth": 32
                 },
+                {
+                    "name": "port",
+                    "bitwidth": 9
+                }
+            ],
+            "primitives": [
                 {
                     "op": "modify_field",
                     "parameters": [
                         {
                             "type": "field",
                             "value": [
-                                "flow_meta",
-                                "srcAddr"
-                            ]
-                        },
-                        {
-                            "type": "field",
-                            "value": [
-                                "ipv4",
-                                "srcAddr"
-                            ]
-                        }
-                    ]
-                },
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "flow_meta",
-                                "expected_sport"
+                                "routing_metadata",
+                                "nhop_ipv4"
                             ]
                         },
                         {
@@ -1183,13 +1195,29 @@
                         {
                             "type": "field",
                             "value": [
-                                "flow_meta",
-                                "expected_dport"
+                                "standard_metadata",
+                                "egress_spec"
                             ]
                         },
                         {
                             "type": "runtime_data",
                             "value": 1
+                        }
+                    ]
+                },
+                {
+                    "op": "add_to_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "ipv4",
+                                "ttl"
+                            ]
+                        },
+                        {
+                            "type": "hexstr",
+                            "value": "-0x1"
                         }
                     ]
                 }
@@ -1223,10 +1251,12 @@
                     ],
                     "actions": [
                         "respond_arp",
+                        "forward_arp",
                         "_drop"
                     ],
                     "next_tables": {
                         "respond_arp": null,
+                        "forward_arp": null,
                         "_drop": null
                     },
                     "base_default_next": null
