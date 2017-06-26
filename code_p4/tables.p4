@@ -35,21 +35,26 @@ action respond_arp(dmac) {
     modify_field(arp.srcAddr, tmp_arp.ipAddr);
 
     modify_field(standard_metadata.egress_spec, standard_metadata.ingress_port);
+    
+    // Switch is queried no need to forward
+    modify_field(tmp_arp.is_dest, 1);
 }
 
-action forward_arp(port) {
-    modify_field(standard_metadata.egress_spec, port);
-}
 
-action add_miss_tag(value, egress_port) {
+action add_miss_tag(reason, id, ids_addr, egress_port) {
     add_header(miss_tag);
     // Change protocol to specify presence of tag
     modify_field(ipv4.protocol, 0x00c8);
 
     // Set type of tag
-    modify_field(miss_tag.value, value);
+    modify_field(miss_tag.reason, reason);
+    modify_field(miss_tag.id, id);
+    modify_field(miss_tag.dstAddr, ipv4.dstAddr);
     
-    // Set egress port to reach IDS
+    // Setting IDS ip
+    modify_field(ipv4.dstAddr, ids_addr);
+
+    // Setting egress port to reach IDS
     modify_field(standard_metadata.egress_spec, egress_port);
 }
 
@@ -70,7 +75,16 @@ table arp_response {
     }
     actions {
         respond_arp;
-        forward_arp;
+        _no_op;
+    }
+}
+
+table arp_forward {
+    reads {
+        standard_metadata.ingress_port : exact;
+    }
+    actions {
+        redirect_packet;
         _drop;
     }
 }
@@ -153,8 +167,8 @@ table ex_port {
 
 table modbus {
     reads {
-        ipv4.srcAddr : exact;
-        ipv4.dstAddr : exact;
+        flow_meta.srcAddr: exact;
+        flow_meta.expected_sport: exact;
         modbus.funcode: exact;
     }
     actions {
@@ -167,7 +181,7 @@ table modbus {
 
 table miss_tag_table {
     reads {
-        miss_tag.value : exact;
+        miss_tag.reason : exact;
     }
     actions {
         _drop;

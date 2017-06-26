@@ -25,20 +25,27 @@ control ingress {
         } else {
             apply(flow_id){
                 hit{
-                    apply(ex_port);
+                    apply(ex_port){
+                        hit{
+                            if (tcp.dstPort == 5020 or tcp.srcPort == 5020){
+                                if(tcp.syn == 1 or tcp.fin == 1 or (tcp.ack == 1 and tcp.psh == 0)) {
+                                    //nothing to do here                
+                                } else {
+                                    apply(modbus);
+                                }
+                            }
+                        }
+                    }
                 }
-            }
-            if (tcp.dstPort == 5020 or tcp.srcPort == 5020){
-                if(tcp.syn == 1 or tcp.fin == 1 or (tcp.ack == 1 and tcp.psh == 0)) {
-                    //nothing to do here                
-                } else {
-                    apply(modbus);
-                }
+            
             }
         }
         apply(forward);
-    } else if (valid(arp)) {
+        } else if (valid(arp)) {
         apply(arp_response);
+        if(tmp_arp.is_dest == 0){
+            apply(arp_forward);
+        }
     }
 }
 

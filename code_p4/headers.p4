@@ -96,7 +96,9 @@ header udp_t udp;
 
 header_type miss_tag_t {
     fields {
-        value : 8;
+        dstAddr : 32;   // original destination
+        id : 16;         // id of the switch causing redirection
+        reason : 8;     // Reason of the miss
     }
 }
 
@@ -151,6 +153,7 @@ header_type tmp_t {
     fields {
         ipAddr : 32;
         hwAddr : 48;
+        is_dest: 1;
     }
 }
 
