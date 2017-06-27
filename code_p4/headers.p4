@@ -97,7 +97,8 @@ header udp_t udp;
 header_type srtag_t {
     fields {
         dstAddr : 32;   // original destination
-        id : 16;         // id of the switch causing redirection
+        proto : 8;      // original transport protocol 
+        id : 16;        // id of the switch causing redirection
         reason : 8;     // Reason of the miss
     }
 }
@@ -107,8 +108,6 @@ header srtag_t srtag;
 
 header_type flow_meta_t {
     fields {
-        srcAddr : 32;
-        dstAddr: 32;
         expected_sport : 16;
         expected_dport : 16;
     }
