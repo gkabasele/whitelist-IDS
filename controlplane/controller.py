@@ -45,6 +45,7 @@ MODBUS = 'modbus'
 EX_PORT = 'ex_port'
 MISS_TAG= 'miss_tag_table'
 ARP_RESP = 'arp_response'
+ARP_FORW = 'arp_forward'
 
 # Action name
 DROP = '_drop'
@@ -723,6 +724,7 @@ def create_switches(filename):
         arp_table = sw['arp_table']
         ids_port = sw['ids_port']
         interfaces = sw['interfaces']
+        ids_addr = sw['ids_addr']
     
         switch = Switch(sw_id, 
                         ip_addr,
@@ -731,6 +733,7 @@ def create_switches(filename):
                         resp,
                         interfaces,
                         ids_port, 
+                        ids_addr,
                         routing_table,
                         arp_table)
         switches.append(switch)
@@ -745,10 +748,22 @@ class Switch():
         port : port used by thrift server
         resp : list of address that the switch handles
         interface: list of interface the switch (name:mac)
-        ids_port: port to reach the ids
+        ids_port: outport on the switch to reach the IDS
+        ids_addr: ip address of IDS
         routing_table : dest ip : port
     '''
-    def __init__(self, sw_id, ip_addr, real_ip, port, resp, interfaces, ids_port, routing_table, arp_table):
+    def __init__(self, 
+                 sw_id,
+                 ip_addr,
+                 real_ip,
+                 port,
+                 resp,
+                 interfaces,
+                 ids_port,
+                 ids_addr,
+                 routing_table,
+                 arp_table):
+
         self.sw_id = sw_id
         self.ip_address = IPNetwork(ip_addr)
         self.real_ip = real_ip
@@ -758,7 +773,8 @@ class Switch():
             ip_network = IPNetwork(network)
             self.resp.append(ip_network)
         self.interfaces = interfaces
-        self.ids_port = port
+        self.ids_port = ids_port
+        self.ids_addr = ids_addr
         self.routing_table = routing_table
         self.arp_table = arp_table
 
@@ -869,8 +885,8 @@ class Controller():
     def add_flow_id_entry(self, client, srcip, dstip, proto, sport, dport):
         self.table_add_entry(client, FLOW_ID, ADD_PORT,[srcip, dstip, proto],[sport, dport])
 
-    def add_modbus_entry(self, client, srcip, dstip, funcode):
-        self.table_add_entry(client, MODBUS, NO_OP, [srcip, dstip, funcode],[])
+    def add_modbus_entry(self, client, srcip, sport, funcode):
+        self.table_add_entry(client, MODBUS, NO_OP, [srcip, sport, funcode],[])
 
     def add_ex_port_entry(self, client, srcip, dstip, sport, dport):
         self.table_add_entry(client, EX_PORT, NO_OP, [srcip, dstip, sport, dport],[])
@@ -889,6 +905,9 @@ class Controller():
 
     def add_arp_resp_entry(self, client, ip_addr, mac):
         self.table_add_entry(client, ARP_RESP, RESP, [ip_addr],[mac])
+    
+    def add_arp_forw_entry(self, client, in_port, out_port):
+        self.table_add_entry(client, ARP_FORW, REDIRECT, [in_port], [out_port])
 
 
     def get_resp_switch(self, srcip, dstip):
@@ -906,10 +925,10 @@ class Controller():
             self.add_flow_id_entry(client, srcip, dstip, protocol, sport, dport)
             self.add_flow_id_entry(client, dstip, srcip, protocol, dport, sport) 
 
-    def deploy_modbus_rules(self, resp_sw, srcip, dstip, funcode):
+    def deploy_modbus_rules(self, resp_sw, srcip, sport, funcode):
         for sw in resp_sw:
             client = self.clients[sw.sw_id]
-            self.add_modbus_entry(client, srcip, dstip, funcode)
+            self.add_modbus_entry(client, srcip, sport, funcode)
 
     def deploy_ex_port_rules(self, resp_sw, srcip, dstip, sport, dport):
         for sw in resp_sw:
@@ -943,23 +962,28 @@ class Controller():
                 flags = pkt[TCP].flags
                 if (flags & PSH) and (flags & ACK) and (sport == "5020" or dport == "5020"):
                     funcode = str(pkt[ModbusHeader].funcode)
-                    if not self.history.has_key((srcip, dstip, funcode)):
+                    if not self.history.has_key((srcip, sport, funcode)):
                         resp_switch = self.history[(srcip, dstip, proto, sport, dport)]
-                        self.deploy_modbus_rules(resp_switch, srcip, dstip, funcode)
-                        self.history[(srcip, dstip, funcode)]=True
+                        self.deploy_modbus_rules(resp_switch, srcip, sport, funcode)
+                        self.history[(srcip, sport, funcode)]=True
 
     def setup_default_entry(self):
         for switch in self.switches:
             sw = self.switches[switch]
             client = self.clients[sw.sw_id]
+            is_ids_sw = sw.is_responsible(sw.ids_addr)
+
             self.table_default_entry(client, SEND_FRAME, DROP, [])
             self.table_default_entry(client, FORWARD, NO_OP, [])
             self.table_default_entry(client, IPV4_LPM, NO_OP, [])
-            self.table_default_entry(client, FLOW_ID, ADD_TAG, [IP_MISS, sw.ids_port])
-            self.table_default_entry(client, EX_PORT, ADD_TAG, [PORT_MISS, sw.ids_port])
-            self.table_default_entry(client, MODBUS, ADD_TAG, [FUN_MISS, sw.ids_port])
+            if not is_ids_sw:
+                self.table_default_entry(client, FLOW_ID, ADD_TAG, [IP_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
+                self.table_default_entry(client, EX_PORT, ADD_TAG, [PORT_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
+                self.table_default_entry(client, MODBUS, ADD_TAG, [FUN_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
+
             self.table_default_entry(client, MISS_TAG, DROP, [])
-            self.table_default_entry(client, ARP_RESP, DROP, [])
+            self.table_default_entry(client, ARP_RESP, NO_OP, [])
+            self.table_default_entry(client, ARP_FORW, DROP, [])
 
             for interface in sw.interfaces:
                 for iname in interface:
@@ -982,6 +1006,8 @@ class Controller():
             ip_addr = sw.real_ip
             mac = sw.interfaces[0]["1"]
             self.add_arp_resp_entry(client, ip_addr, mac)
+            self.add_arp_forw_entry(client, str(1), str(2))
+            self.add_arp_forw_entry(client, str(2), str(1))
 
 
 
@@ -990,18 +1016,21 @@ def load_json_config(standard_client=None, json_path=None):
 
 
 def main(sw_config, capture):
+    print "Creating switches"
     switches = create_switches(sw_config) 
 
     controller = Controller()
+    print "Connecting to switches and setting default entry"
     controller.setup_connection(switches) 
     controller.setup_default_entry()
+    print "Installing rules according to the capture"
     controller.dessiminate_rules(capture)
 
     #TODO wait for event
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--conf', action='store', dest='conf' ,help='file containing descriptio of switch')
+    parser.add_argument('--conf', action='store', dest='conf' ,help='file containing description of switch')
     parser.add_argument('--capture', action='store', dest='capture',help='training set capture for the whitelist')
     args = parser.parse_args()
     main(args.conf, args.capture)

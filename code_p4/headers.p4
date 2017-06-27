@@ -94,7 +94,7 @@ header_type udp_t {
 
 header udp_t udp;
 
-header_type miss_tag_t {
+header_type srtag_t {
     fields {
         dstAddr : 32;   // original destination
         id : 16;         // id of the switch causing redirection
@@ -102,7 +102,7 @@ header_type miss_tag_t {
     }
 }
 
-header miss_tag_t miss_tag;
+header srtag_t srtag;
 
 
 header_type flow_meta_t {

@@ -5,6 +5,7 @@
 #define ETHERTYPE_ARP 0x0806
 #define IP_PROTOCOLS_TCP 6
 #define IP_PROTOCOLS_UDP 17
+#define IP_PROTOCOLS_SRTAG 200 
 #define TCP_PORT_MODBUS 5020
 
 parser start {
@@ -30,6 +31,7 @@ parser parse_ipv4 {
     return select(latest.protocol) {
         IP_PROTOCOLS_TCP : parse_tcp;
         IP_PROTOCOLS_UDP : parse_udp; 
+        IP_PROTOCOLS_SRTAG: parse_srtag;
         default: ingress; 
     }
 }
@@ -58,11 +60,11 @@ parser parse_modbus_dst {
 
 parser parse_modbus {
     extract(modbus);
-    return parse_miss_tag;
+    return ingress;
 }
 
-parser parse_miss_tag {
-    extract(miss_tag);
+parser parse_srtag {
+    extract(srtag);
     return ingress;
 }
 

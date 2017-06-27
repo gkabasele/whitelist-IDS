@@ -42,14 +42,14 @@ action respond_arp(dmac) {
 
 
 action add_miss_tag(reason, id, ids_addr, egress_port) {
-    add_header(miss_tag);
+    add_header(srtag);
     // Change protocol to specify presence of tag
     modify_field(ipv4.protocol, 0x00c8);
 
     // Set type of tag
-    modify_field(miss_tag.reason, reason);
-    modify_field(miss_tag.id, id);
-    modify_field(miss_tag.dstAddr, ipv4.dstAddr);
+    modify_field(srtag.reason, reason);
+    modify_field(srtag.id, id);
+    modify_field(srtag.dstAddr, ipv4.dstAddr);
     
     // Setting IDS ip
     modify_field(ipv4.dstAddr, ids_addr);
@@ -181,7 +181,7 @@ table modbus {
 
 table miss_tag_table {
     reads {
-        miss_tag.reason : exact;
+        srtag.reason : exact;
     }
     actions {
         _drop;
