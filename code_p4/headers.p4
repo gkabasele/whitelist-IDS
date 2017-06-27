@@ -105,14 +105,6 @@ header_type srtag_t {
 
 header srtag_t srtag;
 
-
-header_type flow_meta_t {
-    fields {
-        expected_sport : 16;
-        expected_dport : 16;
-    }
-}
-
 metadata flow_meta_t flow_meta;
 
 header_type modbus_t {

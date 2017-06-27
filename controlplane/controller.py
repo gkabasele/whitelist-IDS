@@ -882,8 +882,8 @@ class Controller():
         runtime_data = parse_runtime_data(action, action_params)
         client.bm_mt_set_default_action(0, table_name, action_name, runtime_data)
 
-    def add_flow_id_entry(self, client, srcip, dstip, proto, sport, dport):
-        self.table_add_entry(client, FLOW_ID, ADD_PORT,[srcip, dstip, proto],[sport, dport])
+    def add_flow_id_entry(self, client, srcip, dstip, proto):
+        self.table_add_entry(client, FLOW_ID, NO_OP,[srcip, dstip, proto],[])
 
     def add_modbus_entry(self, client, srcip, sport, funcode):
         self.table_add_entry(client, MODBUS, NO_OP, [srcip, sport, funcode],[])
@@ -919,11 +919,11 @@ class Controller():
                 resp_switch.append(sw)
         return resp_switch
                
-    def deploy_flow_id_rules(self, resp_sw, srcip, dstip, protocol, sport, dport):
+    def deploy_flow_id_rules(self, resp_sw, srcip, dstip, protocol):
         for sw in resp_sw:
             client = self.clients[sw.sw_id]
-            self.add_flow_id_entry(client, srcip, dstip, protocol, sport, dport)
-            self.add_flow_id_entry(client, dstip, srcip, protocol, dport, sport) 
+            self.add_flow_id_entry(client, srcip, dstip, protocol)
+            self.add_flow_id_entry(client, dstip, srcip, protocol) 
 
     def deploy_modbus_rules(self, resp_sw, srcip, sport, funcode):
         for sw in resp_sw:
@@ -956,7 +956,7 @@ class Controller():
                 
                     self.history[(srcip, dstip, proto, sport, dport)] = resp_switch
                     self.history[(dstip, srcip, proto, dport, sport)] = resp_switch
-                    self.deploy_flow_id_rules(resp_switch, srcip, dstip, proto, sport, dport)
+                    self.deploy_flow_id_rules(resp_switch, srcip, dstip, proto)
                     self.deploy_ex_port_rules(resp_switch, srcip, dstip, sport, dport)
 
                 flags = pkt[TCP].flags
