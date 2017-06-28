@@ -97,15 +97,14 @@ header udp_t udp;
 header_type srtag_t {
     fields {
         dstAddr : 32;   // original destination
-        proto : 8;      // original transport protocol 
         id : 16;        // id of the switch causing redirection
+        proto : 8;      // original transport protocol 
         reason : 8;     // Reason of the miss
     }
 }
 
 header srtag_t srtag;
 
-metadata flow_meta_t flow_meta;
 
 header_type modbus_t {
     fields {

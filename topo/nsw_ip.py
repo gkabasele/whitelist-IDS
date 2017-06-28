@@ -64,12 +64,10 @@ class MultiSwitchTopo(IPTopo):
                                 json_path = json_path,
                                 thrift_port = thrift_port,
                                 dpid = self.int2dpid(0))
-        host = self.addHost('mtu',mac = '00:05:00:00:00:00', ip="10.0.10.1/24" )
-        #self.addLink(host,sw_control, params2={"ip":("10.0.10.10/24")})
+        host = self.addHost('mtu',mac = '00:05:00:00:00:00', ip="10.0.10.1/24")
         self.addLink(host,sw_control)
 
         router_cc = self.addRouter('rcc')
-        #self.addLink(router_cc , sw_control, igp_passive=True, params1={"ip":("10.0.10.30/24")}, params2={"ip":("10.0.10.20/24")})
         self.addLink(router_cc , sw_control, igp_passive=True, params1={"ip":("10.0.10.30/24")})
 
         for i in xrange(n_sub):
@@ -89,12 +87,8 @@ class MultiSwitchTopo(IPTopo):
                 host = self.addHost("s%d-h%d" % (switch_id, h + 1),
                                 mac = "00:04:00:00:%02x:%02x" %(switch_id,h),
                                 ip= "10.0.%d0.%d/24"%(switch_id+1 , h+1)) 
-                #self.addLink(host, switch, params2={"ip":("10.0.%d0.10/24"%(switch_id+1))})
                 self.addLink(host, switch)
 
-            #self.addLink(router, switch, igp_passive=True,
-            #                params1={"ip":("10.0.%d0.30/24"%(switch_id + 1))},
-            #                params2={"ip":("10.0.%d0.20/24"%(switch_id + 1))})
             self.addLink(router, switch, igp_passive=True, params1={"ip":("10.0.%d0.30/24"%(switch_id + 1))})
 
         self.addLink('rcc', 'r1', igp_area = "0.0.0.0", params1={"ip":("10.0.100.1/24")},params2={"ip":("10.0.100.2/24")}) 
@@ -173,7 +167,7 @@ def main():
         for n in xrange(num_hosts):
             h = net.get('s%d-h%d' % (sub_id, n + 1))
             h.describe()
-
+    h = net.get('s3-h1').cmd('sudo iptables -I INPUT -i eth0 -j NFQUEUE --queue-num 1')
     sleep(1)
 
     print "Ready !"

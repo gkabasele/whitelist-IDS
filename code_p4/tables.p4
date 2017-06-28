@@ -43,15 +43,17 @@ action respond_arp(dmac) {
 
 action add_miss_tag(reason, id, ids_addr, egress_port) {
     add_header(srtag);
-    // Change protocol to specify presence of tag
-    modify_field(ipv4.protocol, 0x00c8);
 
     // Set type of tag
     modify_field(srtag.reason, reason);
     modify_field(srtag.id, id);
     modify_field(srtag.dstAddr, ipv4.dstAddr);
     modify_field(srtag.proto, ipv4.protocol);
-    
+
+    // Change protocol to specify presence of tag
+    modify_field(ipv4.protocol, 0x00c8);
+
+        
     // Setting IDS ip
     modify_field(ipv4.dstAddr, ids_addr);
 
@@ -62,6 +64,7 @@ action add_miss_tag(reason, id, ids_addr, egress_port) {
 action redirect_packet(egress_port) {
     modify_field(standard_metadata.egress_spec, egress_port);
 }
+
 
 
 table arp_response {

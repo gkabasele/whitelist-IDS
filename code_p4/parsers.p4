@@ -64,6 +64,7 @@ parser parse_modbus {
 }
 
 parser parse_srtag {
+    extract(tcp);
     extract(srtag);
     return ingress;
 }
