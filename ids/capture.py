@@ -17,7 +17,10 @@ def print_and_accept(packet):
     print(packet)
     payload = packet.get_payload()
     (dst, identifier, protocol, reason)  = unpack('ihbb', payload[-8:])
-
+    print dst
+    print identifier
+    print protocol
+    print reason
     #reason =  unpack('tag[-1]
     #identifier = tag[-3:-1]
     #protocol = tag[-4:-3]

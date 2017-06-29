@@ -84,10 +84,21 @@ class MultiSwitchTopo(IPTopo):
             switch = switches[switch_id]
             router = routers[switch_id]
             for h in xrange(n_host):
-                host = self.addHost("s%d-h%d" % (switch_id, h + 1),
-                                mac = "00:04:00:00:%02x:%02x" %(switch_id,h),
-                                ip= "10.0.%d0.%d/24"%(switch_id+1 , h+1)) 
-                self.addLink(host, switch)
+                if switch_id != 3:
+                    host = self.addHost("s%d-h%d" % (switch_id, h + 1),
+                                    mac = "00:04:00:00:%02x:%02x" %(switch_id,h),
+                                    ip= "10.0.%d0.%d/24"%(switch_id+1 , h+1)) 
+                    self.addLink(host, switch)
+                else:
+                    ids = self.addHost("s%d-h%d" % (switch_id, h + 1),
+                                    mac = "00:04:00:00:%02x:%02x" %(switch_id,h),
+                                    ip= "10.0.%d0.%d/24"%(switch_id+1 , h+1))
+                    root_gw = self.addHost("s%d-h%d"% (switch_id, h + 2),
+                                            ip = "172.0.10.2/24", 
+                                            inNamespace=False)
+
+                    self.addLink(ids, switch)
+                    self.addLink(ids, root_gw,  params1={"ip":("172.0.10.1/24")})
 
             self.addLink(router, switch, igp_passive=True, params1={"ip":("10.0.%d0.30/24"%(switch_id + 1))})
 
@@ -167,7 +178,10 @@ def main():
         for n in xrange(num_hosts):
             h = net.get('s%d-h%d' % (sub_id, n + 1))
             h.describe()
-    h = net.get('s3-h1').cmd('sudo iptables -I INPUT -i eth0 -j NFQUEUE --queue-num 1')
+    h = net.get('s3-h1')
+    h_gw = net.get('s3-h2')
+    h_gw.cmd('ip link set s3-h2-eth0 up')  
+    h.cmd('sudo iptables -I INPUT -i eth0 -j NFQUEUE --queue-num 1')
     sleep(1)
 
     print "Ready !"
