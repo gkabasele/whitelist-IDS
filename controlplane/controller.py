@@ -845,15 +845,20 @@ class Controller():
                     if req:
                         print req
                         (srcip, sport, dstip, dport, proto) = self.parse_req(req)
-                        resp_sw = self.get_resp_switch(srcip, dstip)
                         # FIXME same flow_id entry but different ex_port
-                        if (srcip, dstip, proto, sport, dport) not in self.history:
+                        if (srcip, dstip, proto) in self.history:
+                            resp_sw = self.history[(srcip, dstip, proto)]
+                            if (srcip, dstip, proto, sport, dport) not in self.history:
+                                self.deploy_ex_port_rules(resp_sw, srcip, dstip, sport, dport) 
+                                self.history[(srcip, dstip, proto, sport, dport)] = resp_sw
+                                self.history[(dstip, srcip, proto, dport, sport)] = resp_sw
+                        else:
+                            resp_sw = self.get_resp_switch(srcip, dstip)
                             self.deploy_flow_id_rules(resp_sw, srcip, dstip, proto)
-                            self.deploy_ex_port_rules(resp_sw, srcip, dstip, sport, dport) 
-                            self.history[(srcip, dstip, proto, sport, dport)] = resp_sw
-                            self.history[(dstip, srcip, proto, dport, sport)] = resp_sw
-                            # Notifying ids about the rule installement
-                            conn.sendall(str((srcip, sport, dstip, dport, proto)))
+                            self.deploy_ex_port_rules(resp_sw, srcip, dstip, sport, dport)
+                            self.add_history_entry(srcip, dstip, proto, sport, dport, resp_sw)
+                        # Notifying ids about the rule installation
+                        conn.sendall(str((srcip, sport, dstip, dport, proto)))
                     else:
                         break
             finally:
@@ -937,7 +942,6 @@ class Controller():
         self.table_add_entry(client, EX_PORT, NO_OP, [srcip, dstip, sport, dport],[])
     
     def add_send_frame_entry(self, client, port, mac):
-        #self.table_add_entry(client, SEND_FRAME, REWRITE, [port],[mac])
         self.table_add_entry(client, SEND_FRAME, NO_OP, [port],[])
     
     def add_ipv4_entry(self, client, ip_addr, port):
@@ -1000,9 +1004,7 @@ class Controller():
                         self.history.has_key((dstip, srcip, proto, dport, sport))):
 
                     resp_switch = self.get_resp_switch(srcip, dstip)  
-                
-                    self.history[(srcip, dstip, proto, sport, dport)] = resp_switch
-                    self.history[(dstip, srcip, proto, dport, sport)] = resp_switch
+                    self.add_history_entry(srcip, dstip, proto, sport, dport, resp_switch) 
                     self.deploy_flow_id_rules(resp_switch, srcip, dstip, proto)
                     self.deploy_ex_port_rules(resp_switch, srcip, dstip, sport, dport)
 
@@ -1013,6 +1015,13 @@ class Controller():
                         resp_switch = self.history[(srcip, dstip, proto, sport, dport)]
                         self.deploy_modbus_rules(resp_switch, srcip, sport, funcode)
                         self.history[(srcip, sport, funcode)]=True
+
+    def add_history_entry(self, srcip, dstip, proto, sport, dport, resp_switch):
+        self.history[(srcip, dstip, proto)] = resp_switch
+        self.history[(srcip, dstip, proto, sport, dport)] = resp_switch
+        self.history[(dstip, srcip, proto)] = resp_switch
+        self.history[(dstip, srcip, proto, dport, sport)] = resp_switch 
+        
 
     def setup_default_entry(self):
         for switch in self.switches:
@@ -1062,9 +1071,6 @@ class Controller():
             for entry in sw.arp_table:
                 for ip, mac in entry.iteritems():
                     self.add_arp_resp_entry(client, ip, mac)
-            # TODO broadcast arp request
-            #for i in xrange(len(sw.interfaces)-1):
-            #    self.add_arp_forw_entry(client, str(i+1), sw.ids_port)
                  
 
 
