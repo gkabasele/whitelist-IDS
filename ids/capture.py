@@ -29,8 +29,9 @@ class SRTag(Packet):
     
 
 bind_layers(IP, SRTag, proto=200)
-bind_layers(SRTag, TCP, proto=6)
+bind_layers(SRTag, TCP, protocol=6)
 
+#TODO packet remove layer
 def forge_new_packet(payload, dstip, proto):
     pkt = IP(payload[:-8])
     pkt[IP].dst = dstip
@@ -43,12 +44,12 @@ def print_and_accept(packet):
     
     print(packet)
     payload = packet.get_payload()
-    #(dst, identifier, proto, reason)  = unpack('LHBB', payload[-8:])
-    dstip = str(IPAddress(socket.htonl(dst)))
     pkt = IP(payload)
-    srcip = (pkt[IP].src)
+    dstip = pkt[SRTag].dst 
+    srcip = pkt[IP].src
     sport = pkt[TCP].sport
     dport = pkt[TCP].dport
+    proto = pkt[SRTag].protocol
     flow = (srcip,sport,dstip,dport,proto)
     try:
         if flow not in history: 
