@@ -44,7 +44,14 @@ control ingress {
         apply(arp_response);
 
         if(tmp_arp.is_dest == 0){
-            apply(arp_forward);
+            // Request
+            if(arp.opcode == 1) {
+               apply(arp_forward_req); 
+            } else if (arp.opcode == 2) {
+               apply(arp_forward_resp); 
+            } else {
+               //nothing to do here
+            }
         }
     }
 }

@@ -3,6 +3,7 @@ import sys
 import struct
 import json
 import inspect
+import socket
 from netaddr import IPNetwork
 from netaddr import IPAddress
 from scapy.all import *
@@ -45,7 +46,8 @@ MODBUS = 'modbus'
 EX_PORT = 'ex_port'
 MISS_TAG= 'miss_tag_table'
 ARP_RESP = 'arp_response'
-ARP_FORW = 'arp_forward'
+ARP_FORW_REQ = 'arp_forward_req'
+ARP_FORW_RESP = 'arp_forward_resp'
 
 # Action name
 DROP = '_drop'
@@ -53,10 +55,12 @@ NO_OP = '_no_op'
 ADD_TAG = 'add_miss_tag'
 REWRITE = 'rewrite_mac'
 DMAC = 'set_dmac'
-NHOP = 'set_nhop'
+SET_EGRESS = 'set_egress_port'
 ADD_PORT = 'add_expected_port'
 REDIRECT = 'redirect_packet'
 RESP = 'respond_arp'
+STORE_ARP = 'store_arp_in'
+FORWARD_ARP = 'forward_arp'
 
 # TAG MISS
 IP_MISS = '10'
@@ -751,6 +755,7 @@ class Switch():
         ids_port: outport on the switch to reach the IDS
         ids_addr: ip address of IDS
         routing_table : dest ip : port
+        arp_table : arp table for table in subnet work
     '''
     def __init__(self, 
                  sw_id,
@@ -807,6 +812,7 @@ class Controller():
         self.clients = {}
         self.switches = {}
         self.history = {}
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def add_client(self, id_client, standard_client, switch):
         self.clients[id_client] = standard_client
@@ -818,10 +824,49 @@ class Controller():
             standard_client, mc_client = thrift_connect(
                 str(sw.ip_address.ip), int(sw.port), Controller.get_thrift_services(PreType.SimplePre)
             ) 
+            # Loading config only once
+
             if once:
                 load_json_config(standard_client)
                 once = False
             self.add_client(sw.sw_id, standard_client, sw)  
+
+    def waiting_request(self, ip, port):
+        server = (ip,port)
+        print "Starting controller"
+        self.sock.bind(server)
+        self.sock.listen(1) 
+        while True:
+            conn, ids = self.sock.accept()
+            try:
+                print "connected to ids"
+                while True:
+                    req = conn.recv(128)
+                    if req:
+                        print req
+                        (srcip, sport, dstip, dport, proto) = self.parse_req(req)
+                        resp_sw = self.get_resp_switch(srcip, dstip)
+                        # FIXME same flow_id entry but different ex_port
+                        if (srcip, dstip, proto, sport, dport) not in self.history:
+                            self.deploy_flow_id_rules(resp_sw, srcip, dstip, proto)
+                            self.deploy_ex_port_rules(resp_sw, srcip, dstip, sport, dport) 
+                            self.history[(srcip, dstip, proto, sport, dport)] = resp_sw
+                            self.history[(dstip, srcip, proto, dport, sport)] = resp_sw
+                            # Notifying ids about the rule installement
+                            conn.sendall(str((srcip, sport, dstip, dport, proto)))
+                    else:
+                        break
+            finally:
+                conn.close()
+
+    def parse_req(self, req):
+        tmp = req.replace("'","").replace(" ","").strip('()').split(",")
+        srcip = tmp[0]
+        sport = tmp[1]
+        dstip = tmp[2]
+        dport = tmp[3]
+        proto = tmp[4]
+        return (srcip, sport, dstip, dport, proto)
 
     def get_res(self, type_name, name, array):
         if name not in array:
@@ -892,10 +937,11 @@ class Controller():
         self.table_add_entry(client, EX_PORT, NO_OP, [srcip, dstip, sport, dport],[])
     
     def add_send_frame_entry(self, client, port, mac):
-        self.table_add_entry(client, SEND_FRAME, REWRITE, [port],[mac])
+        #self.table_add_entry(client, SEND_FRAME, REWRITE, [port],[mac])
+        self.table_add_entry(client, SEND_FRAME, NO_OP, [port],[])
     
     def add_ipv4_entry(self, client, ip_addr, port):
-        self.table_add_entry(client, IPV4_LPM, NHOP, [str(ip_addr)], [str(ip_addr.ip), port])
+        self.table_add_entry(client, IPV4_LPM, SET_EGRESS, [str(ip_addr)], [port])
 
     def add_forward_entry(self, client, ip_addr, mac):
         self.table_add_entry(client, FORWARD, DMAC, [str(ip_addr)],[mac]) 
@@ -904,7 +950,8 @@ class Controller():
         self.table_add_entry(client, MISS_TAG, REDIRECT, [tag],[port])
 
     def add_arp_resp_entry(self, client, ip_addr, mac):
-        self.table_add_entry(client, ARP_RESP, RESP, [ip_addr],[mac])
+        # opcode request
+        self.table_add_entry(client, ARP_RESP, RESP, [ip_addr, str(1)],[mac])
     
     def add_arp_forw_entry(self, client, in_port, out_port):
         self.table_add_entry(client, ARP_FORW, REDIRECT, [in_port], [out_port])
@@ -975,15 +1022,21 @@ class Controller():
 
             self.table_default_entry(client, SEND_FRAME, DROP, [])
             self.table_default_entry(client, FORWARD, NO_OP, [])
-            self.table_default_entry(client, IPV4_LPM, NO_OP, [])
-            if not is_ids_sw:
+            
+            self.table_default_entry(client, IPV4_LPM, SET_EGRESS, [sw.ids_port])
+            if is_ids_sw:
+                self.table_default_entry(client, FLOW_ID, NO_OP, [])
+                self.table_default_entry(client, EX_PORT, NO_OP, [])
+                self.table_default_entry(client, MODBUS, NO_OP, [])
+            else:
                 self.table_default_entry(client, FLOW_ID, ADD_TAG, [IP_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
                 self.table_default_entry(client, EX_PORT, ADD_TAG, [PORT_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
                 self.table_default_entry(client, MODBUS, ADD_TAG, [FUN_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
 
             self.table_default_entry(client, MISS_TAG, DROP, [])
             self.table_default_entry(client, ARP_RESP, NO_OP, [])
-            self.table_default_entry(client, ARP_FORW, DROP, [])
+            self.table_default_entry(client, ARP_FORW_REQ, STORE_ARP, [sw.ids_port])
+            self.table_default_entry(client, ARP_FORW_RESP, FORWARD_ARP, [])
 
             for interface in sw.interfaces:
                 for iname in interface:
@@ -1006,16 +1059,20 @@ class Controller():
             ip_addr = sw.real_ip
             mac = sw.interfaces[0]["1"]
             self.add_arp_resp_entry(client, ip_addr, mac)
-            self.add_arp_forw_entry(client, str(1), str(2))
-            self.add_arp_forw_entry(client, str(2), str(1))
-
+            for entry in sw.arp_table:
+                for ip, mac in entry.iteritems():
+                    self.add_arp_resp_entry(client, ip, mac)
+            # TODO broadcast arp request
+            #for i in xrange(len(sw.interfaces)-1):
+            #    self.add_arp_forw_entry(client, str(i+1), sw.ids_port)
+                 
 
 
 def load_json_config(standard_client=None, json_path=None):
     load_json_str(utils.get_json_config(standard_client, json_path))
 
 
-def main(sw_config, capture):
+def main(sw_config, capture, ip, port):
     print "Creating switches"
     switches = create_switches(sw_config) 
 
@@ -1026,11 +1083,12 @@ def main(sw_config, capture):
     print "Installing rules according to the capture"
     controller.dessiminate_rules(capture)
 
-    #TODO wait for event
-
+    controller.waiting_request(ip, port)
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--conf', action='store', dest='conf' ,help='file containing description of switch')
-    parser.add_argument('--capture', action='store', dest='capture',help='training set capture for the whitelist')
+    parser.add_argument('--conf', action='store', dest='conf', help='file containing description of switch')
+    parser.add_argument('--capture', action='store', dest='capture', help='training set capture for the whitelist')
+    parser.add_argument('--ip', action='store', dest ='ip', default='172.0.10.2', help='ip address of the controller')
+    parser.add_argument('--port', action='store', dest='port', type=int, default=2000, help='port used by controller')
     args = parser.parse_args()
-    main(args.conf, args.capture)
+    main(args.conf, args.capture, args.ip, args.port)

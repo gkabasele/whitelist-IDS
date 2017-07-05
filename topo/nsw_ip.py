@@ -89,6 +89,12 @@ class MultiSwitchTopo(IPTopo):
                                     mac = "00:04:00:00:%02x:%02x" %(switch_id,h),
                                     ip= "10.0.%d0.%d/24"%(switch_id+1 , h+1)) 
                     self.addLink(host, switch)
+                    if switch_id == 1:
+                        host = self.addHost("s%d-h%d" % (switch_id, h + 2),
+                                    mac = "00:04:00:00:%02x:%02x" %(switch_id,h+1),
+                                    ip= "10.0.%d0.%d/24"%(switch_id+1 , h+2)) 
+                        self.addLink(host, switch)
+
                 else:
                     ids = self.addHost("s%d-h%d" % (switch_id, h + 1),
                                     mac = "00:04:00:00:%02x:%02x" %(switch_id,h),

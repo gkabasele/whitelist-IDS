@@ -5,10 +5,10 @@ action _drop() {
     drop();
 }
 
-action set_nhop(nhop_ipv4, port) {
-    modify_field(routing_metadata.nhop_ipv4, nhop_ipv4);
+action set_egress_port(port) {
+  //  modify_field(routing_metadata.nhop_ipv4, nhop_ipv4);
     modify_field(standard_metadata.egress_spec, port);
-    add_to_field(ipv4.ttl, -1);
+  //  add_to_field(ipv4.ttl, -1);
 }
 
 action set_dmac(dmac) {
@@ -33,6 +33,9 @@ action respond_arp(dmac) {
 
     modify_field(arp.srcMac, dmac);
     modify_field(arp.srcAddr, tmp_arp.ipAddr);
+
+    // Set opcode to reply 
+    modify_field(arp.opcode, 2);
 
     modify_field(standard_metadata.egress_spec, standard_metadata.ingress_port);
     
@@ -67,9 +70,47 @@ action redirect_packet(egress_port) {
 
 
 
+
+register arp_ip {
+    width : 32;
+    instance_count : 256;
+}
+
+register arp_mac {
+    width : 48;
+    instance_count : 256;
+}
+
+register arp_in_port {
+    width : 32;
+    instance_count : 256;
+}
+
+register arp_index {
+    width : 32;
+    instance_count : 1;
+} 
+
+action store_arp_in(egress_port){
+    register_read(tmp_reg_arp.tmp_index, arp_index, 0);
+    register_write(arp_ip, tmp_reg_arp.tmp_index, arp.srcAddr);
+    register_write(arp_mac, tmp_reg_arp.tmp_index, arp.srcMac);
+    register_write(arp_in_port, tmp_reg_arp.tmp_index, standard_metadata.ingress_port);
+    //add_to_field(tmp_reg_arp.tmp_index, 1);
+    modify_field(standard_metadata.egress_spec, egress_port);
+}
+
+action forward_arp() {
+    register_read(tmp_reg_arp.tmp_index, arp_index, 0);
+    register_read(tmp_reg_arp.tmp_inport, arp_in_port, tmp_reg_arp.tmp_index);
+    modify_field(standard_metadata.egress_spec, tmp_reg_arp.tmp_inport);
+}
+
+
 table arp_response {
     reads {
         arp.dstAddr : exact;
+        arp.opcode : exact;
     }
     actions {
         respond_arp;
@@ -77,12 +118,22 @@ table arp_response {
     }
 }
 
-table arp_forward {
+table arp_forward_req {
     reads {
         standard_metadata.ingress_port : exact;
     }
     actions {
-        redirect_packet;
+        store_arp_in;
+        _drop;
+    }
+}
+
+table arp_forward_resp {
+    reads {
+        standard_metadata.ingress_port : exact;
+    }
+    actions {
+        forward_arp;
         _drop;
     }
 }
@@ -93,7 +144,7 @@ table ipv4_lpm {
         ipv4.dstAddr : lpm;
     }
     actions {
-        set_nhop;
+        set_egress_port;
         _drop;
         _no_op;
     }
@@ -122,6 +173,7 @@ table send_frame {
     }
     actions {
         rewrite_mac;
+        _no_op;
         _drop;
     }
     size: 256;

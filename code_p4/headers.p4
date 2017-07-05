@@ -75,7 +75,7 @@ header_type tcp_t {
         window : 16;
         checksum : 16;
         urgentPtr : 16;
-        opt : 96;
+        //opt : 160;
     }
 }
 
@@ -148,3 +148,14 @@ header_type tmp_t {
 }
 
 metadata tmp_t tmp_arp;
+
+header_type tmp_arp_t {
+    fields {
+        tmp_ipAddr : 32;
+        tmp_hwAddr : 48;
+        tmp_inport : 32;
+        tmp_index : 8;
+    }
+}
+
+metadata tmp_arp_t tmp_reg_arp;
