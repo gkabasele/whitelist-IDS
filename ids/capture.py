@@ -31,12 +31,13 @@ class SRTag(Packet):
 bind_layers(IP, SRTag, proto=200)
 bind_layers(SRTag, TCP, protocol=6)
 
-#TODO packet remove layer
 def forge_new_packet(payload, dstip, proto):
-    pkt = IP(payload[:-8])
-    pkt[IP].dst = dstip
-    pkt[IP].proto = proto
-    return pkt
+    pkt = IP(payload)
+    ip = pkt[IP]
+    tcp = pkt[TCP]
+    ip.dst = dstip
+    ip.proto = proto
+    return ip/tcp
      
     
 
