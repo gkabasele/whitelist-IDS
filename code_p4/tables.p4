@@ -37,6 +37,8 @@ action respond_arp(dmac) {
     // Set opcode to reply 
     modify_field(arp.opcode, 2);
 
+    modify_field(ethernet.srcAddr, dmac);
+    modify_field(ethernet.dstAddr, tmp_arp.hwAddr);
     modify_field(standard_metadata.egress_spec, standard_metadata.ingress_port);
     
     // Switch is queried no need to forward

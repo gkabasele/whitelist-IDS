@@ -78,6 +78,7 @@ class MultiSwitchTopo(IPTopo):
                                 json_path = json_path,
                                 thrift_port = thrift_port+(i+1),
                                 dpid = self.int2dpid(i+1))
+                                
             routers[(i+1)] = self.addRouter(label_router) 
             
         for switch_id in switches:

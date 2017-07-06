@@ -8,6 +8,11 @@ from scapy.all import *
 from struct  import *
 from netaddr import  IPAddress
 
+# TAG MISS
+IP_MISS = '10'
+PORT_MISS = '20'
+FUN_MISS = '30'
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--ip', action='store', dest='ip', default= '172.0.10.2',help='ip address of the controller') 
 parser.add_argument('--port', action='store', dest='port', type=int ,default= 2000,help='ip address of the controller') 
@@ -53,15 +58,15 @@ def print_and_accept(packet):
     proto = pkt[SRTag].protocol
     flow = (srcip,sport,dstip,dport,proto)
     try:
-        if flow not in history: 
-            fail = sock.sendall(str(flow))
-            if not fail:
-                history[flow] = True
-                resp = sock.recv(128)
-                print "Received response", resp
-                pkt = forge_new_packet(payload, dstip, proto)
-                send(pkt)
-                
+        if proto != FUN_MISS: 
+            if flow not in history: 
+                fail = sock.sendall(str(flow))
+                if not fail:
+                    history[flow] = True
+                    resp = sock.recv(128)
+                    print "Received response", resp
+                    pkt = forge_new_packet(payload, dstip, proto)
+                    send(pkt)
     finally: 
         packet.accept()
 

@@ -122,11 +122,11 @@ class P4Switch(Switch):
             args.extend(['--nanolog', self.nanomsg])
         args.extend(['--device-id', str(self.device_id)])
         P4Switch.device_id += 1
-        args.append(self.json_path)
         if self.enable_debugger:
             args.append("--debugger")
         if self.log_console:
             args.append("--log-console")
+        args.append(self.json_path)
         logfile = "/tmp/p4s.{}.log".format(self.name)
         info(' '.join(args) + "\n")
 

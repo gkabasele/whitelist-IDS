@@ -21,8 +21,13 @@ header_type ipv4_t {
         protocol : 8;
         hdrChecksum : 16;
         srcAddr : 32;
-        dstAddr: 32;
+        dstAddr : 32;
+        //opitons max 20 bytes
+        options : *;
     }
+    // length is expressed in bytes
+    length : 4 * ihl;
+    max_length : 320;
 }
 
 header ipv4_t ipv4;
@@ -76,7 +81,10 @@ header_type tcp_t {
         checksum : 16;
         urgentPtr : 16;
         //opt : 160;
+        opt : *;
     }
+    length : 4 * dataOffset;
+    max_length :  480;
 }
 
 header tcp_t tcp;

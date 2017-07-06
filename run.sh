@@ -1,2 +1,3 @@
 # !/bin/bash
-sudo python topo/nsw_ip.py --behavioral-exe ../targets/simple_switch/simple_switch --json config-json/whitelist.json
+TARGET=~/p4-tutorials/bmv2/targets/simple_switch/simple_switch
+sudo python topo/nsw_ip.py --behavioral-exe $TARGET --json config-json/whitelist.json
