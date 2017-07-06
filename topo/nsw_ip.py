@@ -50,6 +50,8 @@ class MultiSwitchTopo(IPTopo):
      Switch"""
     def build(self, *args, **kwargs):
         # Initialize topology and default options
+        log_dir = "log/"
+
         sw_path = kwargs.get('sw_path')
         json_path = kwargs.get('json_path')
         thrift_port = kwargs.get('thrift_port')
@@ -73,11 +75,20 @@ class MultiSwitchTopo(IPTopo):
         for i in xrange(n_sub):
             label_sw = "s%d"%(i+1)
             label_router = "r%d"%(i+1)
+            enable_debug = False
+            log = None
+            
+            if (i+1) == 3:
+                enable_debug = True
+                log = "sw_ids.log"
+
             switches[(i+1)] = self.addSwitch(label_sw,
                                 sw_path = sw_path,
                                 json_path = json_path,
                                 thrift_port = thrift_port+(i+1),
-                                dpid = self.int2dpid(i+1))
+                                dpid = self.int2dpid(i+1),
+                                enable_debugger= enable_debug,
+                                log_file = log)
                                 
             routers[(i+1)] = self.addRouter(label_router) 
             

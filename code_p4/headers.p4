@@ -27,7 +27,7 @@ header_type ipv4_t {
     }
     // length is expressed in bytes
     length : 4 * ihl;
-    max_length : 320;
+    max_length : 60;
 }
 
 header ipv4_t ipv4;
@@ -60,6 +60,7 @@ field_list ipv4_checksum_list {
         ipv4.protocol;
         ipv4.srcAddr;
         ipv4.dstAddr;
+        ipv4.options;
 }
 
 header_type tcp_t {
@@ -84,7 +85,7 @@ header_type tcp_t {
         opt : *;
     }
     length : 4 * dataOffset;
-    max_length :  480;
+    max_length :  60;
 }
 
 header tcp_t tcp;

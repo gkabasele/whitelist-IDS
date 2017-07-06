@@ -42,9 +42,43 @@ parser parse_udp {
     return ingress;
 }
 
+// Check if SYN is set
 parser parse_tcp {
     extract(tcp);
-    return select(latest.dstPort) {
+    return select(latest.syn) {
+       0x0 : parse_tcp_fin;
+       default: ingress; 
+    }
+}
+
+// Check if FIN is set
+parser parse_tcp_fin {
+    return select(tcp.fin) {
+       0x0 : parse_tcp_ack;
+       default: ingress;
+    }
+}
+
+// Check if ACK is set
+parser parse_tcp_ack {
+    return select(tcp.ack) {
+       0x1 : parse_tcp_psh;
+       default:  ingress; 
+    }
+
+}
+
+// Check if 
+parser parse_tcp_psh {
+    return select(tcp.psh) {
+        0x1 : parse_tcp_modbus;
+        default: ingress;
+    }
+}
+
+
+parser parse_tcp_modbus {
+    return select(tcp.dstPort) {
         TCP_PORT_MODBUS: parse_modbus;
         default: parse_modbus_dst;
     }

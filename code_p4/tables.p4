@@ -58,6 +58,9 @@ action add_miss_tag(reason, id, ids_addr, egress_port) {
     // Change protocol to specify presence of tag
     modify_field(ipv4.protocol, 0x00c8);
 
+    // Change total length of ip 
+    add_to_field(ipv4.totalLen, 8); 
+
         
     // Setting IDS ip
     modify_field(ipv4.dstAddr, ids_addr);

@@ -158,7 +158,7 @@
                     }
                 }
             },
-            "max_length": 320
+            "max_length": 60
         },
         {
             "name": "arp_t",
@@ -311,7 +311,7 @@
                     }
                 }
             },
-            "max_length": 480
+            "max_length": 60
         },
         {
             "name": "udp_t",
@@ -656,6 +656,118 @@
                             "type": "field",
                             "value": [
                                 "tcp",
+                                "syn"
+                            ]
+                        }
+                    ],
+                    "transitions": [
+                        {
+                            "type": "hexstr",
+                            "value": "0x00",
+                            "mask": null,
+                            "next_state": "parse_tcp_fin"
+                        },
+                        {
+                            "type": "default",
+                            "value": null,
+                            "mask": null,
+                            "next_state": null
+                        }
+                    ]
+                },
+                {
+                    "name": "parse_tcp_fin",
+                    "id": 4,
+                    "parser_ops": [],
+                    "transition_key": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "tcp",
+                                "fin"
+                            ]
+                        }
+                    ],
+                    "transitions": [
+                        {
+                            "type": "hexstr",
+                            "value": "0x00",
+                            "mask": null,
+                            "next_state": "parse_tcp_ack"
+                        },
+                        {
+                            "type": "default",
+                            "value": null,
+                            "mask": null,
+                            "next_state": null
+                        }
+                    ]
+                },
+                {
+                    "name": "parse_tcp_ack",
+                    "id": 5,
+                    "parser_ops": [],
+                    "transition_key": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "tcp",
+                                "ack"
+                            ]
+                        }
+                    ],
+                    "transitions": [
+                        {
+                            "type": "hexstr",
+                            "value": "0x01",
+                            "mask": null,
+                            "next_state": "parse_tcp_psh"
+                        },
+                        {
+                            "type": "default",
+                            "value": null,
+                            "mask": null,
+                            "next_state": null
+                        }
+                    ]
+                },
+                {
+                    "name": "parse_tcp_psh",
+                    "id": 6,
+                    "parser_ops": [],
+                    "transition_key": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "tcp",
+                                "psh"
+                            ]
+                        }
+                    ],
+                    "transitions": [
+                        {
+                            "type": "hexstr",
+                            "value": "0x01",
+                            "mask": null,
+                            "next_state": "parse_tcp_modbus"
+                        },
+                        {
+                            "type": "default",
+                            "value": null,
+                            "mask": null,
+                            "next_state": null
+                        }
+                    ]
+                },
+                {
+                    "name": "parse_tcp_modbus",
+                    "id": 7,
+                    "parser_ops": [],
+                    "transition_key": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "tcp",
                                 "dstPort"
                             ]
                         }
@@ -677,7 +789,7 @@
                 },
                 {
                     "name": "parse_modbus",
-                    "id": 4,
+                    "id": 8,
                     "parser_ops": [
                         {
                             "op": "extract",
@@ -701,7 +813,7 @@
                 },
                 {
                     "name": "parse_modbus_dst",
-                    "id": 5,
+                    "id": 9,
                     "parser_ops": [],
                     "transition_key": [
                         {
@@ -729,7 +841,7 @@
                 },
                 {
                     "name": "parse_udp",
-                    "id": 6,
+                    "id": 10,
                     "parser_ops": [
                         {
                             "op": "extract",
@@ -753,7 +865,7 @@
                 },
                 {
                     "name": "parse_srtag",
-                    "id": 7,
+                    "id": 11,
                     "parser_ops": [
                         {
                             "op": "extract",
@@ -777,7 +889,7 @@
                 },
                 {
                     "name": "parse_arp",
-                    "id": 8,
+                    "id": 12,
                     "parser_ops": [
                         {
                             "op": "extract",
@@ -812,170 +924,28 @@
                 "ipv4",
                 "udp",
                 "srtag",
-                "arp",
                 "tcp",
-                "modbus"
+                "modbus",
+                "arp"
             ]
         }
     ],
     "meter_arrays": [],
     "actions": [
         {
-            "name": "set_egress_port",
+            "name": "_drop",
             "id": 0,
-            "runtime_data": [
-                {
-                    "name": "port",
-                    "bitwidth": 9
-                }
-            ],
-            "primitives": [
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "standard_metadata",
-                                "egress_spec"
-                            ]
-                        },
-                        {
-                            "type": "runtime_data",
-                            "value": 0
-                        }
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "redirect_packet",
-            "id": 1,
-            "runtime_data": [
-                {
-                    "name": "egress_port",
-                    "bitwidth": 9
-                }
-            ],
-            "primitives": [
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "standard_metadata",
-                                "egress_spec"
-                            ]
-                        },
-                        {
-                            "type": "runtime_data",
-                            "value": 0
-                        }
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "rewrite_mac",
-            "id": 2,
-            "runtime_data": [
-                {
-                    "name": "smac",
-                    "bitwidth": 48
-                }
-            ],
-            "primitives": [
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "ethernet",
-                                "srcAddr"
-                            ]
-                        },
-                        {
-                            "type": "runtime_data",
-                            "value": 0
-                        }
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "forward_arp",
-            "id": 3,
             "runtime_data": [],
             "primitives": [
                 {
-                    "op": "register_read",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "tmp_reg_arp",
-                                "tmp_index"
-                            ]
-                        },
-                        {
-                            "type": "register_array",
-                            "value": "arp_index"
-                        },
-                        {
-                            "type": "hexstr",
-                            "value": "0x0"
-                        }
-                    ]
-                },
-                {
-                    "op": "register_read",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "tmp_reg_arp",
-                                "tmp_inport"
-                            ]
-                        },
-                        {
-                            "type": "register_array",
-                            "value": "arp_in_port"
-                        },
-                        {
-                            "type": "field",
-                            "value": [
-                                "tmp_reg_arp",
-                                "tmp_index"
-                            ]
-                        }
-                    ]
-                },
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "standard_metadata",
-                                "egress_spec"
-                            ]
-                        },
-                        {
-                            "type": "field",
-                            "value": [
-                                "tmp_reg_arp",
-                                "tmp_inport"
-                            ]
-                        }
-                    ]
+                    "op": "drop",
+                    "parameters": []
                 }
             ]
         },
         {
             "name": "add_miss_tag",
-            "id": 4,
+            "id": 1,
             "runtime_data": [
                 {
                     "name": "reason",
@@ -1091,6 +1061,22 @@
                     ]
                 },
                 {
+                    "op": "add_to_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "ipv4",
+                                "totalLen"
+                            ]
+                        },
+                        {
+                            "type": "hexstr",
+                            "value": "0x8"
+                        }
+                    ]
+                },
+                {
                     "op": "modify_field",
                     "parameters": [
                         {
@@ -1126,7 +1112,7 @@
         },
         {
             "name": "set_dmac",
-            "id": 5,
+            "id": 2,
             "runtime_data": [
                 {
                     "name": "dmac",
@@ -1154,7 +1140,7 @@
         },
         {
             "name": "store_arp_in",
-            "id": 6,
+            "id": 3,
             "runtime_data": [
                 {
                     "name": "egress_port",
@@ -1270,30 +1256,77 @@
             ]
         },
         {
-            "name": "_drop",
-            "id": 7,
+            "name": "forward_arp",
+            "id": 4,
             "runtime_data": [],
             "primitives": [
                 {
-                    "op": "drop",
-                    "parameters": []
-                }
-            ]
-        },
-        {
-            "name": "_no_op",
-            "id": 8,
-            "runtime_data": [],
-            "primitives": [
+                    "op": "register_read",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "tmp_reg_arp",
+                                "tmp_index"
+                            ]
+                        },
+                        {
+                            "type": "register_array",
+                            "value": "arp_index"
+                        },
+                        {
+                            "type": "hexstr",
+                            "value": "0x0"
+                        }
+                    ]
+                },
                 {
-                    "op": "no_op",
-                    "parameters": []
+                    "op": "register_read",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "tmp_reg_arp",
+                                "tmp_inport"
+                            ]
+                        },
+                        {
+                            "type": "register_array",
+                            "value": "arp_in_port"
+                        },
+                        {
+                            "type": "field",
+                            "value": [
+                                "tmp_reg_arp",
+                                "tmp_index"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "standard_metadata",
+                                "egress_spec"
+                            ]
+                        },
+                        {
+                            "type": "field",
+                            "value": [
+                                "tmp_reg_arp",
+                                "tmp_inport"
+                            ]
+                        }
+                    ]
                 }
             ]
         },
         {
             "name": "respond_arp",
-            "id": 9,
+            "id": 5,
             "runtime_data": [
                 {
                     "name": "dmac",
@@ -1495,6 +1528,101 @@
                         {
                             "type": "hexstr",
                             "value": "0x1"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "rewrite_mac",
+            "id": 6,
+            "runtime_data": [
+                {
+                    "name": "smac",
+                    "bitwidth": 48
+                }
+            ],
+            "primitives": [
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "ethernet",
+                                "srcAddr"
+                            ]
+                        },
+                        {
+                            "type": "runtime_data",
+                            "value": 0
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "set_egress_port",
+            "id": 7,
+            "runtime_data": [
+                {
+                    "name": "port",
+                    "bitwidth": 9
+                }
+            ],
+            "primitives": [
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "standard_metadata",
+                                "egress_spec"
+                            ]
+                        },
+                        {
+                            "type": "runtime_data",
+                            "value": 0
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "_no_op",
+            "id": 8,
+            "runtime_data": [],
+            "primitives": [
+                {
+                    "op": "no_op",
+                    "parameters": []
+                }
+            ]
+        },
+        {
+            "name": "redirect_packet",
+            "id": 9,
+            "runtime_data": [
+                {
+                    "name": "egress_port",
+                    "bitwidth": 9
+                }
+            ],
+            "primitives": [
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "standard_metadata",
+                                "egress_spec"
+                            ]
+                        },
+                        {
+                            "type": "runtime_data",
+                            "value": 0
                         }
                     ]
                 }
@@ -2253,6 +2381,13 @@
                     "value": [
                         "ipv4",
                         "dstAddr"
+                    ]
+                },
+                {
+                    "type": "field",
+                    "value": [
+                        "ipv4",
+                        "options"
                     ]
                 }
             ],
