@@ -233,6 +233,20 @@ table modbus {
     size : 100;
 }
 
+table modbus_payload_size {
+    reads {
+        ipv4.srcAddr: exact;
+        tcp.srcPort: exact;
+        modbus.funcode: exact;
+        standard_metadata.packet_length: exact;
+    }
+    actions {
+        _drop;
+        _no_op;
+        add_miss_tag;
+    }
+}
+
 table miss_tag_table {
     reads {
         srtag.reason : exact;

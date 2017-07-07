@@ -2,11 +2,14 @@ import os
 import sys
 import struct
 import json
+import cPickle as pickle
 import inspect
 import socket
 from netaddr import IPNetwork
 from netaddr import IPAddress
 from scapy.all import *
+
+from utils import *
 
 import argparse
 
@@ -24,18 +27,21 @@ try:
 except:
     pass
 
-class ModbusHeader(Packet):
-    name="ModbusHeader"
-    fields_desc=[
-        ShortField("transactionID",0),
-        ShortField("protocolID",0),
-        ShortField("length",6),
-        ByteField("unitID",0),
-        ByteField("funcode",1)
-    ]
+class Flow():
+    '''
+        flow : 5-tuples (srcip, sport, dstip, dport, proto)
+        resp_switch : list of switch concerned by this flow
+        entries : dict {switch_id : entry} where entry is the id of the flow in
+                  the table
+    '''
+    def __init__(self, flow, resp_switch, entries):
+        self.flow = flow
+        self.resp_switch = resp_switch
+        self.entries = entries
+        self.is_active = True
 
-bind_layers(TCP, ModbusHeader, dport=5020)
-bind_layers(TCP, ModbusHeader, sport=5020)
+bind_layers(TCP, Modbus, dport=5020)
+bind_layers(TCP, Modbus, sport=5020)
 
 # Table name
 SEND_FRAME = 'send_frame'
@@ -43,6 +49,7 @@ FORWARD = 'forward'
 IPV4_LPM = 'ipv4_lpm'
 FLOW_ID = 'flow_id'
 MODBUS = 'modbus'
+MODBUS_PAYLOAD = 'modbus_payload_size'
 EX_PORT = 'ex_port'
 MISS_TAG= 'miss_tag_table'
 ARP_RESP = 'arp_response'
@@ -66,6 +73,11 @@ FORWARD_ARP = 'forward_arp'
 IP_MISS = '10'
 PORT_MISS = '20'
 FUN_MISS = '30'
+PAYLOAD_SIZE_MISS = '40'
+
+# Code for request/response
+OK = 1
+ERROR = 2
 
 def enum(type_name, *sequential, **named):
     enums = dict(zip(sequential, range(len(sequential))), **named)
@@ -841,26 +853,32 @@ class Controller():
             try:
                 print "connected to ids"
                 while True:
-                    req = conn.recv(128)
-                    if req:
-                        print req
-                        (srcip, sport, dstip, dport, proto) = self.parse_req(req)
-                        # FIXME same flow_id entry but different ex_port
-                        if (srcip, dstip, proto) in self.history:
-                            resp_sw = self.history[(srcip, dstip, proto)]
-                            if (srcip, dstip, proto, sport, dport) not in self.history:
-                                self.deploy_ex_port_rules(resp_sw, srcip, dstip, sport, dport) 
-                                self.history[(srcip, dstip, proto, sport, dport)] = resp_sw
-                                self.history[(dstip, srcip, proto, dport, sport)] = resp_sw
+                    #req = conn.recv(128)
+                    data = Communication.recv_msg(conn)
+                    print "Received req"
+                    if data:
+                        #print req
+                        #(srcip, sport, dstip, dport, proto) = self.parse_req(req)
+                        flow = pickle.loads(data)
+                        if flow.reason != FUN_MISS and flow.reason != PAYLOAD_SIZE_MISS:
+                            if (flow.srcip, flow.dstip, flow.proto) in self.history:
+                                resp_sw = self.history[(flow.srcip, flow.dstip, flow.proto)]
+                                if (flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport) not in self.history:
+                                    self.deploy_ex_port_rules(resp_sw, flow.srcip, flow.dstip, flow.sport, flow.dport) 
+                                    self.history[(flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport)] = resp_sw
+                                    self.history[(flow.dstip, flow.srcip, flow.proto, flow.dport, flow.sport)] = resp_sw
+                            else:
+                                resp_sw = self.get_resp_switch(flow.srcip, flow.dstip)
+                                self.deploy_flow_id_rules(resp_sw, flow.srcip, flow.dstip, flow.proto)
+                                self.deploy_ex_port_rules(resp_sw, flow.srcip, flow.dstip, flow.sport, flow.dport)
+                                self.add_history_entry(flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport, resp_sw)
+                            # Notifying ids about the rule installation
+                            #conn.sendall(str((srcip, sport, dstip, dport, proto)))
+                            resp = FlowResponse(flow.req_id, OK) 
+                            Communication.send(resp,conn)
+                            #coon.sendall(pickle.dumps(resp, protocol=pickle.HIGHEST_PROTOCOL))
                         else:
-                            resp_sw = self.get_resp_switch(srcip, dstip)
-                            self.deploy_flow_id_rules(resp_sw, srcip, dstip, proto)
-                            self.deploy_ex_port_rules(resp_sw, srcip, dstip, sport, dport)
-                            self.add_history_entry(srcip, dstip, proto, sport, dport, resp_sw)
-                        # Notifying ids about the rule installation
-                        conn.sendall(str((srcip, sport, dstip, dport, proto)))
-                    else:
-                        break
+                            break
             finally:
                 conn.close()
 
@@ -960,6 +978,9 @@ class Controller():
     def add_arp_forw_entry(self, client, in_port, out_port):
         self.table_add_entry(client, ARP_FORW, REDIRECT, [in_port], [out_port])
 
+    def add_modbus_payload_entry(self, client, srcip, sport, funcode, length):
+        self.table_add_entry(client, MODBUS_PAYLOAD, NO_OP, [srcip, sport, funcode, length], [])
+
 
     def get_resp_switch(self, srcip, dstip):
         #List of switch where the flow is passing
@@ -987,6 +1008,11 @@ class Controller():
             self.add_ex_port_entry(client, srcip, dstip, sport, dport)
             self.add_ex_port_entry(client, dstip, srcip, dport, sport)
 
+    def deploy_modbus_payload_rules(self, resp_sw, srcip, sport, funcode, length):
+        for sw in resp_sw:
+            client = self.clients[sw.sw_id]
+            self.add_modbus_payload_entry(client, srcip, sport, funcode, length)
+
     def dessiminate_rules(self, filename):
         IP_PROTO_TCP = 6
         PSH = 0x08
@@ -1010,11 +1036,14 @@ class Controller():
 
                 flags = pkt[TCP].flags
                 if (flags & PSH) and (flags & ACK) and (sport == "5020" or dport == "5020"):
-                    funcode = str(pkt[ModbusHeader].funcode)
+                    funcode = str(pkt[Modbus].funcode)
+                    length = str(len(pkt))
                     if not self.history.has_key((srcip, sport, funcode)):
                         resp_switch = self.history[(srcip, dstip, proto, sport, dport)]
-                        self.deploy_modbus_rules(resp_switch, srcip, sport, funcode)
                         self.history[(srcip, sport, funcode)]=True
+                        self.history[(srcip, sport, funcode, length)] = True
+                        self.deploy_modbus_rules(resp_switch, srcip, sport, funcode)
+                        self.deploy_modbus_payload_rules(resp_switch, srcip, sport, funcode, length)
 
     def add_history_entry(self, srcip, dstip, proto, sport, dport, resp_switch):
         self.history[(srcip, dstip, proto)] = resp_switch
@@ -1041,6 +1070,7 @@ class Controller():
                 self.table_default_entry(client, FLOW_ID, ADD_TAG, [IP_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
                 self.table_default_entry(client, EX_PORT, ADD_TAG, [PORT_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
                 self.table_default_entry(client, MODBUS, ADD_TAG, [FUN_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
+                self.table_default_entry(client, MODBUS_PAYLOAD, ADD_TAG, [PAYLOAD_SIZE_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
 
             self.table_default_entry(client, MISS_TAG, DROP, [])
             self.table_default_entry(client, ARP_RESP, NO_OP, [])

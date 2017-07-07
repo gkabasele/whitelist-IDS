@@ -31,7 +31,11 @@ control ingress {
                                 if(tcp.syn == 1 or tcp.fin == 1 or (tcp.ack == 1 and tcp.psh == 0)) {
                                      //nothing to do here                
                                 } else {
-                                     apply(modbus);
+                                     apply(modbus) {
+                                         hit{ 
+                                             apply(modbus_payload_size);
+                                         } 
+                                     }
                                 }
                             }
                         }
