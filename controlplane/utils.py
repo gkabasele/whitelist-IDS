@@ -44,7 +44,7 @@ class FlowRequest():
             self.dport = dport
             self.proto = proto 
             self.funcode = funcode
-            self.packet_length = length
+            self.length = length
 
     def __len__(self):
         return sys.getsizeof(self)

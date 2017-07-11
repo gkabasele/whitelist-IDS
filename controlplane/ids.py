@@ -36,27 +36,49 @@ bind_layers(SRTag, TCP, protocol=6)
 bind_layers(TCP, Modbus, sport=5020)
 bind_layers(TCP, Modbus, dport=5020)
 
-def forge_new_packet(payload, dstip, proto):
+
+
+def modify_layer(layer_name, layer_dict, value_dict ):
+    #FIXME avoid eval
+    layer = eval(layer_name+'()') 
+    for field,value in layer_dict.iteritems():
+        if field in value_dict:
+            setattr(layer, field, value_dict[field])
+        else:
+            setattr(layer, field, layer_dict[field])
+    return layer
+    
+    
+def layer_to_dict(layer, pkt):
+    field_names = [field.name for field in pkt[layer].fields_desc]
+    fields = {field_name : getattr(pkt[layer], field_name) for field_name in field_names}
+    return fields
+
+def forge_syn_packet(payload, dstip, proto):
     pkt = IP(payload)
-    ip = pkt[IP]
+    ip_dict = layer_to_dict(IP, pkt) 
+    ip = modify_layer('IP', ip_dict, {'dst' : dstip, 'proto': int(proto), 'len' : pkt[IP].len-8})
     tcp = pkt[TCP]
-    ip.dst = dstip
-    ip.proto = proto
     return ip/tcp
+
+def forge_modbus_packet(payload, dstip, proto):
+    pass
      
 def print_and_accept(packet):
     
     print(packet)
     payload = packet.get_payload()
     pkt = IP(payload)
-    reason = pkt[SRTag].reason
-    funcode = -1 
-    dstip = pkt[SRTag].dst 
+    print "Pkt Rcv: ", pkt.summary()
     srcip = pkt[IP].src
+    dstip = pkt[SRTag].dst 
+    reason = str(pkt[SRTag].reason)
+    proto = str(pkt[SRTag].protocol)
     sport = str(pkt[TCP].sport)
     dport = str(pkt[TCP].dport)
-    proto = str(pkt[SRTag].protocol)
-    length = str(len(pkt))
+    #length = str(len(pkt)-8)
+    length = str(len(pkt)+6) # + 14 bytes for ethernet header - 8 bytes for SRTag
+    funcode = -1
     if Modbus in pkt:
         funcode = str(pkt[Modbus].funcode)
     flow = FlowRequest(reason, srcip, sport, dstip, dport, proto, funcode, length)
@@ -69,14 +91,15 @@ def print_and_accept(packet):
         if msg:
             resp = pickle.loads(msg)    
             if resp.code == OK:
-                pkt = forge_new_packet(packets[flow.req_id], dstip, proto)
+                pkt = forge_syn_packet(packets[flow.req_id], dstip, proto)
+                print pkt.summary()
                 send(pkt)
             elif resp.code == ERROR:
-                print "an error occurred (code: %d)" % code 
+                print "an error occurred"  
             else:
                 pass
     finally: 
-        packet.accept()
+        packet.drop()
 
 def main(): 
     

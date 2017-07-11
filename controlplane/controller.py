@@ -853,44 +853,65 @@ class Controller():
             try:
                 print "connected to ids"
                 while True:
-                    #req = conn.recv(128)
                     data = Communication.recv_msg(conn)
                     print "Received req"
                     if data:
-                        #print req
-                        #(srcip, sport, dstip, dport, proto) = self.parse_req(req)
                         flow = pickle.loads(data)
-                        if flow.reason != FUN_MISS and flow.reason != PAYLOAD_SIZE_MISS:
-                            if (flow.srcip, flow.dstip, flow.proto) in self.history:
-                                resp_sw = self.history[(flow.srcip, flow.dstip, flow.proto)]
+                        code = ERROR
+                        if (flow.srcip, flow.dstip, flow.proto) in self.history:
+                            resp_sw = self.history[(flow.srcip, flow.dstip, flow.proto)]
+
+                            print "Reason: ",flow.reason
+
+                            if flow.reason == PORT_MISS: 
+                                print "Port miss: %s-%s " % (flow.sport, flow.dport) 
                                 if (flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport) not in self.history:
                                     self.deploy_ex_port_rules(resp_sw, flow.srcip, flow.dstip, flow.sport, flow.dport) 
                                     self.history[(flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport)] = resp_sw
                                     self.history[(flow.dstip, flow.srcip, flow.proto, flow.dport, flow.sport)] = resp_sw
+                                    code = OK
+
+                            elif flow.reason == FUN_MISS:
+                                print "Funcode miss: ", flow.funcode
+                                if (flow.srcip, flow.sport, flow.funcode) not in self.history and (int(flow.funcode) > 0):
+                                    self.history[(flow.srcip, flow.sport, flow.funcode)] = True 
+                                    self.history[(flow.dstip, flow.dport, flow.funcode)] = True 
+                                    self.history[(flow.srcip, flow.sport, flow.funcode, flow.length)] = True
+                                    self.deploy_modbus_rules(resp_sw, flow.srcip, flow.sport, flow.funcode)
+                                    self.deploy_modbus_rules(resp_sw, flow.dstip, flow.dport, flow.funcode)
+                                    self.deploy_modbus_payload_rules(resp_sw, flow.srcip, flow.sport, flow.funcode, flow.length)
+                                    code =  OK
+
+                            elif flow.reason == PAYLOAD_SIZE_MISS:
+                                print "Payload size miss: ", flow.length
+                                # It is likely that it is a response from the modbus server
+                                if ((flow.dstip, flow.dport, flow.funcode) in self.history and
+                                   (flow.srcip, flow.sport, flow.funcode) in self.history and
+                                    flow.sport == "5020"): 
+                                    self.history[(flow.srcip, flow.sport, flow.funcode, flow.length)] = True
+                                    self.deploy_modbus_payload_rules(resp_sw, flow.srcip, flow.sport, flow.funcode, flow.length)
+                                    code = OK
+                                    
                             else:
-                                resp_sw = self.get_resp_switch(flow.srcip, flow.dstip)
-                                self.deploy_flow_id_rules(resp_sw, flow.srcip, flow.dstip, flow.proto)
-                                self.deploy_ex_port_rules(resp_sw, flow.srcip, flow.dstip, flow.sport, flow.dport)
-                                self.add_history_entry(flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport, resp_sw)
-                            # Notifying ids about the rule installation
-                            #conn.sendall(str((srcip, sport, dstip, dport, proto)))
-                            resp = FlowResponse(flow.req_id, OK) 
-                            Communication.send(resp,conn)
-                            #coon.sendall(pickle.dumps(resp, protocol=pickle.HIGHEST_PROTOCOL))
+                                print "unknown reason"
+                                code = ERROR
                         else:
-                            break
+                            print "Adding new flow"
+                            resp_sw = self.get_resp_switch(flow.srcip, flow.dstip)
+                            self.deploy_flow_id_rules(resp_sw, flow.srcip, flow.dstip, flow.proto)
+                            self.deploy_ex_port_rules(resp_sw, flow.srcip, flow.dstip, flow.sport, flow.dport)
+                            self.add_history_entry(flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport, resp_sw)
+                            code = OK
+
+                        # Notifying ids about the rule installation
+                        resp = FlowResponse(flow.req_id, code) 
+                        Communication.send(resp,conn)
+                    else:
+                        resp = FlowResponse(flow.req_id, code)
+                        Communication.send(resp, conn)
             finally:
                 conn.close()
-
-    def parse_req(self, req):
-        tmp = req.replace("'","").replace(" ","").strip('()').split(",")
-        srcip = tmp[0]
-        sport = tmp[1]
-        dstip = tmp[2]
-        dport = tmp[3]
-        proto = tmp[4]
-        return (srcip, sport, dstip, dport, proto)
-
+    
     def get_res(self, type_name, name, array):
         if name not in array:
             raise UIn_ResourceError(type_name, name)
@@ -1060,21 +1081,23 @@ class Controller():
 
             self.table_default_entry(client, SEND_FRAME, DROP, [])
             self.table_default_entry(client, FORWARD, NO_OP, [])
-            
-            self.table_default_entry(client, IPV4_LPM, SET_EGRESS, [sw.ids_port])
             if is_ids_sw:
                 self.table_default_entry(client, FLOW_ID, NO_OP, [])
                 self.table_default_entry(client, EX_PORT, NO_OP, [])
                 self.table_default_entry(client, MODBUS, NO_OP, [])
+                # TODO add port to router 
+                self.table_default_entry(client, ARP_FORW_REQ, STORE_ARP, ['2'])
+                self.table_default_entry(client, IPV4_LPM, SET_EGRESS, ['2'])
             else:
                 self.table_default_entry(client, FLOW_ID, ADD_TAG, [IP_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
                 self.table_default_entry(client, EX_PORT, ADD_TAG, [PORT_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
                 self.table_default_entry(client, MODBUS, ADD_TAG, [FUN_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
                 self.table_default_entry(client, MODBUS_PAYLOAD, ADD_TAG, [PAYLOAD_SIZE_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
+                self.table_default_entry(client, ARP_FORW_REQ, STORE_ARP, [sw.ids_port])
+                self.table_default_entry(client, IPV4_LPM, SET_EGRESS, [sw.ids_port])
 
             self.table_default_entry(client, MISS_TAG, DROP, [])
             self.table_default_entry(client, ARP_RESP, NO_OP, [])
-            self.table_default_entry(client, ARP_FORW_REQ, STORE_ARP, [sw.ids_port])
             self.table_default_entry(client, ARP_FORW_RESP, FORWARD_ARP, [])
 
             for interface in sw.interfaces:
@@ -1093,7 +1116,7 @@ class Controller():
                     port = route[dest]
                     self.add_ipv4_entry(client, IPNetwork(dest), port)
 
-            for tag in [IP_MISS, PORT_MISS, FUN_MISS]:
+            for tag in [IP_MISS, PORT_MISS, FUN_MISS, PAYLOAD_SIZE_MISS]:
                 self.add_miss_tag_entry(client, tag, sw.ids_port) 
             ip_addr = sw.real_ip
             mac = sw.interfaces[0]["1"]
