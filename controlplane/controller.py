@@ -875,11 +875,12 @@ class Controller():
                                 print "Funcode miss: ", flow.funcode
                                 if (flow.srcip, flow.sport, flow.funcode) not in self.history and (int(flow.funcode) > 0):
                                     self.history[(flow.srcip, flow.sport, flow.funcode)] = True 
-                                    self.history[(flow.dstip, flow.dport, flow.funcode)] = True 
                                     self.history[(flow.srcip, flow.sport, flow.funcode, flow.length)] = True
                                     self.deploy_modbus_rules(resp_sw, flow.srcip, flow.sport, flow.funcode)
-                                    self.deploy_modbus_rules(resp_sw, flow.dstip, flow.dport, flow.funcode)
                                     self.deploy_modbus_payload_rules(resp_sw, flow.srcip, flow.sport, flow.funcode, flow.length)
+                                    if (flow.dstip, flow.dport, flow.funcode) not in self.history:
+                                        self.history[(flow.dstip, flow.dport, flow.funcode)] = True 
+                                        self.deploy_modbus_rules(resp_sw, flow.dstip, flow.dport, flow.funcode)
                                     code =  OK
 
                             elif flow.reason == PAYLOAD_SIZE_MISS:
@@ -1011,6 +1012,8 @@ class Controller():
             if sw.is_responsible(srcip) or sw.is_responsible(dstip):
                 resp_switch.append(sw)
         return resp_switch
+
+    #TODO use decorator to check if flow already installed
                
     def deploy_flow_id_rules(self, resp_sw, srcip, dstip, protocol):
         for sw in resp_sw:

@@ -84,7 +84,7 @@ def print_and_accept(packet):
     flow = FlowRequest(reason, srcip, sport, dstip, dport, proto, funcode, length)
     packets[flow.req_id] = payload
     try:
-        # TODO check for error (decorator)
+        # TODO check for error 
         Communication.send(flow,sock)
         msg = Communication.recv_msg(sock)
         print "Received response"
