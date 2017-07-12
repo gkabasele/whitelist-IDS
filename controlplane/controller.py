@@ -731,7 +731,7 @@ def create_switches(filename):
     topo = json.load(json_data)
     switches = []
     for sw in topo['switches']:
-        sw_id = sw['id']
+        sw_id = sw['dpid']
         ip_addr = sw['ip_address']
         real_ip = sw['real_ip']
         port = sw['port']
@@ -739,8 +739,10 @@ def create_switches(filename):
         routing_table = sw['routing_table']
         arp_table = sw['arp_table']
         ids_port = sw['ids_port']
+        gw_port = sw['gw_port']
         interfaces = sw['interfaces']
         ids_addr = sw['ids_addr']
+        
     
         switch = Switch(sw_id, 
                         ip_addr,
@@ -749,6 +751,7 @@ def create_switches(filename):
                         resp,
                         interfaces,
                         ids_port, 
+                        gw_port,
                         ids_addr,
                         routing_table,
                         arp_table)
@@ -763,11 +766,12 @@ class Switch():
         ip_address: IP address used by the thrift server
         port : port used by thrift server
         resp : list of address that the switch handles
-        interface: list of interface the switch (name:mac)
+        interface: list of interface the switch has (name:mac)
         ids_port: outport on the switch to reach the IDS
+        gw_port : outport on the switch to reach gateway
         ids_addr: ip address of IDS
         routing_table : dest ip : port
-        arp_table : arp table for table in subnet work
+        arp_table : arp table for entry in subnet work
     '''
     def __init__(self, 
                  sw_id,
@@ -777,6 +781,7 @@ class Switch():
                  resp,
                  interfaces,
                  ids_port,
+                 gw_port,
                  ids_addr,
                  routing_table,
                  arp_table):
@@ -791,6 +796,7 @@ class Switch():
             self.resp.append(ip_network)
         self.interfaces = interfaces
         self.ids_port = ids_port
+        self.gw_port = gw_port
         self.ids_addr = ids_addr
         self.routing_table = routing_table
         self.arp_table = arp_table
@@ -1088,16 +1094,15 @@ class Controller():
                 self.table_default_entry(client, FLOW_ID, NO_OP, [])
                 self.table_default_entry(client, EX_PORT, NO_OP, [])
                 self.table_default_entry(client, MODBUS, NO_OP, [])
-                # TODO add port to router 
-                self.table_default_entry(client, ARP_FORW_REQ, STORE_ARP, ['2'])
-                self.table_default_entry(client, IPV4_LPM, SET_EGRESS, ['2'])
+                self.table_default_entry(client, MODBUS_PAYLOAD, NO_OP, [])
             else:
                 self.table_default_entry(client, FLOW_ID, ADD_TAG, [IP_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
                 self.table_default_entry(client, EX_PORT, ADD_TAG, [PORT_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
                 self.table_default_entry(client, MODBUS, ADD_TAG, [FUN_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
                 self.table_default_entry(client, MODBUS_PAYLOAD, ADD_TAG, [PAYLOAD_SIZE_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
-                self.table_default_entry(client, ARP_FORW_REQ, STORE_ARP, [sw.ids_port])
-                self.table_default_entry(client, IPV4_LPM, SET_EGRESS, [sw.ids_port])
+
+            self.table_default_entry(client, ARP_FORW_REQ, STORE_ARP, [sw.gw_port])
+            self.table_default_entry(client, IPV4_LPM, SET_EGRESS, [sw.gw_port])
 
             self.table_default_entry(client, MISS_TAG, DROP, [])
             self.table_default_entry(client, ARP_RESP, NO_OP, [])

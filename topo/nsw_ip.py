@@ -17,11 +17,14 @@
 
 from ipmininet.ipnet import IPNet
 from ipmininet.iptopo import IPTopo
+from ipmininet.topologydb import TopologyDB
 from mininet.log import setLogLevel, info
 from ipmininet.cli import IPCLI
 from mininet.node import Switch, Host
 
 from p4_mininet import P4Switch, P4Host
+from config_switch import SwitchConf
+from config_switch import SwitchCollection
 
 import argparse
 import os
@@ -44,7 +47,7 @@ parser.add_argument('--pcap-dump', help='Dump packets on interfaces to pcap file
 
 args = parser.parse_args()
 
-   
+# TODO TopologyDB to generate json file   
 class MultiSwitchTopo(IPTopo):
     """Backbone is a ring of router each connected to a field site containing a P4
      Switch"""
@@ -58,19 +61,39 @@ class MultiSwitchTopo(IPTopo):
         n_host = kwargs.get('n_host')
         n_sub = kwargs.get('n_sub')
 
+
         switches = {}
         routers = {}
-
+        encoder = SwitchCollection()
         sw_control = self.addSwitch('cc',
                                 sw_path = sw_path,
                                 json_path = json_path,
                                 thrift_port = thrift_port,
                                 dpid = self.int2dpid(0))
+       
+        sw_conf = SwitchConf(dpid="0", 
+                             real_ip = "10.0.10.10",
+                             port = str(thrift_port),
+                             resp_network = ["10.0.10.0/24"])
+                             
         host = self.addHost('mtu',mac = '00:05:00:00:00:00', ip="10.0.10.1/24")
         self.addLink(host,sw_control)
 
+        intf = str(sw_conf.current_intf)
+        sw_conf.routing_table.append({"10.0.10.1/32":intf})
+        sw_conf.arp_table.append({"10.0.10.1":"00:05:00:00:00:00"})
+        sw_conf.add_interface({intf : "00:AA:BB:00:00:01"})
+
         router_cc = self.addRouter('rcc')
+
         self.addLink(router_cc , sw_control, igp_passive=True, params1={"ip":("10.0.10.30/24")})
+        intf = str(sw_conf.current_intf)
+        sw_conf.add_interface({intf : "00:AA:BB:CC:00:01"})
+        sw_conf.ids_port = intf
+        sw_conf.gw_port = intf
+
+        encoder.add_switch_conf("0", sw_conf) 
+
 
         for i in xrange(n_sub):
             label_sw = "s%d"%(i+1)
@@ -89,42 +112,63 @@ class MultiSwitchTopo(IPTopo):
                                 dpid = self.int2dpid(i+1),
                                 enable_debugger= enable_debug,
                                 log_file = log)
-                                
+
+            sw_confg =  SwitchConf(dpid=str(i+1), 
+                             real_ip = "10.0.%d0.10" % (i + 1),
+                             port = str(thrift_port + (i+1)),
+                             resp_network = ["10.0.%d0.0/24"%(i + 1)])
+            encoder.add_switch_conf((i+1), sw_confg)
+                   
             routers[(i+1)] = self.addRouter(label_router) 
             
         for switch_id in switches:
             switch = switches[switch_id]
             router = routers[switch_id]
+            sw_confg = encoder.get_switch_conf(switch_id)
             for h in xrange(n_host):
+                mac = "00:04:00:00:%02x:%02x" %(switch_id,h)
+                ip = "10.0.%d0.%d/24"%(switch_id+1 , h+1)
+                intf_mac = "00:AA:BB:00:%02x:%02x" % (switch_id+1, h +1)
                 if switch_id != 3:
+                    sw_conf.resp_network.append("10.0.%d0.0/24"% (switch_id+1))
                     host = self.addHost("s%d-h%d" % (switch_id, h + 1),
-                                    mac = "00:04:00:00:%02x:%02x" %(switch_id,h),
-                                    ip= "10.0.%d0.%d/24"%(switch_id+1 , h+1)) 
+                                        mac = mac,
+                                        ip = ip) 
                     self.addLink(host, switch)
-                    if switch_id == 1:
-                        host = self.addHost("s%d-h%d" % (switch_id, h + 2),
-                                    mac = "00:04:00:00:%02x:%02x" %(switch_id,h+1),
-                                    ip= "10.0.%d0.%d/24"%(switch_id+1 , h+2)) 
-                        self.addLink(host, switch)
 
+                    self.host_switch_conf(sw_confg, intf_mac, mac, ip)
+
+                    if switch_id == 1:
+                        ip = "10.0.%d0.%d/24"%(switch_id+1 , h+2)
+                        mac =  "00:04:00:00:%02x:%02x" %(switch_id,h+1)
+                        intf_mac = "00:AA:BB:00:%02x:%02x" % (switch_id+1, h +2)
+                        host = self.addHost("s%d-h%d" % (switch_id, h + 2),
+                                    mac = mac,
+                                    ip = ip) 
+                        self.addLink(host, switch)
+                        self.host_switch_conf(sw_confg, intf_mac, mac, ip)
+                        
                 else:
                     ids = self.addHost("s%d-h%d" % (switch_id, h + 1),
-                                    mac = "00:04:00:00:%02x:%02x" %(switch_id,h),
-                                    ip= "10.0.%d0.%d/24"%(switch_id+1 , h+1))
+                                    mac = mac,
+                                    ip= ip)
                     root_gw = self.addHost("s%d-h%d"% (switch_id, h + 2),
                                             ip = "172.0.10.2/24", 
                                             inNamespace=False)
 
                     self.addLink(ids, switch)
+                    self.host_switch_conf(sw_confg, intf_mac, mac, ip) 
                     self.addLink(ids, root_gw,  params1={"ip":("172.0.10.1/24")})
 
             self.addLink(router, switch, igp_passive=True, params1={"ip":("10.0.%d0.30/24"%(switch_id + 1))})
+            self.router_switch_conf(sw_confg, "00:AA:BB:CC:%02x:01" %(switch_id +1))
 
         self.addLink('rcc', 'r1', igp_area = "0.0.0.0", params1={"ip":("10.0.100.1/24")},params2={"ip":("10.0.100.2/24")}) 
         self.addLink('r1', 'r2', igp_area = "0.0.0.0", params1={"ip":("10.0.101.1/24")},params2={"ip":("10.0.101.2/24")}) 
         self.addLink('r2', 'r3', igp_area = "0.0.0.0", params1={"ip":("10.0.102.1/24")},params2={"ip":("10.0.102.2/24")}) 
         self.addLink('r3', 'rcc', igp_area = "0.0.0.0", params1={"ip":("10.0.103.1/24")},params2={"ip":("10.0.103.2/24")}) 
 
+        encoder.encode_switch_conf("sw_conf.json")
         super(MultiSwitchTopo, self).build(*args, **kwargs)
 
     def int2dpid( self, dpid ):
@@ -135,7 +179,17 @@ class MultiSwitchTopo(IPTopo):
         except IndexError:
             raise Exception ( 'dpid error' )
 
+    def host_switch_conf(self, sw_conf, intf_mac, mac, ip):
+        intf = str(sw_conf.current_intf)
+        sw_conf.routing_table.append({ip :intf})
+        sw_conf.arp_table.append({ip:mac})
+        sw_conf.add_interface({intf : intf_mac})
 
+    def router_switch_conf(self, sw_conf, mac):
+        intf = str(sw_conf.current_intf)
+        sw_conf.add_interface({intf : mac})
+        sw_conf.ids_port = intf
+        sw_conf.gw_port = intf
 
 def main():
 
@@ -201,7 +255,9 @@ def main():
     h_gw.cmd('ip link set s3-h2-eth0 up')  
     h.cmd('sudo iptables -I INPUT -i eth0 -j NFQUEUE --queue-num 1')
     sleep(1)
-
+    
+    #topodb = TopologyDB(net=net)
+    #topodb.save("topo.json")
     print "Ready !"
 
     IPCLI( net )
