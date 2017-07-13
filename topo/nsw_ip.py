@@ -98,12 +98,8 @@ class MultiSwitchTopo(IPTopo):
         for i in xrange(n_sub):
             label_sw = "s%d"%(i+1)
             label_router = "r%d"%(i+1)
-            enable_debug = False
-            log = None
-            
-            if (i+1) == 3:
-                enable_debug = True
-                log = "sw_ids.log"
+            enable_debug = True
+            log = "logs/sw_%s.log" % (i+1)
 
             switches[(i+1)] = self.addSwitch(label_sw,
                                 sw_path = sw_path,
@@ -113,27 +109,31 @@ class MultiSwitchTopo(IPTopo):
                                 enable_debugger= enable_debug,
                                 log_file = log)
 
+            # Id start at 0 and ip at 1
             sw_confg =  SwitchConf(dpid=str(i+1), 
-                             real_ip = "10.0.%d0.10" % (i + 1),
+                             real_ip = "10.0.%d0.10" % (i + 2),
                              port = str(thrift_port + (i+1)),
-                             resp_network = ["10.0.%d0.0/24"%(i + 1)])
+                             resp_network = ["10.0.%d0.0/24"%(i + 2)])
             encoder.add_switch_conf((i+1), sw_confg)
                    
             routers[(i+1)] = self.addRouter(label_router) 
-            
+
+        ids_addr = None 
         for switch_id in switches:
             switch = switches[switch_id]
             router = routers[switch_id]
+            ids_added = False
             sw_confg = encoder.get_switch_conf(switch_id)
             for h in xrange(n_host):
                 mac = "00:04:00:00:%02x:%02x" %(switch_id,h)
                 ip = "10.0.%d0.%d/24"%(switch_id+1 , h+1)
                 intf_mac = "00:AA:BB:00:%02x:%02x" % (switch_id+1, h +1)
-                if switch_id != 3:
+                if switch_id != 3 and not ids_added:
                     sw_conf.resp_network.append("10.0.%d0.0/24"% (switch_id+1))
                     host = self.addHost("s%d-h%d" % (switch_id, h + 1),
                                         mac = mac,
                                         ip = ip) 
+                    ids_added = True
                     self.addLink(host, switch)
 
                     self.host_switch_conf(sw_confg, intf_mac, mac, ip)
@@ -155,7 +155,7 @@ class MultiSwitchTopo(IPTopo):
                     root_gw = self.addHost("s%d-h%d"% (switch_id, h + 2),
                                             ip = "172.0.10.2/24", 
                                             inNamespace=False)
-
+                    ids_addr = ip[:-3]
                     self.addLink(ids, switch)
                     self.host_switch_conf(sw_confg, intf_mac, mac, ip) 
                     self.addLink(ids, root_gw,  params1={"ip":("172.0.10.1/24")})
@@ -167,6 +167,8 @@ class MultiSwitchTopo(IPTopo):
         self.addLink('r1', 'r2', igp_area = "0.0.0.0", params1={"ip":("10.0.101.1/24")},params2={"ip":("10.0.101.2/24")}) 
         self.addLink('r2', 'r3', igp_area = "0.0.0.0", params1={"ip":("10.0.102.1/24")},params2={"ip":("10.0.102.2/24")}) 
         self.addLink('r3', 'rcc', igp_area = "0.0.0.0", params1={"ip":("10.0.103.1/24")},params2={"ip":("10.0.103.2/24")}) 
+        
+        self.set_ids_addr(encoder, ids_addr)
 
         encoder.encode_switch_conf("sw_conf.json")
         super(MultiSwitchTopo, self).build(*args, **kwargs)
@@ -181,8 +183,8 @@ class MultiSwitchTopo(IPTopo):
 
     def host_switch_conf(self, sw_conf, intf_mac, mac, ip):
         intf = str(sw_conf.current_intf)
-        sw_conf.routing_table.append({ip :intf})
-        sw_conf.arp_table.append({ip:mac})
+        sw_conf.routing_table.append({ip.replace("/24","/32") :intf})
+        sw_conf.arp_table.append({ip[:-3]:mac})
         sw_conf.add_interface({intf : intf_mac})
 
     def router_switch_conf(self, sw_conf, mac):
@@ -190,6 +192,10 @@ class MultiSwitchTopo(IPTopo):
         sw_conf.add_interface({intf : mac})
         sw_conf.ids_port = intf
         sw_conf.gw_port = intf
+
+    def set_ids_addr(self, col, ids_addr):
+        for sw_conf in col.switches_conf.values():
+            sw_conf.ids_addr = ids_addr
 
 def main():
 

@@ -41,6 +41,7 @@ class SwitchConf():
                  gw_port = None,
                  routing_table = None,
                  arp_table = None,
+                 ids_addr = None
                 ):
         self.dpid = dpid
         self.ip_address = ip_address
@@ -52,6 +53,7 @@ class SwitchConf():
         self.interfaces = interfaces if interfaces else []
         self.routing_table = routing_table if routing_table else []
         self.arp_table = arp_table if arp_table else []
+        self.ids_addr = ids_addr
         
         self.current_intf = 1
 
