@@ -1,8 +1,10 @@
 from scapy.all import *
 import struct
 import socket
+import ssl
 import cPickle as pickle
 import sys
+
 
 class SRTag(Packet):
     name = "SRTag"
@@ -67,8 +69,13 @@ class FlowResponse():
         return sys.getsizeof(self)
 
 class Communication():
-    @staticmethod
-    def recvall(sock, n):
+
+   CERT_PATH = "/home/mininet/p4-tutorials/whitelist/server.crt"
+   KEY_PATH = "/home/mininet/p4-tutotrials/whitelist/server.key"
+   PEM_PATH = "/home/mininet/p4-tutorials/whitelist/server.pem"
+
+   @staticmethod
+   def recvall(sock, n):
         data = ''
         while len(data) < n:
             packet = sock.recv(n - len(data))
@@ -77,8 +84,8 @@ class Communication():
             data += packet
         return data
     
-    @staticmethod
-    def recv_msg(sock):
+   @staticmethod
+   def recv_msg(sock):
         raw_msglen = Communication.recvall(sock, 4)
         if not raw_msglen:
             return None
@@ -86,8 +93,8 @@ class Communication():
         return Communication.recvall(sock, msglen)
     
     
-    @staticmethod
-    def send(data, sock):
+   @staticmethod
+   def send(data, sock):
         length = len(data)
         if length > 0:
             data = pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL)

@@ -1,4 +1,5 @@
 import socket
+import ssl
 import sys
 import argparse
 import json
@@ -26,8 +27,14 @@ parser.add_argument('--port', action='store', dest='port', type=int ,default= 20
 args = parser.parse_args()
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+# Wrapper SSL
+ssl_sock = ssl.wrap_socket(sock)                         
+                            
+
 server = (args.ip, args.port)
-sock.connect(server)
+#sock.connect(server)
+ssl_sock.connect(server)
 
 packets = {}
 
@@ -101,8 +108,8 @@ def print_and_accept(packet):
     try:
         # TODO check for error 
         if is_safe(pkt):
-            Communication.send(flow, sock)
-            msg = Communication.recv_msg(sock)
+            Communication.send(flow, ssl_sock)
+            msg = Communication.recv_msg(ssl_sock)
             print "Received response"
             if msg:
                 resp = pickle.loads(msg)    
@@ -117,8 +124,8 @@ def print_and_accept(packet):
         else:
             print "Malicious packet detected"
             flow.install = False
-            Communication.send(flow, sock)
-            msg = Communication.recv_msg(sock)
+            Communication.send(flow, ssl_sock)
+            msg = Communication.recv_msg(ssl_sock)
             print "Received response"
             if msg:
                 resp = pickle.loads(msg)
@@ -141,4 +148,4 @@ def main():
 
 if __name__ == '__main__':
         main()
-        sock.close()
+        ssl_sock.close()

@@ -5,12 +5,12 @@ import json
 import cPickle as pickle
 import inspect
 import socket
+import ssl
 from netaddr import IPNetwork
 from netaddr import IPAddress
 from scapy.all import *
 
 from utils import *
-
 import argparse
 
 from functools import wraps
@@ -855,7 +855,11 @@ class Controller():
         self.sock.bind(server)
         self.sock.listen(1) 
         while True:
-            conn, ids = self.sock.accept()
+            newsock, ids = self.sock.accept()
+            conn = ssl.wrap_socket(newsock,
+                                   server_side=True,
+                                   certfile=Communication.PEM_PATH,
+                                   ssl_version=ssl.PROTOCOL_TLSv1)
             try:
                 print "connected to ids"
                 while True:
@@ -928,6 +932,7 @@ class Controller():
                         resp = FlowResponse(flow.req_id, code)
                         Communication.send(resp, conn)
             finally:
+                conn.shutdown(sock.SHUT_RDWR)
                 conn.close()
     
     def get_res(self, type_name, name, array):
