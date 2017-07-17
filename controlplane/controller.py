@@ -864,51 +864,62 @@ class Controller():
                     if data:
                         flow = pickle.loads(data)
                         code = ERROR
-                        if (flow.srcip, flow.dstip, flow.proto) in self.history:
-                            resp_sw = self.history[(flow.srcip, flow.dstip, flow.proto)]
+                        if flow.install:
+                            if (flow.srcip, flow.dstip, flow.proto) in self.history:
+                                resp_sw = self.history[(flow.srcip, flow.dstip, flow.proto)]
 
-                            print "Reason: ",flow.reason
+                                print "Reason: ",flow.reason
 
-                            if flow.reason == PORT_MISS: 
-                                print "Port miss: %s-%s " % (flow.sport, flow.dport) 
-                                if (flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport) not in self.history:
-                                    self.deploy_ex_port_rules(resp_sw, flow.srcip, flow.dstip, flow.sport, flow.dport) 
-                                    self.history[(flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport)] = resp_sw
-                                    self.history[(flow.dstip, flow.srcip, flow.proto, flow.dport, flow.sport)] = resp_sw
-                                    code = OK
+                                if flow.reason == PORT_MISS: 
+                                    print "Port miss: %s-%s " % (flow.sport, flow.dport) 
+                                    if (flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport) not in self.history:
+                                        self.deploy_ex_port_rules(resp_sw, flow.srcip, flow.dstip, flow.sport, flow.dport) 
+                                        self.history[(flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport)] = resp_sw
+                                        self.history[(flow.dstip, flow.srcip, flow.proto, flow.dport, flow.sport)] = resp_sw
+                                        code = OK
 
-                            elif flow.reason == FUN_MISS:
-                                print "Funcode miss: ", flow.funcode
-                                if (flow.srcip, flow.sport, flow.funcode) not in self.history and (int(flow.funcode) > 0):
-                                    self.history[(flow.srcip, flow.sport, flow.funcode)] = True 
-                                    self.history[(flow.srcip, flow.sport, flow.funcode, flow.length)] = True
-                                    self.deploy_modbus_rules(resp_sw, flow.srcip, flow.sport, flow.funcode)
-                                    self.deploy_modbus_payload_rules(resp_sw, flow.srcip, flow.sport, flow.funcode, flow.length)
-                                    if (flow.dstip, flow.dport, flow.funcode) not in self.history:
-                                        self.history[(flow.dstip, flow.dport, flow.funcode)] = True 
-                                        self.deploy_modbus_rules(resp_sw, flow.dstip, flow.dport, flow.funcode)
-                                    code =  OK
+                                elif flow.reason == FUN_MISS:
+                                    print "Funcode miss: ", flow.funcode
+                                    if (flow.srcip, flow.sport, flow.funcode) not in self.history and (int(flow.funcode) > 0):
+                                        self.history[(flow.srcip, flow.sport, flow.funcode)] = True 
+                                        self.history[(flow.srcip, flow.sport, flow.funcode, flow.length)] = True
+                                        self.deploy_modbus_rules(resp_sw, flow.srcip, flow.sport, flow.funcode)
+                                        self.deploy_modbus_payload_rules(resp_sw, flow.srcip, flow.sport, flow.funcode, flow.length)
+                                        if (flow.dstip, flow.dport, flow.funcode) not in self.history:
+                                            self.history[(flow.dstip, flow.dport, flow.funcode)] = True 
+                                            self.deploy_modbus_rules(resp_sw, flow.dstip, flow.dport, flow.funcode)
+                                        code =  OK
 
-                            elif flow.reason == PAYLOAD_SIZE_MISS:
-                                print "Payload size miss: ", flow.length
-                                # It is likely that it is a response from the modbus server
-                                if ((flow.dstip, flow.dport, flow.funcode) in self.history and
-                                   (flow.srcip, flow.sport, flow.funcode) in self.history and
-                                    flow.sport == "5020"): 
-                                    self.history[(flow.srcip, flow.sport, flow.funcode, flow.length)] = True
-                                    self.deploy_modbus_payload_rules(resp_sw, flow.srcip, flow.sport, flow.funcode, flow.length)
-                                    code = OK
-                                    
+                                elif flow.reason == PAYLOAD_SIZE_MISS:
+                                    print "Payload size miss: ", flow.length
+                                    # It is likely that it is a response from the modbus server
+                                    if ((flow.dstip, flow.dport, flow.funcode) in self.history and
+                                       (flow.srcip, flow.sport, flow.funcode) in self.history and
+                                        flow.sport == "5020"): 
+                                        self.history[(flow.srcip, flow.sport, flow.funcode, flow.length)] = True
+                                        self.deploy_modbus_payload_rules(resp_sw, flow.srcip, flow.sport, flow.funcode, flow.length)
+                                        code = OK
+                                        
+                                else:
+                                    print "unknown reason"
+                                    code = ERROR
                             else:
-                                print "unknown reason"
-                                code = ERROR
+                                print "Adding new flow"
+                                resp_sw = self.get_resp_switch(flow.srcip, flow.dstip)
+                                self.deploy_flow_id_rules(resp_sw, flow.srcip, flow.dstip, flow.proto)
+                                self.deploy_ex_port_rules(resp_sw, flow.srcip, flow.dstip, flow.sport, flow.dport)
+                                self.add_history_entry(flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport, resp_sw)
+                                code = OK
                         else:
-                            print "Adding new flow"
-                            resp_sw = self.get_resp_switch(flow.srcip, flow.dstip)
-                            self.deploy_flow_id_rules(resp_sw, flow.srcip, flow.dstip, flow.proto)
-                            self.deploy_ex_port_rules(resp_sw, flow.srcip, flow.dstip, flow.sport, flow.dport)
-                            self.add_history_entry(flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport, resp_sw)
-                            code = OK
+                           print "Dropping request"
+                           client = self.clients[flow.identifier] 
+                           if (flow.srcip, flow.sport, flow.funcode) not in self.history and (int(flow.funcode) > 0):
+                                self.table_add_entry(client, MODBUS, DROP, [flow.srcip, flow.sport, flow.funcode],[])
+                                self.table_add_entry(client, MODBUS_PAYLOAD, DROP, [flow.srcip, flow.sport, flow.funcode, flow.length],[])
+                                self.history[(flow.srcip, flow.sport, flow.funcode)] = True 
+                                self.history[(flow.srcip, flow.sport, flow.funcode, flow.length)] = True
+
+                           code = OK
 
                         # Notifying ids about the rule installation
                         resp = FlowResponse(flow.req_id, code) 

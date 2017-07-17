@@ -35,6 +35,7 @@ bind_layers(IP, SRTag, proto=200)
 bind_layers(SRTag, TCP, protocol=6)
 bind_layers(TCP, Modbus, sport=5020)
 bind_layers(TCP, Modbus, dport=5020)
+bind_layers(Modbus, ModbusDiag, funcode=8)
 
 
 
@@ -54,15 +55,30 @@ def layer_to_dict(layer, pkt):
     fields = {field_name : getattr(pkt[layer], field_name) for field_name in field_names}
     return fields
 
-def forge_syn_packet(payload, dstip, proto):
+def forge_packet(payload, dstip, proto):
     pkt = IP(payload)
     ip_dict = layer_to_dict(IP, pkt) 
     ip = modify_layer('IP', ip_dict, {'dst' : dstip, 'proto': int(proto), 'len' : pkt[IP].len-8})
     tcp = pkt[TCP]
     return ip/tcp
 
-def forge_modbus_packet(payload, dstip, proto):
-    pass
+
+def is_safe(pkt):
+
+    m_sub = [4,1,10]
+    # 253(PDU) + 7(MBAP) + 60(TCP max) + 60(max IP) + 8(SRTag)
+    headers_size = (pkt[IP].ihl*4) + (pkt[TCP].dataofs*4) + 15
+    safe = (len(pkt) <= (253 + headers_size ))
+    if not safe:
+        print "Packet too big"
+    if ModbusDiag in pkt: 
+        safe = (pkt[ModbusDiag].subfuncode not in m_sub)
+        print "Malicious Modbus diagnostic function"
+
+    # TODO check when excpetion for function code scan
+    return safe
+        
+         
      
 def print_and_accept(packet):
     
@@ -76,28 +92,38 @@ def print_and_accept(packet):
     proto = str(pkt[SRTag].protocol)
     sport = str(pkt[TCP].sport)
     dport = str(pkt[TCP].dport)
-    #length = str(len(pkt)-8)
     length = str(len(pkt)+6) # + 14 bytes for ethernet header - 8 bytes for SRTag
-    funcode = -1
-    if Modbus in pkt:
-        funcode = str(pkt[Modbus].funcode)
-    flow = FlowRequest(reason, srcip, sport, dstip, dport, proto, funcode, length)
+    funcode = str(pkt[Modbus].funcode) if Modbus in pkt else -1 
+    identifier = str(pkt[SRTag].identifier)
+
+    flow = FlowRequest(reason, srcip, sport, dstip, dport, proto, funcode, length, identifier)
     packets[flow.req_id] = payload
     try:
         # TODO check for error 
-        Communication.send(flow,sock)
-        msg = Communication.recv_msg(sock)
-        print "Received response"
-        if msg:
-            resp = pickle.loads(msg)    
-            if resp.code == OK:
-                pkt = forge_syn_packet(packets[flow.req_id], dstip, proto)
-                print pkt.summary()
-                send(pkt)
-            elif resp.code == ERROR:
-                print "an error occurred"  
-            else:
-                pass
+        if is_safe(pkt):
+            Communication.send(flow, sock)
+            msg = Communication.recv_msg(sock)
+            print "Received response"
+            if msg:
+                resp = pickle.loads(msg)    
+                if resp.code == OK:
+                    pkt = forge_packet(packets[flow.req_id], dstip, proto)
+                    print pkt.summary()
+                    send(pkt)
+                elif resp.code == ERROR:
+                    print "an error occurred"  
+                else:
+                    print "Unknown code"
+        else:
+            print "Malicious packet detected"
+            flow.install = False
+            Communication.send(flow, sock)
+            msg = Communication.recv_msg(sock)
+            print "Received response"
+            if msg:
+                resp = pickle.loads(msg)
+                if resp.code == OK:
+                    print "Flow: %s:%s -> %s:%s" % (srcip, sport, dstip, dport)
     finally: 
         packet.drop()
 

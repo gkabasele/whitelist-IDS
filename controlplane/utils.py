@@ -5,21 +5,25 @@ import cPickle as pickle
 import sys
 
 class SRTag(Packet):
-    name = "SRTagPacket"
+    name = "SRTag"
     fields_desc=[ IPField("dst", None),
-                  ShortField("identifier", 0),
-                  ByteField("protocol", 6),
-                  ByteField("reason", 0)
+                  ShortField("identifier", None),
+                  ByteField("protocol", None),
+                  ByteField("reason", None)
                 ]
  
 class Modbus(Packet):
-    name = "ModbusHeader"
+    name = "Modbus"
     fields_desc=[ ShortField("transactionID", 0),
                   ShortField("protocolID", 0),
-                  ShortField("length", 6),
+                  ShortField("length", None),
                   ByteField("unitID", 0),
-                  ByteField("funcode", 1)
+                  ByteField("funcode", None)
                 ]
+
+class ModbusDiag(Packet):
+    name = "ModbusDiag"
+    fields_desc=[ ShortField("subfuncode",None)]
 
 class FlowRequest():
 
@@ -33,7 +37,8 @@ class FlowRequest():
                  dport,
                  proto,
                  funcode,
-                 length):
+                 length,
+                 identifier):
 
             self.req_id = FlowRequest.req_id
             FlowRequest.req_id += 1
@@ -45,6 +50,9 @@ class FlowRequest():
             self.proto = proto 
             self.funcode = funcode
             self.length = length
+            self.identifier = identifier
+
+            self.install = True
 
     def __len__(self):
         return sys.getsizeof(self)

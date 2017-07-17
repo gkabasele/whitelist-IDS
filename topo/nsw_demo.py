@@ -44,38 +44,6 @@ parser.add_argument('--pcap-dump', help='Dump packets on interfaces to pcap file
 
 args = parser.parse_args()
 
-class Router(Host):
-    """ Defines a new router that is inside a network namespace so that the
-        individual routing entries don't collide
-    """
-    
-    def __init__(self, name, zebra_cfg, ospf_cfg, interfaces, *args, **kwargs):
-        Host.__init__(self, name, *args, **kwargs)
-        self.zebra_cfg = zebra_cfg
-        self.ospf_cfg = ospf_cfg
-        self.interfaces = interfaces
-
-    def config(self, **kwargs):
-        Host.config(self, **kwargs)
-        self.cmd('sysctl net.ipv4.ip_forward=1')
-
-        for intf, attrs in self.interfaces.items():
-            self.cmd('ip addr flush dev %s' %intf)
-            if 'mac' in attrs:
-                self.cmd('ip link set %s down' % intf)
-                self.cmd('ip link set %s address %s' % (intf, attrs['mac']))
-                self.cmd('ip link set %s up' % intf)
-            for addr in attrs['ipAddrs']:
-                self.cmd('ip addr add %s dev %s' % (addr, intf))
-
-        self.cmd('/usr/lib/quagga/zebra -f %s -z /tmp/zebra-%s.api -i /tmp/zebra-%s.pid -u root -k' % (self.zebra_cfg, self.name, self.name))
-        self.cmd('/usr/lib/quagga/ospfd -f %s -z /tmp/ospfd-%s.api -i /tmp/ospfd-%s.pid -u root' % (self.ospf_cfg, self.name, self.name))
-
-    def terminate(self):
-        self.cmd("ps -ax | egrep 'ospfd-%s.pid|zebra-%s.pid' | awk '{print $1}' | xargs kill" % (self.name, self.name))
-        Host.terminate
-
-
         
 class MultiSwitchTopo(Topo):
     "Single switch connected to n (< 256) hosts."
