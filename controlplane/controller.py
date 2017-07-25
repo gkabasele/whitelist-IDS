@@ -868,6 +868,7 @@ class Controller():
                     if data:
                         flow = pickle.loads(data)
                         code = ERROR
+                        #FIXME use dict.get
                         if flow.install:
                             if (flow.srcip, flow.dstip, flow.proto) in self.history:
                                 resp_sw = self.history[(flow.srcip, flow.dstip, flow.proto)]

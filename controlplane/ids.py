@@ -4,6 +4,7 @@ import sys
 import argparse
 import json
 import cPickle as pickle
+import time
 
 from netfilterqueue import NetfilterQueue
 from scapy.all import *
@@ -62,8 +63,7 @@ def layer_to_dict(layer, pkt):
     fields = {field_name : getattr(pkt[layer], field_name) for field_name in field_names}
     return fields
 
-def forge_packet(payload, dstip, proto):
-    pkt = IP(payload)
+def forge_packet(pkt, dstip, proto):
     ip_dict = layer_to_dict(IP, pkt) 
     ip = modify_layer('IP', ip_dict, {'dst' : dstip, 'proto': int(proto), 'len' : pkt[IP].len-8})
     tcp = pkt[TCP]
@@ -88,7 +88,7 @@ def is_safe(pkt):
          
      
 def print_and_accept(packet):
-    
+   
     print(packet)
     payload = packet.get_payload()
     pkt = IP(payload)
@@ -102,9 +102,8 @@ def print_and_accept(packet):
     length = str(len(pkt)+6) # + 14 bytes for ethernet header - 8 bytes for SRTag
     funcode = str(pkt[Modbus].funcode) if Modbus in pkt else -1 
     identifier = str(pkt[SRTag].identifier)
-
     flow = FlowRequest(reason, srcip, sport, dstip, dport, proto, funcode, length, identifier)
-    packets[flow.req_id] = payload
+    packets[flow.req_id] = pkt
     try:
         # TODO check for error 
         if is_safe(pkt):
@@ -114,7 +113,8 @@ def print_and_accept(packet):
             if msg:
                 resp = pickle.loads(msg)    
                 if resp.code == OK:
-                    pkt = forge_packet(packets[flow.req_id], dstip, proto)
+
+                    pkt = forge_packet(packets[resp.req_id], dstip, proto)
                     print pkt.summary()
                     send(pkt)
                 elif resp.code == ERROR:

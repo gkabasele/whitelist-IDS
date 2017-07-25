@@ -167,6 +167,7 @@ class MultiSwitchTopo(IPTopo):
         self.addLink('r1', 'r2', igp_area = "0.0.0.0", params1={"ip":("10.0.101.1/24")},params2={"ip":("10.0.101.2/24")}) 
         self.addLink('r2', 'r3', igp_area = "0.0.0.0", params1={"ip":("10.0.102.1/24")},params2={"ip":("10.0.102.2/24")}) 
         self.addLink('r3', 'rcc', igp_area = "0.0.0.0", params1={"ip":("10.0.103.1/24")},params2={"ip":("10.0.103.2/24")}) 
+        self.addLink('r3', 'r1', igp_area = "0.0.0.0", params1={"ip":("10.0.105.1/24")},params2={"ip":("10.0.105.2/24")}) 
         
         self.set_ids_addr(encoder, ids_addr)
 
@@ -260,6 +261,16 @@ def main():
     h_gw = net.get('s3-h2')
     h_gw.cmd('ip link set s3-h2-eth0 up')  
     h.cmd('sudo iptables -I INPUT -i eth0 -j NFQUEUE --queue-num 1')
+    # Disabling reverse path filter
+    for i in ['rcc','r1','r2','r3']:
+        r = net.get(i)
+        for name in r.nameToIntf:
+            print name
+            command = "sysctl -w net.ipv4.conf.%s.rp_filter=0" % name
+            r.cmd(command)
+        r.cmd("sysctl -w net.ipv4.conf.all.rp_filter=0")
+    r = net.get('r3')
+    r.cmd('echo 1 >/proc/sys/net/ipv4/conf/r3-eth0/log_martians')
     sleep(1)
     
     #topodb = TopologyDB(net=net)
