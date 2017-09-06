@@ -15,7 +15,7 @@ all: controller_client
 
 
 controller_client: Controller_Client.o $(GEN_OBJ)
-	$(CXX) $^ -o $@ -L/usr/local/lib -lthrift 
+	$(CXX) $^ -o $@ -L/usr/local/lib -lthrift  -lnfnetlink -lnetfilter_queue
 
 clean:
 	$(RM) *.o  controller_client

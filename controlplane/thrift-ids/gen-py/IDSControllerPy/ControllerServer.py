@@ -34,7 +34,7 @@ class ControllerHandler(Iface):
 
 handler = ControllerHandler()
 processor = Processor(handler)
-transport = TSocket.TServerSocket(port=9090)
+transport = TSocket.TServerSocket(port=2050)
 tfactory = TTransport.TBufferedTransportFactory()
 pfactory = TBinaryProtocol.TBinaryProtocolFactory()
 

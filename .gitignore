@@ -3,4 +3,6 @@
 *.pcap
 *.pcapng
 *.jpg
+*.o
 logs/
+controlplane/thrift-ids/gen-cpp/controller_client
