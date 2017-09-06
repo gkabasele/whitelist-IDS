@@ -3,11 +3,23 @@
 #include <cstdio> 
 #include <cstdlib>
 
+/* Netfilter queue */
 #include <netinet/in.h>
 #include <linux/types.h>
+#include <linux/ip.h>
+#include <linux/tcp.h>
 #include <linux/netfilter.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
+#include "srtag.h"
+#include "modbus.h"
 
+/* Libcrafter */
+
+#include <crafter.h>
+
+
+
+/* Thrift */
 #include <thrift/transport/TSocket.h>
 #include <thrift/transport/TBufferTransports.h>
 #include <thrift/protocol/TBinaryProtocol.h>
@@ -28,6 +40,8 @@ boost::shared_ptr<TProtocol> tprotocol(new TBinaryProtocol(ttransport));
 
 ControllerClient client(tprotocol); 
 
+
+
 /* returns packet id */
 static u_int32_t print_pkt (struct nfq_data *tb)
 {
@@ -36,6 +50,10 @@ static u_int32_t print_pkt (struct nfq_data *tb)
         struct nfqnl_msg_packet_hw *hwph;
         u_int32_t mark,ifi; 
         int ret;
+        struct iphdr *ip_info;
+        struct tcphdr *tcp_info;
+        struct srtag_hdr *srtag_info;
+        //struct mobdus_hdr *modbus_info;
         unsigned char *data;
 
         ph = nfq_get_msg_packet_hdr(tb);
@@ -75,15 +93,38 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                 printf("physoutdev=%u ", ifi);
 
         ret = nfq_get_payload(tb, &data);
-        if (ret >= 0)
+        if (ret >= 0){
                 printf("payload_len=%d ", ret);
+                ip_info  = (struct iphdr *) data;
+                printf("IP : src = %u , dest = %u " , ip_info->saddr, ip_info->daddr);
+                switch(ip_info->protocol) {
+                    case IPPROTO_SRTAG: 
+                    {
+                        srtag_info = (struct srtag_hdr*) (data + sizeof(*ip_info));
+                        printf("SRTag : %u ", srtag_info->dest);
+
+                        tcp_info = (struct tcphdr*) (data + sizeof(*ip_info) +sizeof(*srtag_info));
+                        unsigned short dest_port = tcp_info->dest;
+                        printf("TCP : dest = %d ", ntohs(dest_port));
+                    }    break;
+                    case IPPROTO_TCP:
+                    {    tcp_info = (struct tcphdr*) (data + sizeof(*ip_info));
+                        unsigned short dest_port = ntohs(tcp_info->dest);
+                        printf("TCP : dest = %d", dest_port);
+                    }   break;
+                    default:
+                        printf("Unknown protocol");
+                        break;
+                }
+          }
+        
 
         fputc('\n', stdout);
 
         return id;
 }
 
-void treat_pkt(char* , int* verdict)
+void treat_pkt(char* data, int* verdict)
 {
     // Retrieve value from packet
     
