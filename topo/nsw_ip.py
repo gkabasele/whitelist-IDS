@@ -94,7 +94,7 @@ class MultiSwitchTopo(IPTopo):
 
         encoder.add_switch_conf("0", sw_conf) 
 
-
+        #Field Site and Core network (wan) creation
         for i in xrange(n_sub):
             label_sw = "s%d"%(i+1)
             label_router = "r%d"%(i+1)
