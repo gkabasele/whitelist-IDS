@@ -17,12 +17,15 @@ class ControllerHandler(Iface):
         pass
 
     def mirror(self, req, sw):
-        if req == None:
-            err = IDSControllerControllerException(1, "req is None")
-            raise err
+        if req != None:
+            
+            print "%s %s %s" % (req, type(req.srcip),type(req.srcport))
+
+            print "%s %s" % (sw, type(sw))
         else:
-            print req
-    
+            err = IDSControllerException(1, "req is None")
+            raise err
+
     def redirect(self, req, sw):
         print req
 

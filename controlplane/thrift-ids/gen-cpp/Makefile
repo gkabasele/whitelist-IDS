@@ -11,7 +11,7 @@ INC := -I$(THRIFT_DIR) -I$(BOOST_DIR)
 all: controller_client
 
 %.o: %.cpp
-	$(CXX) -Wall -DHAVE_INTTYPES_H -DHAVE_NETINET_IN_H $(INC) -c $< -o $@
+	$(CXX) -Wall -std=gnu++0x -DHAVE_INTTYPES_H -DHAVE_NETINET_IN_H $(INC) -c $< -o $@
 
 
 controller_client: Controller_Client.o $(GEN_OBJ)

@@ -7,6 +7,7 @@ exception IDSControllerException
     2: string error_description
 }
 
+// Add reason to the request
 struct Flow {
     1: required string srcip
     2: required string dstip

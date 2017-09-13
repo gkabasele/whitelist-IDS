@@ -1,3 +1,6 @@
+#ifndef SRTAG_H
+#define SRTAG_H
+
 #include <linux/types.h>
 
 #define IPPROTO_SRTAG 200
@@ -9,4 +12,4 @@ struct srtag_hdr {
         __u8    reason;
 };
 
-
+#endif
