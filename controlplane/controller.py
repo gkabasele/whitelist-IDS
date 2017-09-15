@@ -78,6 +78,7 @@ PAYLOAD_SIZE_MISS = '40'
 # Code for request/response
 OK = 1
 ERROR = 2
+NOTHING = 3
 
 def enum(type_name, *sequential, **named):
     enums = dict(zip(sequential, range(len(sequential))), **named)
@@ -826,10 +827,11 @@ class Controller():
 
         return services
 
-    def __init__(self):
+    def __init__(self,debug=False):
         self.clients = {}
         self.switches = {}
         self.history = {}
+        self.debug = debug
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def add_client(self, id_client, standard_client, switch):
@@ -867,7 +869,7 @@ class Controller():
                     print "Received req"
                     if data:
                         flow = pickle.loads(data)
-                        code = ERROR
+                        code = NOTHING
                         #FIXME use dict.get
                         if flow.install:
                             if (flow.srcip, flow.dstip, flow.proto) in self.history:
@@ -875,7 +877,10 @@ class Controller():
 
                                 print "Reason: ",flow.reason
 
-                                if flow.reason == PORT_MISS: 
+                                if flow.reason == IP_MISS:
+                                    print "Duplicated flow"   
+
+                                elif flow.reason == PORT_MISS: 
                                     print "Port miss: %s-%s " % (flow.sport, flow.dport) 
                                     if (flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport) not in self.history:
                                         self.deploy_ex_port_rules(resp_sw, flow.srcip, flow.dstip, flow.sport, flow.dport) 
@@ -1004,11 +1009,16 @@ class Controller():
     def add_ex_port_entry(self, client, srcip, dstip, sport, dport):
         self.table_add_entry(client, EX_PORT, NO_OP, [srcip, dstip, sport, dport],[])
     
-    def add_send_frame_entry(self, client, port, mac):
-        self.table_add_entry(client, SEND_FRAME, NO_OP, [port],[])
+    def add_send_frame_entry(self, client, port, smac, dmac):
+        self.table_add_entry(client, SEND_FRAME, REWRITE, [port],[smac, dmac])
     
-    def add_ipv4_entry(self, client, ip_addr, port):
-        self.table_add_entry(client, IPV4_LPM, SET_EGRESS, [str(ip_addr)], [port])
+    def add_ipv4_entry(self, client, ip_addr, port, convert_ip=False):
+        ip = str(ip_addr)
+        if convert_ip:
+            nhop = str(ip_addr)[:-3]
+        else:
+            nhop = ip
+        self.table_add_entry(client, IPV4_LPM, SET_EGRESS, [ip], [port, nhop])
 
     def add_forward_entry(self, client, ip_addr, mac):
         self.table_add_entry(client, FORWARD, DMAC, [str(ip_addr)],[mac]) 
@@ -1030,6 +1040,9 @@ class Controller():
     def get_resp_switch(self, srcip, dstip):
         #List of switch where the flow is passing
         resp_switch = [] 
+        if self.debug:
+            resp_switch.append(self.switches["0"])
+            return resp_switch
         for switch in self.switches: 
             sw = self.switches[switch]
             if sw.is_responsible(srcip) or sw.is_responsible(dstip):
@@ -1119,7 +1132,8 @@ class Controller():
                 self.table_default_entry(client, MODBUS_PAYLOAD, ADD_TAG, [PAYLOAD_SIZE_MISS, sw.sw_id, sw.ids_addr, sw.ids_port])
 
             self.table_default_entry(client, ARP_FORW_REQ, STORE_ARP, [sw.gw_port])
-            self.table_default_entry(client, IPV4_LPM, SET_EGRESS, [sw.gw_port])
+            # TODO change sw.arp_entry to the destination
+            self.table_default_entry(client, IPV4_LPM, SET_EGRESS, [sw.gw_port, sw.arp_table[int(sw.gw_port)-1].keys()[0]])
 
             self.table_default_entry(client, MISS_TAG, DROP, [])
             self.table_default_entry(client, ARP_RESP, NO_OP, [])
@@ -1128,8 +1142,9 @@ class Controller():
             for interface in sw.interfaces:
                 for iname in interface:
                     port = iname
-                    mac = interface[iname]     
-                    self.add_send_frame_entry(client, port, mac) 
+                    smac = interface[iname]     
+                    dmac = sw.arp_table[int(port)-1].values()[0]
+                    self.add_send_frame_entry(client, port, smac, dmac) 
 
             for arp_entry in sw.arp_table:
                 for ip_addr in arp_entry:
@@ -1139,7 +1154,8 @@ class Controller():
             for route in sw.routing_table:
                 for dest in route:
                     port = route[dest]
-                    self.add_ipv4_entry(client, IPNetwork(dest), port)
+                    #remove /32
+                    self.add_ipv4_entry(client, IPNetwork(dest), port, True)
 
             for tag in [IP_MISS, PORT_MISS, FUN_MISS, PAYLOAD_SIZE_MISS]:
                 self.add_miss_tag_entry(client, tag, sw.ids_port) 
@@ -1160,7 +1176,7 @@ def main(sw_config, capture, ip, port):
     print "Creating switches"
     switches = create_switches(sw_config) 
 
-    controller = Controller()
+    controller = Controller(True)
     print "Connecting to switches and setting default entry"
     controller.setup_connection(switches) 
     controller.setup_default_entry()

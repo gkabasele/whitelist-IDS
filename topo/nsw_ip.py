@@ -270,6 +270,7 @@ def main():
             r.cmd(command)
         r.cmd("sysctl -w net.ipv4.conf.all.rp_filter=0")
     r = net.get('r3')
+    # Log packet whose destination ar not suppose to arrive
     r.cmd('echo 1 >/proc/sys/net/ipv4/conf/r3-eth0/log_martians')
     sleep(1)
     

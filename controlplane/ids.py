@@ -21,6 +21,7 @@ PAYLOAD_SIZE_MISS = '40'
 # Code for request/response
 OK = 1
 ERROR = 2
+NOTHING = 3
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--ip', action='store', dest='ip', default= '172.0.10.2',help='ip address of the controller') 
@@ -95,6 +96,7 @@ def print_and_accept(packet):
     print "Pkt Rcv: ", pkt.summary()
     srcip = pkt[IP].src
     dstip = pkt[SRTag].dst 
+    print "%s -> %s" %(srcip, dstip)
     reason = str(pkt[SRTag].reason)
     proto = str(pkt[SRTag].protocol)
     sport = str(pkt[TCP].sport)
@@ -112,9 +114,12 @@ def print_and_accept(packet):
             print "Received response"
             if msg:
                 resp = pickle.loads(msg)    
-                if resp.code == OK:
-
+                if resp.code == OK or resp.code == NOTHING:
+                    if resp.code == NOTHING:
+                        print "Rule already install"
                     pkt = forge_packet(packets[resp.req_id], dstip, proto)
+                    #recompute checksum
+                    del pkt[IP].chksum
                     print pkt.summary()
                     send(pkt)
                 elif resp.code == ERROR:
