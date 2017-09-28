@@ -13,6 +13,8 @@ from scapy.all import *
 from utils import *
 import argparse
 
+import logging
+
 from functools import wraps
 import  bmpy_utils as utils
 
@@ -26,6 +28,8 @@ try:
     from bm_runtime.simple_pre_lag import SimplePreLAG
 except:
     pass
+
+logging.basicConfig(filename='controller.log', level=logging.DEBUG)
 
 class Flow():
     '''
@@ -938,7 +942,7 @@ class Controller():
                         resp = FlowResponse(flow.req_id, code)
                         Communication.send(resp, conn)
             finally:
-                conn.shutdown(sock.SHUT_RDWR)
+                conn.shutdown(self.sock.SHUT_RDWR)
                 conn.close()
     
     def get_res(self, type_name, name, array):
@@ -1073,37 +1077,79 @@ class Controller():
             client = self.clients[sw.sw_id]
             self.add_modbus_payload_entry(client, srcip, sport, funcode, length)
 
-    def dessiminate_rules(self, filename):
-        IP_PROTO_TCP = 6
+    def parse_line(self, line):
+        if '||' not in line:
+            return tuple(line.split('|'))
+        else:
+            return (None, None, None, None)
+
+    # Add a mapping from table to args
+    # TODO make generic method (table, args)
+    def is_flow_installed(self, srcip, dstip, proto, dport, sport):
+        return self.history.has_key((srcip, dstip, proto, sport, dport)) or \
+                                self.history.has_key((dstip, srcip, proto, dport, sport)) 
+
+    def is_com_installed(self, srcip, dstip, proto): 
+        return self.history.has_key((srcip, dstip, proto)) or \
+                                self.history.has_key((dstip, srcip, proto))
+
+    def install_flow(self, srcip, dstip, proto, sport, dport, packet=True):
         PSH = 0x08
         ACK = 0x10
         SYN = 0x02
-        capture = rdpcap(filename)    
-        for pkt in capture:
-            srcip = pkt[IP].src
-            dstip = pkt[IP].dst
-            if pkt[IP].proto == IP_PROTO_TCP:
-                proto = str(pkt[IP].proto)
-                sport = str(pkt[TCP].sport)
-                dport = str(pkt[TCP].dport)
-                if not(self.history.has_key((srcip, dstip, proto, sport, dport)) or \
-                        self.history.has_key((dstip, srcip, proto, dport, sport))):
+        resp_switch = self.get_resp_switch(srcip, dstip)  
+         
+        if not self.is_com_installed(srcip, dstip, proto):
+            self.add_history_entry(srcip, dstip, proto, sport, dport, resp_switch) 
+            self.deploy_flow_id_rules(resp_switch, srcip, dstip, proto)
 
-                    resp_switch = self.get_resp_switch(srcip, dstip)  
-                    self.add_history_entry(srcip, dstip, proto, sport, dport, resp_switch) 
-                    self.deploy_flow_id_rules(resp_switch, srcip, dstip, proto)
-                    self.deploy_ex_port_rules(resp_switch, srcip, dstip, sport, dport)
+        if not self.is_flow_installed(srcip, dstip, proto, sport, dport):
+            self.add_history_entry(srcip, dstip, proto, sport, dport, resp_switch)
+            self.deploy_ex_port_rules(resp_switch, srcip, dstip, sport, dport)
 
-                flags = pkt[TCP].flags
-                if (flags & PSH) and (flags & ACK) and (sport == "5020" or dport == "5020"):
-                    funcode = str(pkt[Modbus].funcode)
-                    length = str(len(pkt))
-                    if not self.history.has_key((srcip, sport, funcode)):
-                        resp_switch = self.history[(srcip, dstip, proto, sport, dport)]
-                        self.history[(srcip, sport, funcode)]=True
-                        self.history[(srcip, sport, funcode, length)] = True
-                        self.deploy_modbus_rules(resp_switch, srcip, sport, funcode)
-                        self.deploy_modbus_payload_rules(resp_switch, srcip, sport, funcode, length)
+        logging.debug('%s:%s <-> %s:%s' % (srcip, sport, dstip, dport))
+        if packet:
+            flags = pkt[TCP].flags
+            if (flags & PSH) and (flags & ACK) and (sport == "5020" or dport == "5020"):
+                funcode = str(pkt[Modbus].funcode)
+                length = str(len(pkt))
+                if not self.history.has_key((srcip, sport, funcode)):
+                    resp_switch = self.history[(srcip, dstip, proto, sport, dport)]
+                    self.history[(srcip, sport, funcode)]=True
+                    self.history[(srcip, sport, funcode, length)] = True
+                    self.deploy_modbus_rules(resp_switch, srcip, sport, funcode)
+                    self.deploy_modbus_payload_rules(resp_switch, srcip, sport, funcode, length)
+
+
+    def dessiminate_rules(self, filename):
+        IP_PROTO_TCP = 6
+        IP_PROTO_UDP = 17
+        if 'pcap' in filename: 
+            capture = rdpcap(filename)    
+            for pkt in capture:
+                srcip = pkt[IP].src
+                dstip = pkt[IP].dst
+                if pkt[IP].proto == IP_PROTO_TCP:
+                    proto = str(pkt[IP].proto)
+                    sport = str(pkt[TCP].sport)
+                    dport = str(pkt[TCP].dport)
+                if pkt[IP].proto == IP_PROTO_UDP:
+                    proto = str(pkt[IP].proto)
+                    sport = str(pkt[UDP].sport)
+                    dport = str(pkt[UDP].dport)
+                self.install_flow(srcip, dstip, proto, sport, dport)
+        else:
+            with open(filename, 'r+') as capture:
+                i = 0
+                for line in capture:
+                    if (645125 * 0.05) < i:
+                        break
+                    logging.debug(line)
+                    (srcip, dstip, proto, sport, dport) = self.parse_line(line)
+                    if srcip is not None:
+                        self.install_flow(srcip, dstip, proto, sport, dport, False)
+                        i += 1
+            print "Done with the file"
 
     def add_history_entry(self, srcip, dstip, proto, sport, dport, resp_switch):
         self.history[(srcip, dstip, proto)] = resp_switch
@@ -1172,7 +1218,7 @@ def load_json_config(standard_client=None, json_path=None):
     load_json_str(utils.get_json_config(standard_client, json_path))
 
 
-def main(sw_config, capture, ip, port):
+def main(sw_config, ip, port, capture=None, training=None):
     print "Creating switches"
     switches = create_switches(sw_config) 
 
@@ -1181,14 +1227,22 @@ def main(sw_config, capture, ip, port):
     controller.setup_connection(switches) 
     controller.setup_default_entry()
     print "Installing rules according to the capture"
-    controller.dessiminate_rules(capture)
+    assert (bool(capture) ^ bool(training)) 
+    if capture:
+        controller.dessiminate_rules(capture)
+    else:
+        controller.dessiminate_rules(training)
 
     controller.waiting_request(ip, port)
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--conf', action='store', dest='conf', help='file containing description of switch')
     parser.add_argument('--capture', action='store', dest='capture', help='training set capture for the whitelist')
+    parser.add_argument('--training', action='store', dest='training', help='training set file for the whitelist')
     parser.add_argument('--ip', action='store', dest ='ip', default='172.0.10.2', help='ip address of the controller')
     parser.add_argument('--port', action='store', dest='port', type=int, default=2000, help='port used by controller')
     args = parser.parse_args()
-    main(args.conf, args.capture, args.ip, args.port)
+    if args.capture or args.training:
+        main(args.conf, args.ip, args.port, args.capture, args.training)
+    else:
+        print 'Missing argument capture or training for the whitelist'

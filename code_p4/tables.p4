@@ -74,9 +74,6 @@ action redirect_packet(egress_port) {
     modify_field(standard_metadata.egress_spec, egress_port);
 }
 
-
-
-
 register arp_ip {
     width : 32;
     instance_count : 256;
@@ -200,7 +197,7 @@ table flow_id {
         _no_op;
         add_miss_tag;
     }
-    size : 100;
+    size : 1048576;
 }
 
 // table for expected port given ip addresses
@@ -216,7 +213,7 @@ table ex_port {
         _no_op;
         add_miss_tag;
     }
-    size: 100;
+    size: 1048576;
 }
 
 
@@ -231,7 +228,6 @@ table modbus {
         _no_op;
         add_miss_tag;
     }
-    size : 100;
 }
 
 table modbus_payload_size {

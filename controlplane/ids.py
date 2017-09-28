@@ -46,7 +46,13 @@ bind_layers(TCP, Modbus, sport=5020)
 bind_layers(TCP, Modbus, dport=5020)
 bind_layers(Modbus, ModbusDiag, funcode=8)
 
+# Number of malicious packet
+num_mal = 0
+num_rcv = 0
 
+# IP Protocol
+IP_PROTO_TCP = 6
+IP_PROTO_UDP = 17
 
 def modify_layer(layer_name, layer_dict, value_dict ):
     #FIXME avoid eval
@@ -86,10 +92,14 @@ def is_safe(pkt):
     # TODO check when excpetion for function code scan
     return safe
         
-         
+def do_nothing(packet):         
+    global num_rcv
+    num_rcv +=1
      
 def print_and_accept(packet):
    
+    global num_rcv
+    num_rcv +=1
     print(packet)
     payload = packet.get_payload()
     pkt = IP(payload)
@@ -99,43 +109,55 @@ def print_and_accept(packet):
     print "%s -> %s" %(srcip, dstip)
     reason = str(pkt[SRTag].reason)
     proto = str(pkt[SRTag].protocol)
-    sport = str(pkt[TCP].sport)
-    dport = str(pkt[TCP].dport)
-    length = str(len(pkt)+6) # + 14 bytes for ethernet header - 8 bytes for SRTag
-    funcode = str(pkt[Modbus].funcode) if Modbus in pkt else -1 
-    identifier = str(pkt[SRTag].identifier)
-    flow = FlowRequest(reason, srcip, sport, dstip, dport, proto, funcode, length, identifier)
-    packets[flow.req_id] = pkt
+    if pkt[SRTag].protocol == IP_PROTO_TCP:
+        sport = str(pkt[TCP].sport)
+        dport = str(pkt[TCP].dport)
+        length = str(len(pkt)+6) # + 14 bytes for ethernet header - 8 bytes for SRTag
+        funcode = str(pkt[Modbus].funcode) if Modbus in pkt else -1 
+        identifier = str(pkt[SRTag].identifier)
+        flow = FlowRequest(reason, srcip, sport, dstip, dport, proto, funcode, length, identifier)
+        packets[flow.req_id] = pkt
+    elif pkt[SRTag].protocol == IP_PROTO_UDP:
+        sport = str(pkt[UDP].sport)
+        dport = str(pkt[UDP].dport)
+        length = str(len(pkt)+6)
+        funcode = -1
+        identifier = str(pkt[SRTag].identifier)
+        flow = FlowRequest(reason, srcip, sport, dstip, dport, proto, funcode, length, identifier)
+        packets[flow.req_id] = pkt
     try:
         # TODO check for error 
         if is_safe(pkt):
-            Communication.send(flow, ssl_sock)
-            msg = Communication.recv_msg(ssl_sock)
-            print "Received response"
-            if msg:
-                resp = pickle.loads(msg)    
-                if resp.code == OK or resp.code == NOTHING:
-                    if resp.code == NOTHING:
-                        print "Rule already install"
-                    pkt = forge_packet(packets[resp.req_id], dstip, proto)
-                    #recompute checksum
-                    del pkt[IP].chksum
-                    print pkt.summary()
-                    send(pkt)
-                elif resp.code == ERROR:
-                    print "an error occurred"  
-                else:
-                    print "Unknown code"
+            print "Legitimate pkt"
+            #Communication.send(flow, ssl_sock)
+            #msg = Communication.recv_msg(ssl_sock)
+            #print "Received response"
+            #if msg:
+            #    resp = pickle.loads(msg)    
+            #    if resp.code == OK or resp.code == NOTHING:
+            #        if resp.code == NOTHING:
+            #            print "Rule already installed"
+            #        pkt = forge_packet(packets[resp.req_id], dstip, proto)
+            #        #recompute checksum
+            #        del pkt[IP].chksum
+            #        print pkt.summary()
+            #        send(pkt)
+            #    elif resp.code == ERROR:
+            #        print "an error occurred"  
+            #    else:
+            #        print "Unknown code"
         else:
-            print "Malicious packet detected"
-            flow.install = False
-            Communication.send(flow, ssl_sock)
-            msg = Communication.recv_msg(ssl_sock)
-            print "Received response"
-            if msg:
-                resp = pickle.loads(msg)
-                if resp.code == OK:
-                    print "Flow: %s:%s -> %s:%s" % (srcip, sport, dstip, dport)
+            print "Malicious pkt"
+            #global num_mal
+            #num_mal += 1
+            #flow.install = False
+            #Communication.send(flow, ssl_sock)
+            #msg = Communication.recv_msg(ssl_sock)
+            #print "Received response"
+            #if msg:
+            #    resp = pickle.loads(msg)
+            #    if resp.code == OK:
+            #        print "Flow: %s:%s -> %s:%s" % (srcip, sport, dstip, dport)
     finally: 
         packet.drop()
 
@@ -143,6 +165,7 @@ def main():
     
     nfqueue = NetfilterQueue()
     nfqueue.bind(1, print_and_accept)
+    #nfqueue.bind(1, do_nothing)
 
     try:
         nfqueue.run()
@@ -150,6 +173,10 @@ def main():
         print "Done"
     
     nfqueue.unbind()
+    global num_rcv
+    global num_mal
+    print "Rcv: %d, Mal: %d, TN: %f" % (num_rcv, num_mal, num_mal/num_rcv)
+    print "FP rate: %f " % (num_rcv/645125) 
 
 if __name__ == '__main__':
         main()
