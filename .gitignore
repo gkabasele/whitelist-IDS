@@ -4,5 +4,7 @@
 *.pcapng
 *.jpg
 *.o
+*.log
+sw_conf.json
 logs/
 controlplane/thrift-ids/gen-cpp/controller_client

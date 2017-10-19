@@ -5,10 +5,10 @@ action _drop() {
     drop();
 }
 
-action set_egress_port(port, nhop_ipv4) {
-    modify_field(routing_metadata.nhop_ipv4, nhop_ipv4);
+action set_egress_port(port) {
+    //modify_field(routing_metadata.nhop_ipv4, nhop_ipv4);
     modify_field(standard_metadata.egress_spec, port);
-  //  add_to_field(ipv4.ttl, -1);
+    //add_to_field(ipv4.ttl, -1);
 }
 
 action set_dmac(dmac) {

@@ -42,11 +42,11 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 def verify(func):
-            def wrapper(self, *args, **kwargs):
-                a = list(args)
-                assert len(a[1]) == self.num_fields, "Number of fields for the rule does not match"
-                response = func(self, *args)
-                return response
+    def wrapper(self, *args, **kwargs):
+        a = list(args)
+        assert len(a[0]) == self.num_fields, "Number of fields for the rule does not match"
+        return func(self, *args)
+    return wrapper
 
 class RuleTables():
     '''
@@ -69,10 +69,10 @@ class RuleTables():
     '''
     @verify
     def add_rule(self, rule, switch_id, num_entry):
-        if rule not in rules:
+        if rule not in self.rules:
             self.rules[rule] = {switch_id : num_entry}
         elif switch_id not in self.rules[rule]:
-            self.flows[rules][switch_id] = num_entry
+            self.rules[rule][switch_id] = num_entry
 
     '''
         rule : fields used for matching
@@ -90,7 +90,10 @@ class RuleTables():
     def get_num_entry(self, rule, switch_id):
         return self.rules[rule][switch_id]
     
-
+    @verify
+    def is_rule_installed(self, rule):
+        return rule in self.rules
+        
 bind_layers(TCP, Modbus, dport=5020)
 bind_layers(TCP, Modbus, sport=5020)
 
@@ -227,8 +230,8 @@ class Controller(Iface):
         self.switches = {}
         # Flow : srcip, sport, proto, dstip, dport
         self.flow_table = RuleTables(5)
-        # Modbus : srcip, sport, funcode, length
-        self.modbus_table = RuleTables(4)
+        # Modbus : srcip, sport, funcode, payload_length, length
+        self.modbus_table = RuleTables(5)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def add_client(self, id_client, standard_client, switch):
@@ -432,8 +435,8 @@ class Controller(Iface):
     def add_flow_id_entry(self, client, srcip, sport, proto, dstip, dport):
         self.table_add_entry(client, FLOW_ID, NO_OP,[srcip, sport, proto, dstip, dport],[])
 
-    def add_modbus_entry(self, client, srcip, sport, funcode, length):
-        self.table_add_entry(client, MODBUS, NO_OP, [srcip, sport, funcode, length],[])
+    def add_modbus_entry(self, client, srcip, sport, funcode, payload_length, length):
+        self.table_add_entry(client, MODBUS, NO_OP, [srcip, sport, funcode, payload_length, length],[])
 
     def add_send_frame_entry(self, client, port, mac):
         self.table_add_entry(client, SEND_FRAME, NO_OP, [port],[])
@@ -460,30 +463,33 @@ class Controller(Iface):
                 resp_switch.append(sw)
         return resp_switch
 
+    # resp_sw is a list of switch object
     def deploy_flow_id_rules(self, resp_sw, srcip, sport, proto, dstip, dport):
         for sw in resp_sw:
             client = self.clients[sw.sw_id]
             self.add_flow_id_entry(client, srcip, sport, proto, dstip, dport)
-            self.flow_table.add_rule((srcip, sport, proto, dstip, dport), sw.sw_id, sw.p4_table["flow"])
-            sw.p4_table["flow"] += 1
-            if proto == IP_PROTO_TCP:
+            self.flow_table.add_rule((srcip, sport, proto, dstip, dport), sw.sw_id, sw.p4_table[FLOW_ID])
+            sw.p4_table[FLOW_ID] += 1
+            if int(proto) == IP_PROTO_TCP:
                 self.add_flow_id_entry(client, dstip, dport, proto, srcip, sport) 
-                self.flow_table.add_rule((dstip, dport, proto, srcip, sport), sw.sw_id, sw.p4_table["flow"])
+                self.flow_table.add_rule((dstip, dport, proto, srcip, sport), sw.sw_id, sw.p4_table[FLOW_ID])
 
-    def deploy_modbus_rules(self, resp_sw, srcip, sport, funcode, length):
-        for sw in resp_sw:
-            client = self.clients[sw.sw_id]
-            self.add_modbus_entry(client, srcip, sport, funcode, length)
-            self.modbus_table.add_rule((srcip, sport, funcode, length), sw.sw_id, sw.p4_table["modbus"])
-            sw.p4_table["modbus"] += 1
+    # resp_sw is a list of switch_id present in the corresponding table
+    def deploy_modbus_rules(self, resp_sw, srcip, sport, funcode, payload_length, length):
+        for sw_id in resp_sw:
+            switch = self.switches[sw_id]
+            client = self.clients[sw_id]
+            self.add_modbus_entry(client, srcip, sport, funcode, payload_length, length)
+            self.modbus_table.add_rule((srcip, sport, funcode, payload_length, length), switch.sw_id, switch.p4_table[MODBUS])
+            switch.p4_table[MODBUS] += 1
 
     def is_flow_installed(self, flow):
-        if proto == IP_PROTO_TCP:
-            (srcip, sport, proto, dstip, dport) = flow
-            return (flow in self.flow_table or \
-                    (dstip, dport, proto, srcip, sport) in self.flow_table)
+        (srcip, sport, proto, dstip, dport) = flow
+        if int(proto) == IP_PROTO_TCP:
+            return (self.flow_table.is_rule_installed(flow) or \
+                    self.flow_table.is_rule_installed((dstip, dport, proto, srcip, sport)))
         else:
-            return flow in self.flow_table
+            return self.flow_table.is_rule_installed(flow) 
 
     def dessiminate_rules(self, filename):
         PSH = 0x08
@@ -504,10 +510,12 @@ class Controller(Iface):
                 flags = pkt[TCP].flags
                 if (flags & PSH) and (flags & ACK) and (sport == "5020" or dport == "5020"):
                     funcode = str(pkt[Modbus].funcode)
+                    payload_length = str(pkt[Modbus].length)
                     length = str(len(pkt))
-                    if not (srcip, sport, funcode, length) in self.modbus_table:
-                        resp_switch = self.flow_table.rule_to_switches((srcip, dstip, proto, sport, dport))
-                        self.deploy_modbus_rules(resp_switch, srcip, sport, funcode, length)
+                    if not self.modbus_table.is_rule_installed((srcip, sport, funcode, payload_length, length)):
+                        resp_switch = self.flow_table.rule_to_switches((srcip, sport, proto, dstip, dport))
+                        self.deploy_modbus_rules(resp_switch, srcip, sport, funcode, payload_length, length)
+            #TODO UDP traffic
 
     def setup_default_entry(self):
         for switch in self.switches:
