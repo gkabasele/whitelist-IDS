@@ -538,6 +538,7 @@ class Controller(Iface):
             self.table_default_entry(client, ARP_RESP, NO_OP, [])
             self.table_default_entry(client, ARP_FORW_RESP, FORWARD_ARP, [])
 
+
             for interface in sw.interfaces:
                 for iname in interface:
                     port = iname
@@ -570,7 +571,6 @@ def load_json_config(standard_client=None, json_path=None):
 def main(sw_config, capture, ip, port):
     print "Creating switches"
     switches = create_switches(sw_config) 
-
     controller = Controller()
     print "Connecting to switches and setting default entry"
     controller.setup_connection(switches) 

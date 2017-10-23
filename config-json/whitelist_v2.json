@@ -918,11 +918,11 @@
             "order": [
                 "ethernet",
                 "ipv4",
-                "udp",
                 "srtag",
+                "arp",
+                "udp",
                 "tcp",
-                "modbus",
-                "arp"
+                "modbus"
             ]
         }
     ],
@@ -1046,36 +1046,8 @@
             ]
         },
         {
-            "name": "set_egress_port",
-            "id": 1,
-            "runtime_data": [
-                {
-                    "name": "port",
-                    "bitwidth": 9
-                }
-            ],
-            "primitives": [
-                {
-                    "op": "modify_field",
-                    "parameters": [
-                        {
-                            "type": "field",
-                            "value": [
-                                "standard_metadata",
-                                "egress_spec"
-                            ]
-                        },
-                        {
-                            "type": "runtime_data",
-                            "value": 0
-                        }
-                    ]
-                }
-            ]
-        },
-        {
             "name": "add_miss_tag",
-            "id": 2,
+            "id": 1,
             "runtime_data": [
                 {
                     "name": "id",
@@ -1182,7 +1154,7 @@
                         },
                         {
                             "type": "hexstr",
-                            "value": "0x8"
+                            "value": "0x7"
                         }
                     ]
                 },
@@ -1215,6 +1187,34 @@
                         {
                             "type": "runtime_data",
                             "value": 2
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "set_dmac",
+            "id": 2,
+            "runtime_data": [
+                {
+                    "name": "dmac",
+                    "bitwidth": 48
+                }
+            ],
+            "primitives": [
+                {
+                    "op": "modify_field",
+                    "parameters": [
+                        {
+                            "type": "field",
+                            "value": [
+                                "ethernet",
+                                "dstAddr"
+                            ]
+                        },
+                        {
+                            "type": "runtime_data",
+                            "value": 0
                         }
                     ]
                 }
@@ -1301,12 +1301,12 @@
             ]
         },
         {
-            "name": "set_dmac",
+            "name": "set_egress_port",
             "id": 5,
             "runtime_data": [
                 {
-                    "name": "dmac",
-                    "bitwidth": 48
+                    "name": "port",
+                    "bitwidth": 9
                 }
             ],
             "primitives": [
@@ -1316,8 +1316,8 @@
                         {
                             "type": "field",
                             "value": [
-                                "ethernet",
-                                "dstAddr"
+                                "standard_metadata",
+                                "egress_spec"
                             ]
                         },
                         {

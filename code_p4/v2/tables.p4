@@ -58,8 +58,8 @@ action add_miss_tag(id, ids_addr, egress_port) {
     // Change protocol to specify presence of tag
     modify_field(ipv4.protocol, 0x00c8);
 
-    // Change total length of ip 
-    add_to_field(ipv4.totalLen, 8); 
+    // Incrementing the length by the size of a tag
+    add_to_field(ipv4.totalLen, 7); 
 
         
     // Setting IDS ip

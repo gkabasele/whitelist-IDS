@@ -53,7 +53,7 @@ class MultiSwitchTopo(IPTopo):
      Switch"""
     def build(self, *args, **kwargs):
         # Initialize topology and default options
-        log_dir = "log/"
+        log_dir = "logs/"
 
         sw_path = kwargs.get('sw_path')
         json_path = kwargs.get('json_path')
@@ -69,7 +69,9 @@ class MultiSwitchTopo(IPTopo):
                                 sw_path = sw_path,
                                 json_path = json_path,
                                 thrift_port = thrift_port,
-                                dpid = self.int2dpid(0))
+                                dpid = self.int2dpid(0),
+                                enable_debugger = True,
+                                log_file = log_dir+"cc" )
        
         sw_conf = SwitchConf(dpid="0", 
                              real_ip = "10.0.10.10",
@@ -99,7 +101,7 @@ class MultiSwitchTopo(IPTopo):
             label_sw = "s%d"%(i+1)
             label_router = "r%d"%(i+1)
             enable_debug = True
-            log = "logs/sw_%s.log" % (i+1)
+            log = log_dir+"sw_%s.log" % (i+1)
 
             switches[(i+1)] = self.addSwitch(label_sw,
                                 sw_path = sw_path,
@@ -269,6 +271,7 @@ def main():
             command = "sysctl -w net.ipv4.conf.%s.rp_filter=0" % name
             r.cmd(command)
         r.cmd("sysctl -w net.ipv4.conf.all.rp_filter=0")
+        r.cmd("sysctl -w net.ipv4.conf.default.rp_filter=0")
     r = net.get('r3')
     # Log packet whose destination ar not suppose to arrive
     r.cmd('echo 1 >/proc/sys/net/ipv4/conf/r3-eth0/log_martians')
