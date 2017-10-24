@@ -276,9 +276,9 @@ class Controller(Iface):
             sport = str(req.srcport)
             dport = str(req.dstport)
            
-            if not self.is_flow_installed(self, (req.srcip, sport, proto, req.dstip, dport)): 
+            if not self.is_flow_installed( (req.srcip, sport, proto, req.dstip, dport)): 
                 resp_sw = self.get_resp_switch(req.srcip, req.dstip)
-                self.deploy_flow_id_rules(resp_sw, req.srcip, req.dstip, proto)
+                self.deploy_flow_id_rules(resp_sw, req.srcip, sport, proto, req.dstip, dport)
         else:
             err = IDSControllerException(1, "cannot read request")
             raise err 

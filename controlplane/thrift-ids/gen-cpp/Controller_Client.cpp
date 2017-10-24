@@ -58,137 +58,179 @@ std::string to_ipv4_string(__u32 ip)
     return std::string(buffer);
 }
 
+// TODO check if packet is malicious
+
+/* */
+void handle_tcp_pkt(struct iphdr* ip_info,struct srtag_hdr *srtag_info, 
+                    std::vector<int16_t> switches, unsigned char* data, int ret)
+
+{
+    struct tcphdr *tcp_info;
+    struct modbus_hdr *modbus_info = NULL;
+    struct sockaddr_in connection;
+    int sockfd;
+    int optval;
+    Flow req;
+
+
+    std::string srcip = to_ipv4_string(ip_info->saddr);
+    std::string dstip = to_ipv4_string(srtag_info->dest); 
+    int8_t proto = (int8_t)(srtag_info->protocol);
+
+    /*Get TCP header*/
+    tcp_info = (struct tcphdr*) (data + sizeof(*ip_info) +sizeof(*srtag_info));
+    /*TODO check for oveflow ?*/
+    int16_t srcport = (int16_t) ntohs(tcp_info->source);
+    int16_t dstport = (int16_t) ntohs(tcp_info->dest);
+    printf("Src Port: %d, Dst Port: %d\n", srcport, dstport);
+    req = form_request(srcip, dstip, srcport, dstport, proto);
+
+    if (is_modbus_pkt(tcp_info)) { 
+        modbus_info = (struct modbus_hdr*) (tcp_info + sizeof(*tcp_info));                
+        /* TODO check if int is too big for short values*/
+        int8_t funcode = (int8_t) modbus_info->funcode;
+        int16_t length = (int16_t) ret;
+        printf("Modbus Pkt: funcode = %d", funcode);
+        req.__set_length(length);
+        req.__set_funcode(funcode); 
+    }
+    switches.push_back((int16_t) srtag_info->identifier);
+    client.allow(req, switches); 
+    /* Forge packet */
+    ip_info->daddr = srtag_info->dest;
+    ip_info->protocol = IPPROTO_TCP;
+    ip_info->tot_len = ip_info->tot_len - sizeof(*srtag_info);
+    ip_info->check = in_cksum((unsigned short*) ip_info, sizeof(ip_info));
+    /* Copy packet */
+    unsigned char* crafted_packet; 
+    crafted_packet = forge_packet(ret - sizeof(*srtag_info), 
+                                  ip_info, tcp_info, modbus_info);
+    /* Send packet */                
+    if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP)) == -1){
+        perror("socket");
+        exit(EXIT_FAILURE);
+    }
+
+    /* IP_HDRINCL no default ip set by the kernel */
+
+    setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &optval, sizeof(int));
+    connection.sin_family = AF_INET;
+    connection.sin_addr.s_addr = inet_addr(dstip.c_str());
+    printf("Forwarding packet");
+    sendto(sockfd, crafted_packet, ip_info->tot_len, 0, 
+           (struct sockaddr *)&connection, sizeof(struct sockaddr)); 
+    close(sockfd);
+    free(crafted_packet);
+}
+
 
 /* returns packet id */
 static u_int32_t print_pkt (struct nfq_data *tb)
 {
-        int id = 0;
-        struct nfqnl_msg_packet_hdr *ph;
-        struct nfqnl_msg_packet_hw *hwph;
-        u_int32_t mark,ifi; 
-        int ret;
-        struct iphdr *ip_info;
-        struct tcphdr *tcp_info;
-        struct srtag_hdr *srtag_info;
-        struct modbus_hdr *modbus_info = NULL;
-        std::vector<int16_t> switches;
-        Flow req;
+    int id = 0;
+    struct nfqnl_msg_packet_hdr *ph;
+    struct nfqnl_msg_packet_hw *hwph;
+    u_int32_t mark,ifi; 
+    int ret;
+    struct iphdr *ip_info;
+    struct tcphdr *tcp_info;
+    struct srtag_hdr *srtag_info;
+    //struct modbus_hdr *modbus_info = NULL;
+    std::vector<int16_t> switches;
+    Flow req;
+    
+    
+    //struct sockaddr_in connection;
+    //int sockfd;
+    //int optval;
+    
+    unsigned char *data;
+    
+    ph = nfq_get_msg_packet_hdr(tb);
+    if (ph) {
+            id = ntohl(ph->packet_id);
+            printf("hw_protocol=0x%04x hook=%u id=%u ",
+                    ntohs(ph->hw_protocol), ph->hook, id);
+    }
+    
+    hwph = nfq_get_packet_hw(tb);
+    if (hwph) {
+            int i, hlen = ntohs(hwph->hw_addrlen);
+    
+            printf("hw_src_addr=");
+            for (i = 0; i < hlen-1; i++)
+                    printf("%02x:", hwph->hw_addr[i]);
+            printf("%02x ", hwph->hw_addr[hlen-1]);
+    }
+    
+    mark = nfq_get_nfmark(tb);
+    if (mark)
+            printf("mark=%u ", mark);
+    
+    ifi = nfq_get_indev(tb);
+    if (ifi)
+            printf("indev=%u ", ifi);
+    
+    ifi = nfq_get_outdev(tb);
+    if (ifi)
+            printf("outdev=%u ", ifi);
+    ifi = nfq_get_physindev(tb);
+    if (ifi)
+            printf("physindev=%u ", ifi);
+    
+    ifi = nfq_get_physoutdev(tb);
+    if (ifi)
+            printf("physoutdev=%u ", ifi);
+    
+    ret = nfq_get_payload(tb, &data);
+    if (ret >= 0){
+            printf("payload_len=%d ", ret);
+            ip_info  = (struct iphdr *) data;
+            printf("IP : src = %u , dest = %u " , ip_info->saddr, ip_info->daddr);
+            std::string srcip = to_ipv4_string(ip_info->saddr);
+            switch(ip_info->protocol) {
+                case IPPROTO_SRTAG: 
+                {
+                    srtag_info = (struct srtag_hdr*) (data + sizeof(*ip_info));
+                    std::string dstip = to_ipv4_string(srtag_info->dest); 
+                    int8_t proto = (int8_t)(srtag_info->protocol);
+                    switch(proto) {
+                        case IPPROTO_TCP:
+                        {
+                            handle_tcp_pkt(ip_info, srtag_info, switches, data, ret);
+                            break;
 
-
-        struct sockaddr_in connection;
-        int sockfd;
-        int optval;
-        
-
-        unsigned char *data;
-
-        ph = nfq_get_msg_packet_hdr(tb);
-        if (ph) {
-                id = ntohl(ph->packet_id);
-                printf("hw_protocol=0x%04x hook=%u id=%u ",
-                        ntohs(ph->hw_protocol), ph->hook, id);
-        }
-
-        hwph = nfq_get_packet_hw(tb);
-        if (hwph) {
-                int i, hlen = ntohs(hwph->hw_addrlen);
-
-                printf("hw_src_addr=");
-                for (i = 0; i < hlen-1; i++)
-                        printf("%02x:", hwph->hw_addr[i]);
-                printf("%02x ", hwph->hw_addr[hlen-1]);
-        }
-
-        mark = nfq_get_nfmark(tb);
-        if (mark)
-                printf("mark=%u ", mark);
-
-        ifi = nfq_get_indev(tb);
-        if (ifi)
-                printf("indev=%u ", ifi);
-
-        ifi = nfq_get_outdev(tb);
-        if (ifi)
-                printf("outdev=%u ", ifi);
-        ifi = nfq_get_physindev(tb);
-        if (ifi)
-                printf("physindev=%u ", ifi);
-
-        ifi = nfq_get_physoutdev(tb);
-        if (ifi)
-                printf("physoutdev=%u ", ifi);
-
-        ret = nfq_get_payload(tb, &data);
-        if (ret >= 0){
-                printf("payload_len=%d ", ret);
-                ip_info  = (struct iphdr *) data;
-                printf("IP : src = %u , dest = %u " , ip_info->saddr, ip_info->daddr);
-                std::string srcip = to_ipv4_string(ip_info->saddr);
-                switch(ip_info->protocol) {
-                    case IPPROTO_SRTAG: 
-                    {
-                        srtag_info = (struct srtag_hdr*) (data + sizeof(*ip_info));
-                        std::string dstip = to_ipv4_string(srtag_info->dest); 
-                        int8_t proto = (int8_t)(srtag_info->protocol);
-                        /*Get TCP header*/
-                        tcp_info = (struct tcphdr*) (data + sizeof(*ip_info) +sizeof(*srtag_info));
-                        /*check for oveflow ?*/
-                        int16_t srcport = (int16_t) ntohs(tcp_info->source);
-                        int16_t dstport = (int16_t) ntohs(tcp_info->dest);
-                        req = form_request(srcip, dstip, srcport, dstport, proto);
-
-                        if (is_modbus_pkt(tcp_info)) { 
-                            modbus_info = (struct modbus_hdr*) (tcp_info + sizeof(*tcp_info));                
-                            /*check if int is too big for short values*/
-                            int8_t funcode = (int8_t) modbus_info->funcode;
-                            int16_t length = (int16_t) ret;
-                            printf("Modbus Pkt: funcode = %d", funcode);
-                            req.__set_length(length);
-                            req.__set_funcode(funcode); 
+                        }                        
+                        case IPPROTO_UDP:
+                        {
+                            printf("UDP packet");
+                            break;
+                        }                         
+                        default:
+                        {
+                            printf("Unknown protocol");
+                            break;
                         }
-                        switches.push_back((int16_t) srtag_info->identifier);
-                        client.allow(req, switches); 
-                        /* Forge packet */
-                        ip_info->daddr = srtag_info->dest;
-                        ip_info->protocol = IPPROTO_TCP;
-                        ip_info->tot_len = ip_info->tot_len - sizeof(*srtag_info);
-                        ip_info->check = in_cksum((unsigned short*) ip_info, sizeof(ip_info));
-                        /* Copy packet */
-                        unsigned char* crafted_packet; 
-                        crafted_packet = forge_packet(ret - sizeof(*srtag_info), 
-                                                      ip_info, tcp_info, modbus_info);
-                        /* Send packet */                
-                        if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP)) == -1){
-                            perror("socket");
-                            exit(EXIT_FAILURE);
-                        }
-
-                        /* IP_HDRINCL no default ip set by the kernel */
-
-                        setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &optval, sizeof(int));
-                        connection.sin_family = AF_INET;
-                        connection.sin_addr.s_addr = inet_addr(dstip.c_str());
-                        printf("Forwarding packet");
-                        sendto(sockfd, crafted_packet, ip_info->tot_len, 0, 
-                               (struct sockaddr *)&connection, sizeof(struct sockaddr)); 
-                        close(sockfd);
-                        free(crafted_packet);
-                    }   break;
-                    case IPPROTO_TCP:
-                    {    tcp_info = (struct tcphdr*) (data + sizeof(*ip_info));
-                        unsigned short dest_port = ntohs(tcp_info->dest);
-                        printf("TCP : dest = %d", dest_port);
-                    }   break;
-                    default:
-                        printf("Unknown protocol");
-                        break;
+                    }
                 }
-          }
-        
-
-        fputc('\n', stdout);
-
-        return id;
+                case IPPROTO_TCP:
+                {    
+                    tcp_info = (struct tcphdr*) (data + sizeof(*ip_info));
+                    unsigned short dest_port = ntohs(tcp_info->dest);
+                    printf("TCP : dest = %d", dest_port);
+                }   break;
+                default:
+                {
+                    printf("Unknown protocol");
+                    break;
+                }
+            }
+      }
+    
+    
+    fputc('\n', stdout);
+    
+    return id;
 }
 
 unsigned short in_cksum(unsigned short *addr, int len)
@@ -221,6 +263,7 @@ unsigned short in_cksum(unsigned short *addr, int len)
     return (answer);
 }
 
+// Strip srtag to get original packet
 unsigned char* forge_packet(int length, struct iphdr* ip_info, 
                             struct tcphdr* tcp_info, struct modbus_hdr* modbus_info)
 {
@@ -256,12 +299,14 @@ unsigned char* forge_packet(int length, struct iphdr* ip_info,
     return forged_packet; 
 }
 
+// Detecting if the packet is a modbus packet
 bool is_modbus_pkt(struct tcphdr* tcp_info)
 {
     return ((tcp_info->psh == 1 && tcp_info->ack == 1)  && 
             (ntohs(tcp_info->source) == MODBUS_PORT || ntohs(tcp_info->dest)));
 }
 
+// Create a request to the controller
 Flow form_request(std::string srcip, std::string dstip, 
                   int16_t srcport, int16_t dstport, int8_t proto)
 {
@@ -309,11 +354,12 @@ int main(int argc, char **argv)
     //struct nfnl_handle *nh;
     int fd;
     int rv;
+    // TODO: what happens if packet too big
     char buf[4096] __attribute__ ((aligned));
 
     
 
-        // NFQUEUE packet capture of packet
+    // NFQUEUE packet capture of packet
     printf("opening library handle\n");
     h = nfq_open();
     if (!h) {

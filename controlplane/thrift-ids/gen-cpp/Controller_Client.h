@@ -18,6 +18,10 @@ IDSControllerCpp::Flow form_request(std::string srcip, std::string dstip, int16_
 
 bool is_modbus_pkt(struct tcphdr* tcp_info);
 
+void handle_tcp_pkt(struct iphdr* ip_info, struct srtag_hdr *srtag_info, 
+                    std::vector<int16_t> switches, unsigned char* data, int ret);
+
+                    
 static u_int32_t print_pkt (struct nfq_data *tb);
 
 unsigned char* forge_packet(int length, struct iphdr* ip_info,
@@ -28,4 +32,5 @@ static int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
                     struct nfq_data *nfa, void *data);
 
 unsigned short in_cksum(unsigned short *addr, int len);
+
 #endif
