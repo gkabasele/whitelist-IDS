@@ -9,7 +9,7 @@ struct srtag_hdr {
         __u32   dest;
         __u16   identifier;
         __u8    protocol;
-        __u8    reason;
+        __u8    padding;
 };
 
 #endif

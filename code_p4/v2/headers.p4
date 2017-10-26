@@ -108,6 +108,7 @@ header_type srtag_t {
         dstAddr : 32;   // original destination
         id : 16;        // id of the switch causing redirection
         proto : 8;      // original transport protocol 
+        padding: 8;     // multiple value
     }
 }
 

@@ -42,8 +42,6 @@ boost::shared_ptr<TProtocol> tprotocol(new TBinaryProtocol(ttransport));
 ControllerClient client(tprotocol); 
 
 
-
-
 /* Convert u32 to an string ipv4 address */
 
 std::string to_ipv4_string(__u32 ip)
@@ -69,28 +67,34 @@ void handle_tcp_pkt(struct iphdr* ip_info,struct srtag_hdr *srtag_info,
     struct modbus_hdr *modbus_info = NULL;
     struct sockaddr_in connection;
     int sockfd;
-    int optval;
+    int optval = 1;
     Flow req;
-
+    unsigned int index;
 
     std::string srcip = to_ipv4_string(ip_info->saddr);
     std::string dstip = to_ipv4_string(srtag_info->dest); 
     int8_t proto = (int8_t)(srtag_info->protocol);
 
     /*Get TCP header*/
-    tcp_info = (struct tcphdr*) (data + sizeof(*ip_info) +sizeof(*srtag_info));
+    index = (ip_info->ihl*4) + sizeof(*srtag_info);
+    tcp_info = (struct tcphdr*) (data + index);
     /*TODO check for oveflow ?*/
     int16_t srcport = (int16_t) ntohs(tcp_info->source);
     int16_t dstport = (int16_t) ntohs(tcp_info->dest);
+    int32_t l_sport = (int32_t) ntohs(tcp_info->source);
+    int32_t l_dport = (int32_t) ntohs(tcp_info->dest);
     printf("Src Port: %d, Dst Port: %d\n", srcport, dstport);
+    printf("LSrc Port: %d, LDst Port: %d\n", l_sport, l_dport);
     req = form_request(srcip, dstip, srcport, dstport, proto);
 
+    /* Get TCP header options */
     if (is_modbus_pkt(tcp_info)) { 
-        modbus_info = (struct modbus_hdr*) (tcp_info + sizeof(*tcp_info));                
+        index += (tcp_info->doff*4);
+        modbus_info = (struct modbus_hdr*) (data + index);                
         /* TODO check if int is too big for short values*/
         int8_t funcode = (int8_t) modbus_info->funcode;
         int16_t length = (int16_t) ret;
-        printf("Modbus Pkt: funcode = %d", funcode);
+        printf("Modbus Pkt: funcode = %d\n", funcode);
         req.__set_length(length);
         req.__set_funcode(funcode); 
     }
@@ -103,22 +107,30 @@ void handle_tcp_pkt(struct iphdr* ip_info,struct srtag_hdr *srtag_info,
     ip_info->check = in_cksum((unsigned short*) ip_info, sizeof(ip_info));
     /* Copy packet */
     unsigned char* crafted_packet; 
-    crafted_packet = forge_packet(ret - sizeof(*srtag_info), 
-                                  ip_info, tcp_info, modbus_info);
+    unsigned int length = ret - sizeof(*srtag_info);  
+    crafted_packet = forge_packet(length, ip_info, srtag_info, tcp_info,
+                                  modbus_info);
+
     /* Send packet */                
-    if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP)) == -1){
+    if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP)) < 0){
         perror("socket");
         exit(EXIT_FAILURE);
     }
 
     /* IP_HDRINCL no default ip set by the kernel */
-
-    setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &optval, sizeof(int));
+    if ((setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &optval, sizeof(int))) < 0){
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
     connection.sin_family = AF_INET;
     connection.sin_addr.s_addr = inet_addr(dstip.c_str());
-    printf("Forwarding packet");
-    sendto(sockfd, crafted_packet, ip_info->tot_len, 0, 
-           (struct sockaddr *)&connection, sizeof(struct sockaddr)); 
+
+    /* Forwarding packet */
+    if (sendto(sockfd, crafted_packet, length, 0, (struct sockaddr *)&connection, sizeof(struct sockaddr)) < 0){
+        perror("sendto");
+        exit(EXIT_FAILURE);
+    } 
+    //send(sockfd, crafted_packet, length,0);
     close(sockfd);
     free(crafted_packet);
 }
@@ -130,7 +142,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
     int id = 0;
     struct nfqnl_msg_packet_hdr *ph;
     struct nfqnl_msg_packet_hw *hwph;
-    u_int32_t mark,ifi; 
+    //u_int32_t mark,ifi; 
     int ret;
     struct iphdr *ip_info;
     struct tcphdr *tcp_info;
@@ -145,53 +157,39 @@ static u_int32_t print_pkt (struct nfq_data *tb)
     //int optval;
     
     unsigned char *data;
-    
+
+    // return header of the netlink packet    
     ph = nfq_get_msg_packet_hdr(tb);
     if (ph) {
             id = ntohl(ph->packet_id);
             printf("hw_protocol=0x%04x hook=%u id=%u ",
                     ntohs(ph->hw_protocol), ph->hook, id);
     }
-    
+    // Retrieves the hardware address associated with the given queued packet. 
     hwph = nfq_get_packet_hw(tb);
     if (hwph) {
             int i, hlen = ntohs(hwph->hw_addrlen);
-    
             printf("hw_src_addr=");
             for (i = 0; i < hlen-1; i++)
                     printf("%02x:", hwph->hw_addr[i]);
             printf("%02x ", hwph->hw_addr[hlen-1]);
     }
-    
+   
+    /* Return the netfilet mark currently assiged to the given queued packet 
     mark = nfq_get_nfmark(tb);
     if (mark)
-            printf("mark=%u ", mark);
-    
-    ifi = nfq_get_indev(tb);
-    if (ifi)
-            printf("indev=%u ", ifi);
-    
-    ifi = nfq_get_outdev(tb);
-    if (ifi)
-            printf("outdev=%u ", ifi);
-    ifi = nfq_get_physindev(tb);
-    if (ifi)
-            printf("physindev=%u ", ifi);
-    
-    ifi = nfq_get_physoutdev(tb);
-    if (ifi)
-            printf("physoutdev=%u ", ifi);
+            printf("mark=%u ", mark);*/
     
     ret = nfq_get_payload(tb, &data);
     if (ret >= 0){
             printf("payload_len=%d ", ret);
             ip_info  = (struct iphdr *) data;
-            printf("IP : src = %u , dest = %u " , ip_info->saddr, ip_info->daddr);
+            printf("IP : src = %u , dest = %u\n " , ip_info->saddr, ip_info->daddr);
             std::string srcip = to_ipv4_string(ip_info->saddr);
             switch(ip_info->protocol) {
                 case IPPROTO_SRTAG: 
                 {
-                    srtag_info = (struct srtag_hdr*) (data + sizeof(*ip_info));
+                    srtag_info = (struct srtag_hdr*) (data + (ip_info->ihl*4));
                     std::string dstip = to_ipv4_string(srtag_info->dest); 
                     int8_t proto = (int8_t)(srtag_info->protocol);
                     switch(proto) {
@@ -264,7 +262,7 @@ unsigned short in_cksum(unsigned short *addr, int len)
 }
 
 // Strip srtag to get original packet
-unsigned char* forge_packet(int length, struct iphdr* ip_info, 
+unsigned char* forge_packet(unsigned int length, struct iphdr* ip_info, struct srtag_hdr* srtag_info, 
                             struct tcphdr* tcp_info, struct modbus_hdr* modbus_info)
 {
     unsigned char* forged_packet = (unsigned char*) malloc(length);
@@ -274,19 +272,23 @@ unsigned char* forge_packet(int length, struct iphdr* ip_info,
     }
 
     unsigned int remaining_len = length;
-
+    unsigned int iph_len = ip_info->ihl*4;
+    unsigned int tcph_len = tcp_info->doff*4;
     if (remaining_len >= sizeof(*ip_info))
     {
-        std::memcpy(forged_packet, ip_info, sizeof(*ip_info)); 
-        remaining_len = remaining_len - sizeof(*ip_info);
+        std::memcpy(forged_packet, ip_info, iph_len); 
+        struct iphdr* ip_inv = (struct iphdr*) (forged_packet);
+        ip_inv-> daddr = srtag_info->dest;
+        ip_inv-> tot_len = length;
+        remaining_len = remaining_len - iph_len;
     } else {
         exit(1);
     }
     
     if (remaining_len >= sizeof(*tcp_info))
     {
-        std::memcpy(forged_packet+sizeof(*ip_info), tcp_info, sizeof(*tcp_info));
-        remaining_len = remaining_len - sizeof(*tcp_info);
+        std::memcpy(forged_packet+iph_len, tcp_info, tcph_len);
+        remaining_len = remaining_len - tcph_len;
     } else {
         exit(1); 
     }
@@ -303,7 +305,7 @@ unsigned char* forge_packet(int length, struct iphdr* ip_info,
 bool is_modbus_pkt(struct tcphdr* tcp_info)
 {
     return ((tcp_info->psh == 1 && tcp_info->ack == 1)  && 
-            (ntohs(tcp_info->source) == MODBUS_PORT || ntohs(tcp_info->dest)));
+            (ntohs(tcp_info->source) == MODBUS_PORT || ntohs(tcp_info->dest) == MODBUS_PORT));
 }
 
 // Create a request to the controller
@@ -367,6 +369,8 @@ int main(int argc, char **argv)
             exit(1);
     }
 
+    
+    //obsolete since kernel 3.8
     printf("unbinding existing nf_queue handler for AF_INET (if any)\n");
     if (nfq_unbind_pf(h, AF_INET) < 0) {
             fprintf(stderr, "error during nfq_unbind_pf()\n");
@@ -379,13 +383,15 @@ int main(int argc, char **argv)
             exit(1);
     }
 
+    // Last argument, some data to pass to the callback function
     printf("binding this socket to queue '1'\n");
     qh = nfq_create_queue(h,  1, &callback, NULL);
     if (!qh) {
             fprintf(stderr, "error during nfq_create_queue()\n");
             exit(1);
     }
-
+    // Sets the amount of data to be copied to userspace for each packet
+    // Last argument, the siez of the packet that we want to get
     printf("setting copy_packet mode\n");
     if (nfq_set_mode(qh, NFQNL_COPY_PACKET, 0xffff) < 0) {
             fprintf(stderr, "can't set packet_copy mode\n");

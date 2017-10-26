@@ -270,11 +270,18 @@ class Controller(Iface):
     # install flow in the whitelist
     def allow(self, req, sw):
         if req != None:
-            print "%s" % req 
+            print "Req: %s" % req 
+            
+            # convert to unsigned 
+            u_sport = (req.srcport & 0xffff)
+            u_dport = (req.dstport & 0xffff)
+            u_proto = (req.proto & 0xff)
+
+            print "u_sport: %d, u_sport: %d, u_proto: %d" % (u_sport, u_dport, u_proto)
             #Convert to string
-            proto = str(req.proto)
-            sport = str(req.srcport)
-            dport = str(req.dstport)
+            proto = str(u_proto)
+            sport = str(u_sport)
+            dport = str(u_dport)
            
             if not self.is_flow_installed( (req.srcip, sport, proto, req.dstip, dport)): 
                 resp_sw = self.get_resp_switch(req.srcip, req.dstip)

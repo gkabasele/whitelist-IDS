@@ -54,12 +54,13 @@ action add_miss_tag(id, ids_addr, egress_port) {
     modify_field(srtag.id, id);
     modify_field(srtag.dstAddr, ipv4.dstAddr);
     modify_field(srtag.proto, ipv4.protocol);
+    modify_field(srtag.padding, 0x0000);
 
     // Change protocol to specify presence of tag
     modify_field(ipv4.protocol, 0x00c8);
 
     // Incrementing the length by the size of a tag
-    add_to_field(ipv4.totalLen, 7); 
+    add_to_field(ipv4.totalLen, 8); 
 
         
     // Setting IDS ip
