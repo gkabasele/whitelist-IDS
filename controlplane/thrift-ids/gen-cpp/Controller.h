@@ -19,6 +19,7 @@ class ControllerIf {
   virtual void redirect(const Flow& req, const std::vector<int16_t> & switches) = 0;
   virtual void block(const Flow& req, const std::vector<int16_t> & switches) = 0;
   virtual void allow(const Flow& req, const std::vector<int16_t> & switches) = 0;
+  virtual void remove(const Flow& req, const std::vector<int16_t> & switches) = 0;
 };
 
 class ControllerIfFactory {
@@ -58,6 +59,9 @@ class ControllerNull : virtual public ControllerIf {
     return;
   }
   void allow(const Flow& /* req */, const std::vector<int16_t> & /* switches */) {
+    return;
+  }
+  void remove(const Flow& /* req */, const std::vector<int16_t> & /* switches */) {
     return;
   }
 };
@@ -570,6 +574,133 @@ class Controller_allow_presult {
   friend std::ostream& operator<<(std::ostream& out, const Controller_allow_presult& obj);
 };
 
+typedef struct _Controller_remove_args__isset {
+  _Controller_remove_args__isset() : req(false), switches(false) {}
+  bool req :1;
+  bool switches :1;
+} _Controller_remove_args__isset;
+
+class Controller_remove_args {
+ public:
+
+  static const char* ascii_fingerprint; // = "2B8403668EC75BC5E4D140D3463BE87A";
+  static const uint8_t binary_fingerprint[16]; // = {0x2B,0x84,0x03,0x66,0x8E,0xC7,0x5B,0xC5,0xE4,0xD1,0x40,0xD3,0x46,0x3B,0xE8,0x7A};
+
+  Controller_remove_args(const Controller_remove_args&);
+  Controller_remove_args& operator=(const Controller_remove_args&);
+  Controller_remove_args() {
+  }
+
+  virtual ~Controller_remove_args() throw();
+  Flow req;
+  std::vector<int16_t>  switches;
+
+  _Controller_remove_args__isset __isset;
+
+  void __set_req(const Flow& val);
+
+  void __set_switches(const std::vector<int16_t> & val);
+
+  bool operator == (const Controller_remove_args & rhs) const
+  {
+    if (!(req == rhs.req))
+      return false;
+    if (!(switches == rhs.switches))
+      return false;
+    return true;
+  }
+  bool operator != (const Controller_remove_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const Controller_remove_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+  friend std::ostream& operator<<(std::ostream& out, const Controller_remove_args& obj);
+};
+
+
+class Controller_remove_pargs {
+ public:
+
+  static const char* ascii_fingerprint; // = "2B8403668EC75BC5E4D140D3463BE87A";
+  static const uint8_t binary_fingerprint[16]; // = {0x2B,0x84,0x03,0x66,0x8E,0xC7,0x5B,0xC5,0xE4,0xD1,0x40,0xD3,0x46,0x3B,0xE8,0x7A};
+
+
+  virtual ~Controller_remove_pargs() throw();
+  const Flow* req;
+  const std::vector<int16_t> * switches;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+  friend std::ostream& operator<<(std::ostream& out, const Controller_remove_pargs& obj);
+};
+
+typedef struct _Controller_remove_result__isset {
+  _Controller_remove_result__isset() : error(false) {}
+  bool error :1;
+} _Controller_remove_result__isset;
+
+class Controller_remove_result {
+ public:
+
+  static const char* ascii_fingerprint; // = "0A23AF95FD017F7C6C78570E7E17112A";
+  static const uint8_t binary_fingerprint[16]; // = {0x0A,0x23,0xAF,0x95,0xFD,0x01,0x7F,0x7C,0x6C,0x78,0x57,0x0E,0x7E,0x17,0x11,0x2A};
+
+  Controller_remove_result(const Controller_remove_result&);
+  Controller_remove_result& operator=(const Controller_remove_result&);
+  Controller_remove_result() {
+  }
+
+  virtual ~Controller_remove_result() throw();
+  IDSControllerException error;
+
+  _Controller_remove_result__isset __isset;
+
+  void __set_error(const IDSControllerException& val);
+
+  bool operator == (const Controller_remove_result & rhs) const
+  {
+    if (!(error == rhs.error))
+      return false;
+    return true;
+  }
+  bool operator != (const Controller_remove_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const Controller_remove_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+  friend std::ostream& operator<<(std::ostream& out, const Controller_remove_result& obj);
+};
+
+typedef struct _Controller_remove_presult__isset {
+  _Controller_remove_presult__isset() : error(false) {}
+  bool error :1;
+} _Controller_remove_presult__isset;
+
+class Controller_remove_presult {
+ public:
+
+  static const char* ascii_fingerprint; // = "0A23AF95FD017F7C6C78570E7E17112A";
+  static const uint8_t binary_fingerprint[16]; // = {0x0A,0x23,0xAF,0x95,0xFD,0x01,0x7F,0x7C,0x6C,0x78,0x57,0x0E,0x7E,0x17,0x11,0x2A};
+
+
+  virtual ~Controller_remove_presult() throw();
+  IDSControllerException error;
+
+  _Controller_remove_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+  friend std::ostream& operator<<(std::ostream& out, const Controller_remove_presult& obj);
+};
+
 class ControllerClient : virtual public ControllerIf {
  public:
   ControllerClient(boost::shared_ptr< ::apache::thrift::protocol::TProtocol> prot) {
@@ -607,6 +738,9 @@ class ControllerClient : virtual public ControllerIf {
   void allow(const Flow& req, const std::vector<int16_t> & switches);
   void send_allow(const Flow& req, const std::vector<int16_t> & switches);
   void recv_allow();
+  void remove(const Flow& req, const std::vector<int16_t> & switches);
+  void send_remove(const Flow& req, const std::vector<int16_t> & switches);
+  void recv_remove();
  protected:
   boost::shared_ptr< ::apache::thrift::protocol::TProtocol> piprot_;
   boost::shared_ptr< ::apache::thrift::protocol::TProtocol> poprot_;
@@ -626,6 +760,7 @@ class ControllerProcessor : public ::apache::thrift::TDispatchProcessor {
   void process_redirect(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_block(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_allow(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_remove(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
  public:
   ControllerProcessor(boost::shared_ptr<ControllerIf> iface) :
     iface_(iface) {
@@ -633,6 +768,7 @@ class ControllerProcessor : public ::apache::thrift::TDispatchProcessor {
     processMap_["redirect"] = &ControllerProcessor::process_redirect;
     processMap_["block"] = &ControllerProcessor::process_block;
     processMap_["allow"] = &ControllerProcessor::process_allow;
+    processMap_["remove"] = &ControllerProcessor::process_remove;
   }
 
   virtual ~ControllerProcessor() {}
@@ -695,6 +831,15 @@ class ControllerMultiface : virtual public ControllerIf {
       ifaces_[i]->allow(req, switches);
     }
     ifaces_[i]->allow(req, switches);
+  }
+
+  void remove(const Flow& req, const std::vector<int16_t> & switches) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->remove(req, switches);
+    }
+    ifaces_[i]->remove(req, switches);
   }
 
 };

@@ -50,6 +50,14 @@ class Iface:
     """
     pass
 
+  def remove(self, req, switches):
+    """
+    Parameters:
+     - req
+     - switches
+    """
+    pass
+
 
 class Client(Iface):
   def __init__(self, iprot, oprot=None):
@@ -190,6 +198,39 @@ class Client(Iface):
       raise result.error
     return
 
+  def remove(self, req, switches):
+    """
+    Parameters:
+     - req
+     - switches
+    """
+    self.send_remove(req, switches)
+    self.recv_remove()
+
+  def send_remove(self, req, switches):
+    self._oprot.writeMessageBegin('remove', TMessageType.CALL, self._seqid)
+    args = remove_args()
+    args.req = req
+    args.switches = switches
+    args.write(self._oprot)
+    self._oprot.writeMessageEnd()
+    self._oprot.trans.flush()
+
+  def recv_remove(self):
+    iprot = self._iprot
+    (fname, mtype, rseqid) = iprot.readMessageBegin()
+    if mtype == TMessageType.EXCEPTION:
+      x = TApplicationException()
+      x.read(iprot)
+      iprot.readMessageEnd()
+      raise x
+    result = remove_result()
+    result.read(iprot)
+    iprot.readMessageEnd()
+    if result.error is not None:
+      raise result.error
+    return
+
 
 class Processor(Iface, TProcessor):
   def __init__(self, handler):
@@ -199,6 +240,7 @@ class Processor(Iface, TProcessor):
     self._processMap["redirect"] = Processor.process_redirect
     self._processMap["block"] = Processor.process_block
     self._processMap["allow"] = Processor.process_allow
+    self._processMap["remove"] = Processor.process_remove
 
   def process(self, iprot, oprot):
     (name, type, seqid) = iprot.readMessageBegin()
@@ -267,6 +309,20 @@ class Processor(Iface, TProcessor):
     except IDSControllerException, error:
       result.error = error
     oprot.writeMessageBegin("allow", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def process_remove(self, seqid, iprot, oprot):
+    args = remove_args()
+    args.read(iprot)
+    iprot.readMessageEnd()
+    result = remove_result()
+    try:
+      self._handler.remove(args.req, args.switches)
+    except IDSControllerException, error:
+      result.error = error
+    oprot.writeMessageBegin("remove", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
     oprot.trans.flush()
@@ -859,6 +915,159 @@ class allow_result:
       oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
       return
     oprot.writeStructBegin('allow_result')
+    if self.error is not None:
+      oprot.writeFieldBegin('error', TType.STRUCT, 1)
+      self.error.write(oprot)
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def validate(self):
+    return
+
+
+  def __hash__(self):
+    value = 17
+    value = (value * 31) ^ hash(self.error)
+    return value
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class remove_args:
+  """
+  Attributes:
+   - req
+   - switches
+  """
+
+  thrift_spec = (
+    None, # 0
+    (1, TType.STRUCT, 'req', (Flow, Flow.thrift_spec), None, ), # 1
+    (2, TType.LIST, 'switches', (TType.I16,None), None, ), # 2
+  )
+
+  def __init__(self, req=None, switches=None,):
+    self.req = req
+    self.switches = switches
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 1:
+        if ftype == TType.STRUCT:
+          self.req = Flow()
+          self.req.read(iprot)
+        else:
+          iprot.skip(ftype)
+      elif fid == 2:
+        if ftype == TType.LIST:
+          self.switches = []
+          (_etype31, _size28) = iprot.readListBegin()
+          for _i32 in xrange(_size28):
+            _elem33 = iprot.readI16();
+            self.switches.append(_elem33)
+          iprot.readListEnd()
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('remove_args')
+    if self.req is not None:
+      oprot.writeFieldBegin('req', TType.STRUCT, 1)
+      self.req.write(oprot)
+      oprot.writeFieldEnd()
+    if self.switches is not None:
+      oprot.writeFieldBegin('switches', TType.LIST, 2)
+      oprot.writeListBegin(TType.I16, len(self.switches))
+      for iter34 in self.switches:
+        oprot.writeI16(iter34)
+      oprot.writeListEnd()
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def validate(self):
+    return
+
+
+  def __hash__(self):
+    value = 17
+    value = (value * 31) ^ hash(self.req)
+    value = (value * 31) ^ hash(self.switches)
+    return value
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class remove_result:
+  """
+  Attributes:
+   - error
+  """
+
+  thrift_spec = (
+    None, # 0
+    (1, TType.STRUCT, 'error', (IDSControllerException, IDSControllerException.thrift_spec), None, ), # 1
+  )
+
+  def __init__(self, error=None,):
+    self.error = error
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 1:
+        if ftype == TType.STRUCT:
+          self.error = IDSControllerException()
+          self.error.read(iprot)
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('remove_result')
     if self.error is not None:
       oprot.writeFieldBegin('error', TType.STRUCT, 1)
       self.error.write(oprot)

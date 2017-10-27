@@ -25,4 +25,5 @@ service Controller
     void redirect (1: Flow req, 2:list<i16> switches) throws (1: IDSControllerException error)
     void block (1: Flow req, 2:list<i16> switches) throws (1: IDSControllerException error)
     void allow (1: Flow req, 2:list<i16> switches) throws (1: IDSControllerException error)
+    void remove(1: Flow req, 2:list<i16> switches) throws (1: IDSControllerException error)
 }

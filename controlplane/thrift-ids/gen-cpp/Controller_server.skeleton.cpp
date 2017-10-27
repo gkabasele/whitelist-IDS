@@ -42,6 +42,11 @@ class ControllerHandler : virtual public ControllerIf {
     printf("allow\n");
   }
 
+  void remove(const Flow& req, const std::vector<int16_t> & switches) {
+    // Your implementation goes here
+    printf("remove\n");
+  }
+
 };
 
 int main(int argc, char **argv) {

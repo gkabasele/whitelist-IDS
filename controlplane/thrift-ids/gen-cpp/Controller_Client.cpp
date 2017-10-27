@@ -81,10 +81,8 @@ void handle_tcp_pkt(struct iphdr* ip_info,struct srtag_hdr *srtag_info,
     /*TODO check for oveflow ?*/
     int16_t srcport = (int16_t) ntohs(tcp_info->source);
     int16_t dstport = (int16_t) ntohs(tcp_info->dest);
-    int32_t l_sport = (int32_t) ntohs(tcp_info->source);
-    int32_t l_dport = (int32_t) ntohs(tcp_info->dest);
-    printf("Src Port: %d, Dst Port: %d\n", srcport, dstport);
-    printf("LSrc Port: %d, LDst Port: %d\n", l_sport, l_dport);
+    //int32_t l_sport = (int32_t) ntohs(tcp_info->source);
+    //int32_t l_dport = (int32_t) ntohs(tcp_info->dest);
     req = form_request(srcip, dstip, srcport, dstport, proto);
 
     /* Get TCP header options */
@@ -130,7 +128,6 @@ void handle_tcp_pkt(struct iphdr* ip_info,struct srtag_hdr *srtag_info,
         perror("sendto");
         exit(EXIT_FAILURE);
     } 
-    //send(sockfd, crafted_packet, length,0);
     close(sockfd);
     free(crafted_packet);
 }
@@ -147,7 +144,6 @@ static u_int32_t print_pkt (struct nfq_data *tb)
     struct iphdr *ip_info;
     struct tcphdr *tcp_info;
     struct srtag_hdr *srtag_info;
-    //struct modbus_hdr *modbus_info = NULL;
     std::vector<int16_t> switches;
     Flow req;
     

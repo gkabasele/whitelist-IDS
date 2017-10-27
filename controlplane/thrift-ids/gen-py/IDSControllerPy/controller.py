@@ -85,6 +85,7 @@ class RuleTables():
 
     '''
         rule : fields used for matching
+        return the entry number of the rule in switch with switch_id
     '''
     @verify
     def get_num_entry(self, rule, switch_id):
@@ -230,8 +231,8 @@ class Controller(Iface):
         self.switches = {}
         # Flow : srcip, sport, proto, dstip, dport
         self.flow_table = RuleTables(5)
-        # Modbus : srcip, sport, funcode, payload_length, length
-        self.modbus_table = RuleTables(5)
+        # Modbus : srcip, sport, funcode, payload_length
+        self.modbus_table = RuleTables(4)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def add_client(self, id_client, standard_client, switch):
@@ -250,45 +251,80 @@ class Controller(Iface):
                 load_json_config(standard_client)
                 once = False
             self.add_client(sw.sw_id, standard_client, sw)  
+    
+    def checkreq(func):
+        def wrapper(self, *args, **kwargs):
+            a = list(args)
+            if a[0] == None:
+                err = IDSControllerException(1, "Invalid Request")
+                raise err 
+            else:
+                return func(self, *args)
+        return wrapper
+
+    
+    # Retrieve value from request
+    def retrieve_value(self, req):
+        # convert to unsigned 
+        u_sport = (req.srcport & 0xffff)
+        u_dport = (req.dstport & 0xffff)
+        u_proto = (req.proto & 0xff)
+        #Convert to string
+        proto = str(u_proto)
+        sport = str(u_sport)
+        dport = str(u_dport)
+        funcode = None
+        length = None
+        if req.funcode != None and req.length != None:
+            u_funcode = (req.funcode & 0xff)
+            u_length  = (req.length & 0xff)
+            funcode = str(u_funcode)
+            length = str(u_length)
+        return (req.srcip, sport, proto, req.dstip, dport, funcode, length)
 
     # Forward packet but send clone to ids
+    @checkreq
     def mirror(self, req, sw):
         pass
 
     # Forward packet to ids
+    @checkreq
     def redirect(self, req, sw):
         pass
 
     # Block flow
+    @checkreq
     def block(self, req, sw):
         pass
     
-    # Delete flow from the whitelist    
-    def delete(self, req, sw):
-        pass
-
+    
     # install flow in the whitelist
+    @checkreq
     def allow(self, req, sw):
-        if req != None:
-            print "Req: %s" % req 
+        resp = self.retrieve_value(req) 
+        if len(resp) != 7 :
+            err = IDSControllerException(2,"Could not retrive value from request") 
+            raise err
+        
+        (srcip, sport, proto, dstip, dport, funcode, length) = resp
+        print "srcip: %s, sport: %d, proto: %d" % (srcip, sport, proto)
+        print "dstip: %s, dport: %d" % (dstip, dport)
             
-            # convert to unsigned 
-            u_sport = (req.srcport & 0xffff)
-            u_dport = (req.dstport & 0xffff)
-            u_proto = (req.proto & 0xff)
-
-            print "u_sport: %d, u_sport: %d, u_proto: %d" % (u_sport, u_dport, u_proto)
-            #Convert to string
-            proto = str(u_proto)
-            sport = str(u_sport)
-            dport = str(u_dport)
-           
-            if not self.is_flow_installed( (req.srcip, sport, proto, req.dstip, dport)): 
-                resp_sw = self.get_resp_switch(req.srcip, req.dstip)
-                self.deploy_flow_id_rules(resp_sw, req.srcip, sport, proto, req.dstip, dport)
+        if not self.is_flow_installed( (srcip, sport, proto, dstip, dport)): 
+            resp_sw = self.get_resp_switch(req.srcip, req.dstip)
+            self.deploy_flow_id_rules(resp_sw, srcip, sport, proto, dstip, dport)
+        elif funcode != None and length != None: 
+            if not self.modbus_table.is_rule_installed((srcip, sport, funcode, length)):
+                resp_sw = self.flow_table.rule_to_switches((srcip, sport, proto, dstip, dport))
+                self.deploy_modbus_rules(resp_sw, srcip, sport, funcode, length)  
         else:
-            err = IDSControllerException(1, "cannot read request")
-            raise err 
+            err = IDSControllerException(1,"cannot read request") 
+            raise err
+
+    # Delete flow from the whitelist    
+    @checkreq
+    def remove(self, req, sw):
+        pass
 
 
     # deprecated
@@ -439,11 +475,18 @@ class Controller(Iface):
         runtime_data = parse_runtime_data(action, action_params)
         client.bm_mt_set_default_action(0, table_name, action_name, runtime_data)
 
+    # TODO Parametirize
     def add_flow_id_entry(self, client, srcip, sport, proto, dstip, dport):
         self.table_add_entry(client, FLOW_ID, NO_OP,[srcip, sport, proto, dstip, dport],[])
 
-    def add_modbus_entry(self, client, srcip, sport, funcode, payload_length, length):
-        self.table_add_entry(client, MODBUS, NO_OP, [srcip, sport, funcode, payload_length, length],[])
+    def block_flow_id_entry(self, client, srcip, sport, proto, dstip, dport):
+        self.table_add_entry(client, FLOW_ID, DROP,[srcip, sport, proto, dstip, dport],[])
+
+    def add_modbus_entry(self, client, srcip, sport, funcode, payload_length):
+        self.table_add_entry(client, MODBUS, NO_OP, [srcip, sport, funcode, payload_length],[])
+    
+    def block_modbus_entry(self, client, srcip, sport, funcode, payload_length):
+        self.table_add_entry(client, MODBUS, DROP, [srcip, sport, funcode, payload_length])
 
     def add_send_frame_entry(self, client, port, mac):
         self.table_add_entry(client, SEND_FRAME, NO_OP, [port],[])
@@ -482,12 +525,12 @@ class Controller(Iface):
                 self.flow_table.add_rule((dstip, dport, proto, srcip, sport), sw.sw_id, sw.p4_table[FLOW_ID])
 
     # resp_sw is a list of switch_id present in the corresponding table
-    def deploy_modbus_rules(self, resp_sw, srcip, sport, funcode, payload_length, length):
+    def deploy_modbus_rules(self, resp_sw, srcip, sport, funcode, payload_length):
         for sw_id in resp_sw:
             switch = self.switches[sw_id]
             client = self.clients[sw_id]
-            self.add_modbus_entry(client, srcip, sport, funcode, payload_length, length)
-            self.modbus_table.add_rule((srcip, sport, funcode, payload_length, length), switch.sw_id, switch.p4_table[MODBUS])
+            self.add_modbus_entry(client, srcip, sport, funcode, payload_length)
+            self.modbus_table.add_rule((srcip, sport, funcode, payload_length), switch.sw_id, switch.p4_table[MODBUS])
             switch.p4_table[MODBUS] += 1
 
     def is_flow_installed(self, flow):
@@ -518,10 +561,9 @@ class Controller(Iface):
                 if (flags & PSH) and (flags & ACK) and (sport == "5020" or dport == "5020"):
                     funcode = str(pkt[Modbus].funcode)
                     payload_length = str(pkt[Modbus].length)
-                    length = str(len(pkt))
-                    if not self.modbus_table.is_rule_installed((srcip, sport, funcode, payload_length, length)):
+                    if not self.modbus_table.is_rule_installed((srcip, sport, funcode, payload_length)):
                         resp_switch = self.flow_table.rule_to_switches((srcip, sport, proto, dstip, dport))
-                        self.deploy_modbus_rules(resp_switch, srcip, sport, funcode, payload_length, length)
+                        self.deploy_modbus_rules(resp_switch, srcip, sport, funcode, payload_length)
             #TODO UDP traffic
 
     def setup_default_entry(self):

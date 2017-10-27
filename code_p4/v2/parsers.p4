@@ -46,11 +46,18 @@ parser parse_udp {
 parser parse_tcp {
     extract(tcp);
     return select(latest.syn) {
-       0x0 : parse_tcp_fin;
+       0x0 : parse_tcp_rst;
        default: ingress; 
     }
 }
 
+// Check if RST is set
+parser parse_tcp_rst {
+    return select(tcp.rst) {
+        0x0 : parse_tcp_fin;
+        default: ingress;
+    }
+}
 // Check if FIN is set
 parser parse_tcp_fin {
     return select(tcp.fin) {
@@ -68,7 +75,7 @@ parser parse_tcp_ack {
 
 }
 
-// Check if 
+// Check if PSH
 parser parse_tcp_psh {
     return select(tcp.psh) {
         0x1 : parse_tcp_modbus;

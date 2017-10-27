@@ -202,7 +202,7 @@ table modbus {
         tcp.srcPort : exact;
         modbus.funcode : exact;
         modbus.len: exact;
-        standard_metadata.packet_length: exact;
+        //standard_metadata.packet_length: exact;
     }
     actions {
         _drop;
