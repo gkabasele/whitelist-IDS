@@ -24,9 +24,12 @@ control ingress {
             //TODO set cookie to authenticate p4 switch
             //nothing to do here
         } else {
+            if(ipv4.protocol == 0x0006 and (tcp.fin == 1 or tcp.rst == 1 )){
+                apply(tcp_flags);
+            }
             apply(flow_id){
                 hit{
-                    if (tcp.dstPort == 5020 or tcp.srcPort == 5020){
+                    if (ipv4.protocol == 0x0006 and (tcp.dstPort == 5020 or tcp.srcPort == 5020)){
                         if(tcp.syn == 1 or tcp.fin == 1 or (tcp.ack == 1 and tcp.psh == 0)) {
                             //nothing to do here                
                         } else {
@@ -54,6 +57,7 @@ control ingress {
 
 //Called when the packet is dequeued
 control egress {
+    apply(pkt_cloned);
     apply(send_frame);
 }
 

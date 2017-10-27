@@ -60,7 +60,7 @@ class RuleTables():
         self.rules = {}
         self.num_fields = num_fields 
 
-        ''' 
+    ''' 
         rule : fields used for matching
         switch_id : datapath id of switch containing the flow
         num_entry : number entry of flow in the flow table on the switch
@@ -73,6 +73,17 @@ class RuleTables():
             self.rules[rule] = {switch_id : num_entry}
         elif switch_id not in self.rules[rule]:
             self.rules[rule][switch_id] = num_entry
+    '''
+        rule : fields used for matching
+        switch_id : datapath id of switch containing the flow
+
+        delete rule in the table
+    '''
+    @verify
+    def delete_rule(self, rule, switch_id):
+        self.rules[rule].pop(switch_id, None)
+        if len(self.rules[rule]) == 0:
+            self.rules.pop(rule,None)
 
     '''
         rule : fields used for matching
@@ -94,6 +105,13 @@ class RuleTables():
     @verify
     def is_rule_installed(self, rule):
         return rule in self.rules
+
+    def dump_table(self):
+        for rule, sw in self.rules.iteritems():
+            
+            print rule,":"
+            for sw_id, entry_handle in sw.iteritems():
+                print "\tSwitch_id: ",sw_id," Entry: ",entry_handle , "\n"
         
 bind_layers(TCP, Modbus, dport=5020)
 bind_layers(TCP, Modbus, sport=5020)
@@ -109,6 +127,8 @@ MISS_TAG= 'miss_tag_table'
 ARP_RESP = 'arp_response'
 ARP_FORW_REQ = 'arp_forward_req'
 ARP_FORW_RESP = 'arp_forward_resp'
+PKT_CLONED = 'pkt_cloned'
+TCP_FLAGS = 'tcp_flags'
 
 # Action name
 DROP = '_drop'
@@ -121,7 +141,10 @@ ADD_PORT = 'add_expected_port'
 RESP = 'respond_arp'
 STORE_ARP = 'store_arp_in'
 FORWARD_ARP = 'forward_arp'
+CLONE_I2E = '_clone_i2e'
 
+# Value name
+CLONE_PKT_FLAG = '1'
 
 def create_switches(filename):
 
@@ -295,126 +318,73 @@ class Controller(Iface):
     # Block flow
     @checkreq
     def block(self, req, sw):
-        pass
+        resp = self.retrieve_value(req)
+        if len(resp) != 7:
+            err = IDSControllerException(2, "block: Could not retrieve value from request")
+            raise err
+        (srcip, sport, proto, dstip, dport, funcode, length) == resp
     
+        print "srcip: %s, sport: %s, proto: %s" % (srcip, sport, proto)
+        print "dstip: %s, dport: %s" % (dstip, dport)
+            
+        if not self.is_flow_installed((srcip, sport, proto, dstip, dport)): 
+            pass
+            #resp_sw = self.get_resp_switch(req.srcip, req.dstip)
+            #TODO block flow_id
+            #self.deploy_flow_id_rules(resp_sw, srcip, sport, proto, dstip, dport)
+        elif funcode != None and length != None: 
+            if not self.modbus_table.is_rule_installed((srcip, sport, funcode, length)):
+                pass
+                #resp_sw = self.flow_table.rule_to_switches((srcip, sport, proto, dstip, dport))
+                #self.deploy_modbus_rules(resp_sw, srcip, sport, funcode, length)  
+
+
+    #TODO verify if switch in req same as the one in responsible switch
     
     # install flow in the whitelist
     @checkreq
     def allow(self, req, sw):
         resp = self.retrieve_value(req) 
         if len(resp) != 7 :
-            err = IDSControllerException(2,"Could not retrive value from request") 
+            err = IDSControllerException(2, "allow: Could not retrive value from request") 
             raise err
         
         (srcip, sport, proto, dstip, dport, funcode, length) = resp
-        print "srcip: %s, sport: %d, proto: %d" % (srcip, sport, proto)
-        print "dstip: %s, dport: %d" % (dstip, dport)
+        print "srcip: %s, sport: %s, proto: %s" % (srcip, sport, proto)
+        print "dstip: %s, dport: %s" % (dstip, dport)
             
-        if not self.is_flow_installed( (srcip, sport, proto, dstip, dport)): 
+        if not self.is_flow_installed((srcip, sport, proto, dstip, dport)): 
             resp_sw = self.get_resp_switch(req.srcip, req.dstip)
             self.deploy_flow_id_rules(resp_sw, srcip, sport, proto, dstip, dport)
+            self.flow_table.dump_table()
         elif funcode != None and length != None: 
             if not self.modbus_table.is_rule_installed((srcip, sport, funcode, length)):
                 resp_sw = self.flow_table.rule_to_switches((srcip, sport, proto, dstip, dport))
                 self.deploy_modbus_rules(resp_sw, srcip, sport, funcode, length)  
-        else:
-            err = IDSControllerException(1,"cannot read request") 
-            raise err
 
     # Delete flow from the whitelist    
     @checkreq
     def remove(self, req, sw):
-        pass
+        resp = self.retrieve_value(req)
+        if len(resp) != 7:
+            err = IDSControllerException(2, "remove: Could not retrieve value from request")
+            raise err
+        (srcip, sport, proto, dstip, dport, funcode, length) = resp
+        print "srcip: %s, sport: %s, proto: %s" % (srcip, sport, proto)
+        print "dstip: %s, dport: %s" % (dstip, dport)
+        
+        if self.is_flow_installed((srcip, sport, proto, dstip, dport)):
+            resp_sw = self.get_resp_switch(srcip, dstip)
+            for sw in resp_sw:
+                client = self.clients[sw.sw_id]
+                entry_handle = self.flow_table.get_num_entry((srcip, sport, proto, dstip, dport), sw.sw_id)
+                self.table_delete_entry(client, FLOW_ID, entry_handle)
+                self.flow_table.delete_rule((srcip, sport, proto, dstip, dport), sw.sw_id)
+        else:
+            err = IDSControllerException(3, "remove: Try to remove uninstalled flow") 
+            raise err
 
-
-    # deprecated
-    def waiting_request(self, ip, port):
-        server = (ip,port)
-        print "Starting controller"
-        self.sock.bind(server)
-        self.sock.listen(1) 
-        while True:
-            newsock, ids = self.sock.accept()
-            conn = ssl.wrap_socket(newsock,
-                                   server_side=True,
-                                   certfile=Communication.PEM_PATH,
-                                   ssl_version=ssl.PROTOCOL_TLSv1)
-            try:
-                print "connected to ids"
-                while True:
-                    data = Communication.recv_msg(conn)
-                    print "Received req"
-                    if data:
-                        flow = pickle.loads(data)
-                        code = ERROR
-                        #FIXME use dict.get
-                        if flow.install:
-                            if (flow.srcip, flow.dstip, flow.proto) in self.history:
-                                resp_sw = self.history[(flow.srcip, flow.dstip, flow.proto)]
-
-                                print "Reason: ",flow.reason
-
-                                if flow.reason == PORT_MISS: 
-                                    print "Port miss: %s-%s " % (flow.sport, flow.dport) 
-                                    if (flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport) not in self.history:
-                                        self.deploy_ex_port_rules(resp_sw, flow.srcip, flow.dstip, flow.sport, flow.dport) 
-                                        self.history[(flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport)] = resp_sw
-                                        self.history[(flow.dstip, flow.srcip, flow.proto, flow.dport, flow.sport)] = resp_sw
-                                        code = OK
-
-                                elif flow.reason == FUN_MISS:
-                                    print "Funcode miss: ", flow.funcode
-                                    if (flow.srcip, flow.sport, flow.funcode) not in self.history and (int(flow.funcode) > 0):
-                                        self.history[(flow.srcip, flow.sport, flow.funcode)] = True 
-                                        self.history[(flow.srcip, flow.sport, flow.funcode, flow.length)] = True
-                                        self.deploy_modbus_rules(resp_sw, flow.srcip, flow.sport, flow.funcode)
-                                        self.deploy_modbus_payload_rules(resp_sw, flow.srcip, flow.sport, flow.funcode, flow.length)
-                                        if (flow.dstip, flow.dport, flow.funcode) not in self.history:
-                                            self.history[(flow.dstip, flow.dport, flow.funcode)] = True 
-                                            self.deploy_modbus_rules(resp_sw, flow.dstip, flow.dport, flow.funcode)
-                                        code =  OK
-
-                                elif flow.reason == PAYLOAD_SIZE_MISS:
-                                    print "Payload size miss: ", flow.length
-                                    # It is likely that it is a response from the modbus server
-                                    if ((flow.dstip, flow.dport, flow.funcode) in self.history and
-                                       (flow.srcip, flow.sport, flow.funcode) in self.history and
-                                        flow.sport == "5020"): 
-                                        self.history[(flow.srcip, flow.sport, flow.funcode, flow.length)] = True
-                                        self.deploy_modbus_payload_rules(resp_sw, flow.srcip, flow.sport, flow.funcode, flow.length)
-                                        code = OK
-                                        
-                                else:
-                                    print "unknown reason"
-                                    code = ERROR
-                            else:
-                                print "Adding new flow"
-                                resp_sw = self.get_resp_switch(flow.srcip, flow.dstip)
-                                self.deploy_flow_id_rules(resp_sw, flow.srcip, flow.dstip, flow.proto)
-                                self.deploy_ex_port_rules(resp_sw, flow.srcip, flow.dstip, flow.sport, flow.dport)
-                                self.add_history_entry(flow.srcip, flow.dstip, flow.proto, flow.sport, flow.dport, resp_sw)
-                                code = OK
-                        else:
-                           print "Dropping request"
-                           client = self.clients[flow.identifier] 
-                           if (flow.srcip, flow.sport, flow.funcode) not in self.history and (int(flow.funcode) > 0):
-                                self.table_add_entry(client, MODBUS, DROP, [flow.srcip, flow.sport, flow.funcode],[])
-                                self.table_add_entry(client, MODBUS_PAYLOAD, DROP, [flow.srcip, flow.sport, flow.funcode, flow.length],[])
-                                self.history[(flow.srcip, flow.sport, flow.funcode)] = True 
-                                self.history[(flow.srcip, flow.sport, flow.funcode, flow.length)] = True
-
-                           code = OK
-
-                        # Notifying ids about the rule installation
-                        resp = FlowResponse(flow.req_id, code) 
-                        Communication.send(resp,conn)
-                    else:
-                        resp = FlowResponse(flow.req_id, code)
-                        Communication.send(resp, conn)
-            finally:
-                conn.shutdown(sock.SHUT_RDWR)
-                conn.close()
-    
+        
     def get_res(self, type_name, name, array):
         if name not in array:
             raise UIn_ResourceError(type_name, name)
@@ -460,6 +430,12 @@ class Controller(Iface):
         )
         
         print "Entry has been added with handle", entry_handle
+
+    def table_delete_entry(self, client, table_name, entry_handle):
+        "Delete entry from a match table: table_delete <table name><entry handle>"
+        table = self.get_res("table", table_name, TABLES)
+        print "Deleting entry", entry_handle, "from", table_name
+        client.bm_mt_delete_entry(0, table_name, entry_handle)  
 
     def table_default_entry(self, client,table_name, action_name, action_params):
         table = self.get_res("table", table_name, TABLES)
@@ -523,6 +499,7 @@ class Controller(Iface):
             if int(proto) == IP_PROTO_TCP:
                 self.add_flow_id_entry(client, dstip, dport, proto, srcip, sport) 
                 self.flow_table.add_rule((dstip, dport, proto, srcip, sport), sw.sw_id, sw.p4_table[FLOW_ID])
+                sw.p4_table[FLOW_ID] += 1
 
     # resp_sw is a list of switch_id present in the corresponding table
     def deploy_modbus_rules(self, resp_sw, srcip, sport, funcode, payload_length):
@@ -574,6 +551,11 @@ class Controller(Iface):
 
             self.table_default_entry(client, SEND_FRAME, DROP, [])
             self.table_default_entry(client, FORWARD, NO_OP, [])
+            self.table_default_entry(client, TCP_FLAGS, CLONE_I2E, [])
+            self.table_default_entry(client, PKT_CLONED, NO_OP, [])
+
+            # Set rule in  PKT_CLONED to distinguish instance_type of packet
+            self.table_add_entry(client, PKT_CLONED, ADD_TAG, [CLONE_PKT_FLAG],[sw.sw_id, sw.ids_addr, sw.ids_port]) 
             if is_ids_sw:
                 self.table_default_entry(client, FLOW_ID, NO_OP, [])
                 self.table_default_entry(client, MODBUS, NO_OP, [])
@@ -626,7 +608,6 @@ def main(sw_config, capture, ip, port):
     controller.setup_default_entry()
     print "Installing rules according to the capture"
     controller.dessiminate_rules(capture)
-
     processor = Processor(controller)
     transport = TSocket.TServerSocket(port=port)
     tfactory = TTransport.TBufferedTransportFactory()

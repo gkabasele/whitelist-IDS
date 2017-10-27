@@ -3,6 +3,7 @@
 #include <cstdio> 
 #include <cstdlib>
 #include <cstdint>
+#include <unordered_map>
 
 /* Netfilter queue */
 #include <netinet/in.h>
@@ -40,7 +41,7 @@ boost::shared_ptr<TTransport> ttransport(new TBufferedTransport(tsocket));
 boost::shared_ptr<TProtocol> tprotocol(new TBinaryProtocol(ttransport)); 
 
 ControllerClient client(tprotocol); 
-
+//std::unordered_map<std::string, uint16_t, uint8_t,std::string,uint16_t> flow_map;
 
 /* Convert u32 to an string ipv4 address */
 
@@ -97,12 +98,24 @@ void handle_tcp_pkt(struct iphdr* ip_info,struct srtag_hdr *srtag_info,
         req.__set_funcode(funcode); 
     }
     switches.push_back((int16_t) srtag_info->identifier);
-    client.allow(req, switches); 
+    if (tcp_info-> rst == 1){ 
+        printf("Received RST pkt\n");
+        client.remove(req, switches);
+        req = form_request(dstip, srcip, dstport, srcport, proto);
+        client.remove(req, switches); 
+    } else if (tcp_info->fin == 1) {
+        printf("Received FIN pkt\n");
+        flow_map.insert({srcip,ntohs(tcp_info->src),srtag_info->proto,dstip,ntohs(tcp_info->dest)});
+        client.remove(req, switches);   
+    } else {
+        client.allow(req, switches); 
+    }
     /* Forge packet */
     ip_info->daddr = srtag_info->dest;
-    ip_info->protocol = IPPROTO_TCP;
+    ip_info->protocol = srtag_info->protocol;
     ip_info->tot_len = ip_info->tot_len - sizeof(*srtag_info);
     ip_info->check = in_cksum((unsigned short*) ip_info, sizeof(ip_info));
+
     /* Copy packet */
     unsigned char* crafted_packet; 
     unsigned int length = ret - sizeof(*srtag_info);  
@@ -273,9 +286,9 @@ unsigned char* forge_packet(unsigned int length, struct iphdr* ip_info, struct s
     if (remaining_len >= sizeof(*ip_info))
     {
         std::memcpy(forged_packet, ip_info, iph_len); 
-        struct iphdr* ip_inv = (struct iphdr*) (forged_packet);
-        ip_inv-> daddr = srtag_info->dest;
-        ip_inv-> tot_len = length;
+        //struct iphdr* ip_inv = (struct iphdr*) (forged_packet);
+        //ip_inv-> daddr = srtag_info->dest;
+        //ip_inv-> tot_len = length;
         remaining_len = remaining_len - iph_len;
     } else {
         exit(1);

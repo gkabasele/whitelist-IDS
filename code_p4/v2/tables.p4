@@ -90,6 +90,12 @@ register arp_index {
     instance_count : 1;
 } 
 
+action _clone_i2e(){
+    // Distinguish between original and cloned packet
+    modify_field(standard_metadata.instance_type, 1);
+    clone_ingress_pkt_to_egress(1,clone_FL);
+}
+
 action store_arp_in(egress_port){
     register_read(tmp_reg_arp.tmp_index, arp_index, 0);
     register_write(arp_ip, tmp_reg_arp.tmp_index, arp.srcAddr);
@@ -211,4 +217,26 @@ table modbus {
     }
     size : 1048576;
 }
+
+table tcp_flags{
+    reads {
+        tcp.fin: exact;
+        tcp.rst: exact;
+    }
+    actions { 
+        _clone_i2e;    
+        _no_op;
+    }
+}
+
+table pkt_cloned {
+    reads {
+        standard_metadata.instance_type: exact;
+    }
+    actions {
+        _drop;
+        _no_op;
+        add_miss_tag;
+    }
+} 
 
