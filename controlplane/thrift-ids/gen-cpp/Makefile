@@ -15,7 +15,7 @@ all: controller_client
 
 
 controller_client: Controller_Client.o $(GEN_OBJ)
-	$(CXX) -g  $^ -o $@ -L/usr/local/lib -lthrift -lstdc++  -lnfnetlink -lnetfilter_queue -lpcap -lcrafter -lpthread -lresolv
+	$(CXX) -g  $^ -o $@ -L/usr/local/lib -lthrift -lstdc++  -lnfnetlink -lnetfilter_queue -lpcap -lcrafter -lpthread -lresolv -lm
 
 clean:
 	$(RM) *.o  controller_client

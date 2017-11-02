@@ -10,6 +10,8 @@
 
 #include "Controller.h"
 #include "modbus.h"
+#include "srtag.h"
+#include "flows.h"
 
 
 std::string to_ipv4_string(__u32 ip);
@@ -33,5 +35,7 @@ static int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
                     struct nfq_data *nfa, void *data);
 
 unsigned short in_cksum(unsigned short *addr, int len);
+
+bool con_term(boost::unordered_map<std::size_t, int> hashmap, ids::flow flow_info);
 
 #endif
