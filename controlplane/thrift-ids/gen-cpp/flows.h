@@ -19,8 +19,9 @@ namespace ids
         
     };
     
-    bool operator==(flow const&, flow const&);
-    std::size_t hash_value(flow const&);
+
+    bool operator==(flow const& a, flow const& b);
+    std::size_t hash_value(flow const& f);
 
 }
 

@@ -3,7 +3,6 @@
 #include <cstdio> 
 #include <cstdlib>
 #include <cstdint>
-#include <unordered_map>
 
 /* Netfilter queue */
 #include <netinet/in.h>
@@ -26,7 +25,7 @@
 /* HashMap*/
 
 #include <boost/unordered_map.hpp>
-#include <boost/functional/hash_fwd.hpp>
+#include <boost/functional/hash.hpp>
 
 /* Utils */
 
