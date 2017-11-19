@@ -6,6 +6,7 @@
 #define IP_PROTOCOLS_TCP 6
 #define IP_PROTOCOLS_UDP 17
 #define IP_PROTOCOLS_SRTAG 200 
+#define IP_PROTOCOLS_IDSTAG 201
 #define TCP_PORT_MODBUS 5020
 
 parser start {
@@ -32,6 +33,7 @@ parser parse_ipv4 {
         IP_PROTOCOLS_TCP : parse_tcp;
         IP_PROTOCOLS_UDP : parse_udp; 
         IP_PROTOCOLS_SRTAG: parse_srtag;
+        IP_PROTOCOLS_IDSTAG: parse_idstag;
         default: ingress; 
     }
 }
@@ -106,6 +108,11 @@ parser parse_modbus {
 
 parser parse_srtag {
     extract(srtag);
+    return parse_tcp;
+}
+
+parser parse_idstag {
+    extract(idstag);
     return parse_tcp;
 }
 

@@ -70,6 +70,44 @@ action add_miss_tag(id, ids_addr, egress_port) {
     modify_field(standard_metadata.egress_spec, egress_port);
 }
 
+action add_ids_tag() {
+    add_header(idstag);
+
+    // Change proto
+    modify_field(idstag.proto, ipv4.protocol);
+
+    // Set value
+    modify_field(idstag.val, 0x0001);
+    
+    // Change protocol to specify presence of tag
+    modify_field(ipv4.protocol, 0x00c9);
+
+    // Incrementing the length by the size of a tag
+    add_to_field(ipv4.totalLen, 2);
+    
+}
+
+action remove_ids_tag() {
+    modify_field(ipv4.protocol, idstag.proto);
+    add_to_field(ipv4.totalLen, -2);
+    remove_header(idstag);
+}
+
+action remove_miss_tag(egress_port) {
+    // Setting Original src
+    modify_field(ipv4.dstAddr, srtag.dstAddr);
+    // Change protocol 
+    modify_field(ipv4.protocol, srtag.proto);
+    
+    
+    //Decrementing the length by the size of the tag
+    add_to_field(ipv4.totalLen, -8);
+    
+    remove_header(srtag);
+    // Setting egress port to reach IDS
+    modify_field(standard_metadata.egress_spec, egress_port);
+}
+
 register arp_ip {
     width : 32;
     instance_count : 256;
@@ -216,6 +254,43 @@ table modbus {
         add_miss_tag;
     }
     size : 1048576;
+}
+
+table srtag_tab {
+    reads {
+        ipv4.protocol : exact;
+    }
+    actions {
+        _drop;
+        _no_op;
+        remove_miss_tag;
+    }
+
+}
+
+table idstag_tab {
+    reads {
+        ipv4.protocol : exact;
+        idstag.val : exact;
+        standard_metadata.ingress_port : exact;
+    }
+    actions {
+        _no_op;
+        _drop;
+        remove_ids_tag;
+    }
+
+}
+
+table add_tag_ids_tab {
+    reads {
+        standard_metadata.ingress_port : exact;
+    }
+    actions {
+        _no_op;
+        _drop;
+        add_ids_tag;
+    }
 }
 
 table tcp_flags{

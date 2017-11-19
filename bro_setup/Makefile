@@ -1,7 +1,7 @@
 CC= g++-5
 CFLAGS= -std=c++11  -Wall -Werror
 LIBS=  -lbroker
-BROFLAGS= -b -C -i lo
+BROFLAGS= -b -C -i eth0
 BRO=bro
 
 all: client_broker

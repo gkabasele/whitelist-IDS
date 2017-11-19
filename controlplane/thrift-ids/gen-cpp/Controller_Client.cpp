@@ -1,8 +1,10 @@
 #include <iostream>
+#include <string>
 #include <vector>
 #include <cstdio> 
 #include <cstdlib>
 #include <cstdint>
+#include <thread>
 
 /* Netfilter queue */
 #include <netinet/in.h>
@@ -11,11 +13,16 @@
 #include <linux/tcp.h>
 #include <linux/netfilter.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
+#include <poll.h>
 
 /* Libcrafter */
 #include <crafter.h>
 #include <crafter/Utils/TCPConnection.h>
 
+/* Broker Library*/
+#include <broker/broker.hh>
+#include <broker/endpoint.hh>
+#include <broker/message_queue.hh>
 
 /* Thrift */
 #include <thrift/transport/TSocket.h>
@@ -30,6 +37,16 @@
 #include "modbus.h"
 #include "flows.h"
 
+/* Index of value in message vector from broker agent*/
+#define TOPIC 0
+#define SRCIP 1
+#define SPORT 2
+#define PROTO 3
+#define DSTIP 4
+#define DPORT 5
+#define TCP_LABEL "tcp"
+#define UDP_LABEL "udp"
+
 using namespace apache::thrift;
 using namespace apache::thrift::protocol;
 using namespace apache::thrift::transport;
@@ -43,6 +60,7 @@ boost::shared_ptr<TTransport> ttransport(new TBufferedTransport(tsocket));
 boost::shared_ptr<TProtocol> tprotocol(new TBinaryProtocol(ttransport)); 
 
 ControllerClient client(tprotocol); 
+
 
 
 /* Convert u32 to an string ipv4 address */
@@ -95,9 +113,9 @@ void handle_tcp_pkt(struct iphdr* ip_info,struct srtag_hdr *srtag_info,
         /* TODO check if int is too big for short values*/
         int8_t funcode = (int8_t) modbus_info->funcode;
         //int16_t length = (int16_t) ret;
-        int16_t length = (int16_t) ntohs(modbus_info->len);
-        printf("Modbus Pkt: funcode: %d, length: %d\n", funcode, length);
-        req.__set_length(length);
+        int16_t modbus_length = (int16_t) ntohs(modbus_info->len);
+        printf("Modbus Pkt: funcode: %d, length: %d\n", funcode, modbus_length);
+        req.__set_length(modbus_length);
         req.__set_funcode(funcode); 
     }
     switches.push_back((int16_t) srtag_info->identifier);
@@ -217,9 +235,36 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                 }
                 case IPPROTO_TCP:
                 {    
+                    struct sockaddr_in connection;
+                    int sockfd;
+                    int optval = 1;
+
                     tcp_info = (struct tcphdr*) (data + sizeof(*ip_info));
                     unsigned short dest_port = ntohs(tcp_info->dest);
+                    std::string dstip = to_ipv4_string(ip_info->daddr);
                     printf("TCP : dest = %d", dest_port);
+                    /* Send packet */                
+                    if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP)) < 0){
+                        perror("socket");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    /* IP_HDRINCL no default ip set by the kernel */
+                    if ((setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &optval, sizeof(int))) < 0){
+                        perror("setsockopt");
+                        exit(EXIT_FAILURE);
+                    }
+                    connection.sin_family = AF_INET;
+                    connection.sin_addr.s_addr = inet_addr(dstip.c_str());
+
+                    /* Forwarding packet */
+                    if (sendto(sockfd, data, ret, 0, (struct sockaddr *)&connection, sizeof(struct sockaddr)) < 0){
+                        perror("sendto");
+                        exit(EXIT_FAILURE);
+                    } 
+                    close(sockfd);
+                    //free(crafted_packet);
+
                 }   break;
                 default:
                 {
@@ -351,10 +396,75 @@ static int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
 }
 
+void broker_comm()
+{
+    broker::init();
+    broker::endpoint bro_client("client");
+    bro_client.peer("127.0.0.1",12345);
+    broker::message_queue new_conn_queue("bro/event/new_conn", bro_client);
+    broker::message_queue end_conn_queue("bro/event/end_conn", bro_client);
+
+    pollfd ufds[2];
+    ufds[0].fd = new_conn_queue.fd();
+    ufds[0].events = POLLIN;
+    ufds[1].fd = end_conn_queue.fd();
+    ufds[1].events = POLLIN;
+    Flow req;
+    std::vector<int16_t> switches;
+    //catch exception
+    try {
+        ttransport->open();
+        while(1){
+            int r = poll(ufds, 2, -1);
+            if (r == -1){
+                fprintf(stderr, "poll\n");
+            } else {
+                if (ufds[0].revents & POLLIN) {
+                    for(auto& msg : new_conn_queue.want_pop()){
+                        std::cout << broker::to_string(msg) << std::endl;
+                        std::string srcip = broker::to_string(msg[SRCIP]);
+                        std::string dstip = broker::to_string(msg[DSTIP]);
+                        unsigned long srcport = std::stoul(broker::to_string(msg[SPORT]));
+                        unsigned long dstport = std::stoul(broker::to_string(msg[DPORT]));
+                        unsigned long proto = 0;
+                        if( broker::to_string(msg[PROTO]).compare(TCP_LABEL) == 0) {
+                            proto = 6;
+                        } else if (broker::to_string(msg[PROTO]).compare(UDP_LABEL) == 0){
+                            proto = 17;
+                        } else {
+                            exit(-1);
+                        }
+                        req = form_request(srcip,dstip, (int16_t) srcport, (int16_t) dstport, (int8_t) proto);
+                        //FIXME retrieve switch from srcip
+                        switches.push_back((int16_t) 0);
+                        client.allow(req, switches);
+                    }
+
+                }
+                if (ufds[1].revents & POLLIN) {
+                    for(auto& msg : end_conn_queue.want_pop()){
+                        std::cout << broker::to_string(msg) << std::endl;
+                    }
+                }
+            }
+
+        }
+
+        ttransport->close();
+
+    } catch (TTransportException e) {
+            std::cout << "Error starting client" << std::endl; 
+
+    } catch (IDSControllerException e) {
+            std::cout << e.error_description << std::endl;
+    
+    }
+    exit(0);
+}
+
 int main(int argc, char **argv)
 {
         
-
     struct nfq_handle *h;
     struct nfq_q_handle *qh;
     //struct nfnl_handle *nh;
@@ -403,32 +513,19 @@ int main(int argc, char **argv)
     }
 
     fd = nfq_fd(h);
-
-    //catch exception
-    try {
-        ttransport->open();
-
-        while ((rv = recv(fd, buf, sizeof(buf), 0)) && rv >= 0) {
+    std::thread broker_th(&broker_comm); 
+    while ((rv = recv(fd, buf, sizeof(buf), 0)) && rv >= 0) {
             printf("pkt received\n");
             nfq_handle_packet(h, buf, rv);
-        }
-
-        ttransport->close();
-
-    } catch (TTransportException e) {
-            std::cout << "Error starting client" << std::endl; 
-
-    } catch (IDSControllerException e) {
-            std::cout << e.error_description << std::endl;
-    
     }
+    broker_th.join();
 
     printf("unbinding from queue 0\n");
     nfq_destroy_queue(qh);
 
     #ifdef INSANE
-    /* normally, applications SHOULD NOT issue this command, since
-     * it detaches other programs/sockets from AF_INET, too ! */
+    // normally, applications SHOULD NOT issue this command, since
+    // it detaches other programs/sockets from AF_INET, too ! 
     printf("unbinding from AF_INET\n");
     nfq_unbind_pf(h, AF_INET);
     #endif

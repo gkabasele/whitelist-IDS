@@ -19,21 +19,29 @@
 control ingress {
     if(valid(ipv4) and ipv4.ttl > 0) {
         apply(ipv4_lpm);
-        // Check if tag header present
-        if(ipv4.protocol == 0x00c8){
-            //TODO set cookie to authenticate p4 switch
-            //nothing to do here
-        } else {
-            if(ipv4.protocol == 0x0006 and (tcp.fin == 1 or tcp.rst == 1 )){
-                apply(tcp_flags);
-            }
-            apply(flow_id){
-                hit{
-                    if (ipv4.protocol == 0x0006 and (tcp.dstPort == 5020 or tcp.srcPort == 5020)){
-                        if(tcp.syn == 1 or tcp.fin == 1 or (tcp.ack == 1 and tcp.psh == 0)) {
-                            //nothing to do here                
-                        } else {
-                            apply(modbus);                                      
+        //TODO check for funcode
+        apply(add_tag_ids_tab){
+            miss{
+                apply(idstag_tab){
+                    miss{
+                        // Check if tag header present
+                        apply(srtag_tab){
+                            miss {
+                                if(ipv4.protocol == 0x0006 and (tcp.fin == 1 or tcp.rst == 1 )){
+                                    apply(tcp_flags);
+                                }
+                                apply(flow_id){
+                                    hit{
+                                        if (ipv4.protocol == 0x0006 and (tcp.dstPort == 5020 or tcp.srcPort == 5020)){
+                                            if(tcp.syn == 1 or tcp.fin == 1 or (tcp.ack == 1 and tcp.psh == 0)) {
+                                                //nothing to do here                
+                                            } else {
+                                                apply(modbus);                                      
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

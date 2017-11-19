@@ -36,4 +36,6 @@ static int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 
 unsigned short in_cksum(unsigned short *addr, int len);
 
+void broker_comm();
+
 #endif

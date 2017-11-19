@@ -262,7 +262,9 @@ def main():
     h = net.get('s3-h1')
     h_gw = net.get('s3-h2')
     h_gw.cmd('ip link set s3-h2-eth0 up')  
-    h.cmd('sudo iptables -I INPUT -i eth0 -j NFQUEUE --queue-num 1')
+    #h.cmd('sudo iptables -I INPUT -i eth0 -j NFQUEUE --queue-num 1')
+    h.cmd('sudo iptables -I FORWARD -i eth0 -j NFQUEUE --queue-num 1')
+    h.cmd('sysctl -w net.ipv4.ip_forward=1')
     # Disabling reverse path filter
     for i in ['rcc','r1','r2','r3']:
         r = net.get(i)

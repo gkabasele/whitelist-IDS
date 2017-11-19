@@ -112,6 +112,14 @@ header_type srtag_t {
 
 header srtag_t srtag;
 
+header_type idstag_t {
+    fields {
+        proto : 8; //original transport protocol
+        val : 8; // value set by the IDS to specify that the packet has been inspecting
+    }
+}
+
+header idstag_t idstag;
 
 header_type modbus_t {
     fields {

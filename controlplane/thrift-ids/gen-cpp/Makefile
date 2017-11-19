@@ -4,6 +4,7 @@ GEN_OBJ := $(patsubst %.cpp,%.o, $(GEN_SRC))
 THRIFT_DIR := /usr/local/include/thrift
 BOOST_DIR := /usr/local/include
 
+
 INC := -I$(THRIFT_DIR) -I$(BOOST_DIR)
 
 .PHONY: all clean
@@ -15,7 +16,6 @@ all: controller_client
 
 
 controller_client: Controller_Client.o $(GEN_OBJ)
-	$(CXX) -g  $^ -o $@ -L/usr/local/lib -lthrift -lstdc++  -lnfnetlink -lnetfilter_queue -lpcap -lcrafter -lpthread -lresolv -lm
-
+	$(CXX) -g  $^ -o $@ -L/usr/local/lib -lthrift -lstdc++  -lnfnetlink -lnetfilter_queue -lpcap -lcrafter -lpthread -lresolv -lm -lbroker
 clean:
 	$(RM) *.o  controller_client
