@@ -1,0 +1,7 @@
+Create a new Macro
+------------------
+
+qa ^f( 4f, "adt, | "bdt") "ap f,, h "bp q
+
+"adt = Cut and copy content in Register a
+"ap = Paste content of Register a
