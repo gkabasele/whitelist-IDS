@@ -22,11 +22,6 @@
 #include <thrift/transport/TBufferTransports.h>
 #include <thrift/protocol/TBinaryProtocol.h>
 
-/* HashMap*/
-
-#include <boost/unordered_map.hpp>
-#include <boost/functional/hash.hpp>
-
 /* Utils */
 
 #include "Controller.h"
@@ -49,7 +44,6 @@ boost::shared_ptr<TProtocol> tprotocol(new TBinaryProtocol(ttransport));
 
 ControllerClient client(tprotocol); 
 
-boost::unordered_map<std::size_t, int> flow_map;
 
 /* Convert u32 to an string ipv4 address */
 
@@ -100,36 +94,15 @@ void handle_tcp_pkt(struct iphdr* ip_info,struct srtag_hdr *srtag_info,
         modbus_info = (struct modbus_hdr*) (data + index);                
         /* TODO check if int is too big for short values*/
         int8_t funcode = (int8_t) modbus_info->funcode;
-        int16_t length = (int16_t) ret;
-        printf("Modbus Pkt: funcode = %d\n", funcode);
+        //int16_t length = (int16_t) ret;
+        int16_t length = (int16_t) ntohs(modbus_info->len);
+        printf("Modbus Pkt: funcode: %d, length: %d\n", funcode, length);
         req.__set_length(length);
         req.__set_funcode(funcode); 
     }
     switches.push_back((int16_t) srtag_info->identifier);
-    if (tcp_info-> rst == 1){ 
-        printf("Received RST pkt\n");
-        client.remove(req, switches);
-        req = form_request(dstip, srcip, dstport, srcport, proto);
-        client.remove(req, switches); 
-    } else if (tcp_info->fin == 1) {
-        printf("Received FIN pkt\n");
-        ids::flow flow_info = ids::flow(ip_info->saddr, tcp_info->source, srtag_info->protocol,
-                                  srtag_info->dest, tcp_info->dest); 
-        boost::hash<ids::flow> flow_hasher;
-        std::size_t flow_id = flow_hasher(flow_info);
-        flow_map[flow_id] = 1;        
-    } else if (tcp_info->ack == 1 && tcp_info->fin == 0 && tcp_info->psh==0){
-        printf("Received ACK pkt\n");
-        ids::flow flow_info = ids::flow(ip_info->saddr, tcp_info->source, srtag_info->protocol,
-                                  srtag_info->dest, tcp_info->dest); 
-        if (con_term(flow_map, flow_info)){
-            client.remove(req, switches);
-            req = form_request(dstip, srcip, dstport, srcport, proto);
-            client.remove(req, switches);
-        } 
-    } else {
-        client.allow(req, switches); 
-    }
+    client.allow(req, switches); 
+    
     /* Forge packet */
     ip_info->daddr = srtag_info->dest;
     ip_info->protocol = srtag_info->protocol;
@@ -166,17 +139,7 @@ void handle_tcp_pkt(struct iphdr* ip_info,struct srtag_hdr *srtag_info,
 }
 
 
-bool con_term(boost::unordered_map<std::size_t, int> hashmap , ids::flow flow_info)
-{
-    /* Check if FIN packet has been sent by each endpoint*/
-    ids::flow comp_flow = ids::flow(flow_info.dst, flow_info.dport, flow_info.proto, flow_info.src, flow_info.sport);
-    boost::hash<ids::flow> flow_hasher;
-    std::size_t flow_id_a = flow_hasher(flow_info);
-    std::size_t flow_id_b = flow_hasher(comp_flow);
-    
-    return (hashmap.find(flow_id_a) != hashmap.end() &&
-            hashmap.find(flow_id_b) != hashmap.end());
-}
+
 
 /* returns packet id */
 static u_int32_t print_pkt (struct nfq_data *tb)

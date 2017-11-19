@@ -36,6 +36,4 @@ static int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 
 unsigned short in_cksum(unsigned short *addr, int len);
 
-bool con_term(boost::unordered_map<std::size_t, int> hashmap, ids::flow flow_info);
-
 #endif

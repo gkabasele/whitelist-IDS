@@ -358,6 +358,7 @@ class Controller(Iface):
             self.deploy_flow_id_rules(resp_sw, srcip, sport, proto, dstip, dport)
             self.flow_table.dump_table()
         elif funcode != None and length != None: 
+            print "funcode: %s, length: %s" % (funcode, length)
             if not self.modbus_table.is_rule_installed((srcip, sport, funcode, length)):
                 resp_sw = self.flow_table.rule_to_switches((srcip, sport, proto, dstip, dport))
                 self.deploy_modbus_rules(resp_sw, srcip, sport, funcode, length)  
@@ -551,11 +552,12 @@ class Controller(Iface):
 
             self.table_default_entry(client, SEND_FRAME, DROP, [])
             self.table_default_entry(client, FORWARD, NO_OP, [])
-            self.table_default_entry(client, TCP_FLAGS, CLONE_I2E, [])
+            self.table_default_entry(client, TCP_FLAGS, NO_OP, [])
             self.table_default_entry(client, PKT_CLONED, NO_OP, [])
 
             # Set rule in  PKT_CLONED to distinguish instance_type of packet
-            self.table_add_entry(client, PKT_CLONED, ADD_TAG, [CLONE_PKT_FLAG],[sw.sw_id, sw.ids_addr, sw.ids_port]) 
+            #self.table_default_entry(client, TCP_FLAGS, CLONE_I2E, [])
+            #self.table_add_entry(client, PKT_CLONED, ADD_TAG, [CLONE_PKT_FLAG],[sw.sw_id, sw.ids_addr, sw.ids_port]) 
             if is_ids_sw:
                 self.table_default_entry(client, FLOW_ID, NO_OP, [])
                 self.table_default_entry(client, MODBUS, NO_OP, [])
