@@ -44,6 +44,8 @@
 #define PROTO 3
 #define DSTIP 4
 #define DPORT 5
+#define FUNCODE 5
+#define EXP_CODE 6
 #define TCP_LABEL "tcp"
 #define UDP_LABEL "udp"
 
@@ -54,14 +56,18 @@ using namespace apache::thrift::transport;
 using namespace IDSControllerCpp;
 
 
-// Initialize client
+// Initialize two clients (Broker and IDS)
 boost::shared_ptr<TSocket> tsocket(new TSocket("172.0.10.2", 2050));
 boost::shared_ptr<TTransport> ttransport(new TBufferedTransport(tsocket));
 boost::shared_ptr<TProtocol> tprotocol(new TBinaryProtocol(ttransport)); 
 
+boost::shared_ptr<TTransport> m_tsocket(new TSocket("172.0.10.2", 2050));
+boost::shared_ptr<TTransport> m_ttransport(new TBufferedTransport(tsocket));
+boost::shared_ptr<TProtocol> m_tprotocol(new TBinaryProtocol(ttransport)); 
+
+
 ControllerClient client(tprotocol); 
-
-
+ControllerClient m_client(m_tprotocol);
 
 /* Convert u32 to an string ipv4 address */
 
@@ -239,10 +245,33 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     int sockfd;
                     int optval = 1;
 
-                    tcp_info = (struct tcphdr*) (data + sizeof(*ip_info));
+                    //TODO checkmalformed modbus packet (wrong len and bad ip)
+
+                    tcp_info = (struct tcphdr*) (data + (ip_info->ihl*4));
                     unsigned short dest_port = ntohs(tcp_info->dest);
                     std::string dstip = to_ipv4_string(ip_info->daddr);
-                    printf("TCP : dest = %d", dest_port);
+                    printf("TCP : dest = %d\n", dest_port);
+                    if (is_modbus_pkt(tcp_info)) { 
+                        int8_t proto = (int8_t) IPPROTO_TCP;
+
+                        /*TODO check for oveflow ?*/
+                        int16_t srcport = (int16_t) ntohs(tcp_info->source);
+                        int16_t dstport = (int16_t) ntohs(tcp_info->dest);
+                        req = form_request(srcip, dstip, srcport, dstport, proto);
+                        unsigned int index = (ip_info->ihl*4) + (tcp_info->doff*4);
+                        struct modbus_hdr* modbus_info = (struct modbus_hdr*) (data + index);                
+                        /* TODO check if int is too big for short values*/
+                        int8_t funcode = (int8_t) modbus_info->funcode;
+                        int16_t modbus_length = (int16_t) ntohs(modbus_info->len);
+                        printf("Modbus Pkt: funcode: %d, length: %d\n", funcode, modbus_length);
+                        if (funcode < 127){
+                            switches.push_back((int16_t) 0);
+                            req.__set_length(modbus_length);
+                            req.__set_funcode(funcode); 
+                            m_client.allow(req, switches); 
+                        }
+                    }
+
                     /* Send packet */                
                     if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP)) < 0){
                         perror("socket");
@@ -401,21 +430,25 @@ void broker_comm()
     broker::init();
     broker::endpoint bro_client("client");
     bro_client.peer("127.0.0.1",12345);
+    //FIXME Parameterization and create handler
     broker::message_queue new_conn_queue("bro/event/new_conn", bro_client);
     broker::message_queue end_conn_queue("bro/event/end_conn", bro_client);
+    broker::message_queue error_modbus_queue("bro/event/error_modbus", bro_client);
 
-    pollfd ufds[2];
+    pollfd ufds[3];
     ufds[0].fd = new_conn_queue.fd();
     ufds[0].events = POLLIN;
     ufds[1].fd = end_conn_queue.fd();
     ufds[1].events = POLLIN;
+    ufds[2].fd = error_modbus_queue.fd();
+    ufds[2].events = POLLIN;
     Flow req;
     std::vector<int16_t> switches;
     //catch exception
     try {
         ttransport->open();
         while(1){
-            int r = poll(ufds, 2, -1);
+            int r = poll(ufds, 3, -1);
             if (r == -1){
                 fprintf(stderr, "poll\n");
             } else {
@@ -444,6 +477,29 @@ void broker_comm()
                 if (ufds[1].revents & POLLIN) {
                     for(auto& msg : end_conn_queue.want_pop()){
                         std::cout << broker::to_string(msg) << std::endl;
+                        
+                    }
+                }
+
+                if (ufds[2].revents & POLLIN) {
+                    for(auto& msg : error_modbus_queue.want_pop()){
+                        std::string srcip = broker::to_string(msg[SRCIP]);
+                        std::string dstip = broker::to_string(msg[DSTIP]);
+                        unsigned long srcport = std::stoul(broker::to_string(msg[SPORT]));
+                        unsigned long dstport = std::stoul(broker::to_string(msg[DPORT]));
+                        unsigned long funcode = std::stoul(broker::to_string(msg[FUNCODE]));
+                        unsigned long exception_code = std::stoul(broker::to_string(msg[EXP_CODE]));
+                        req = form_request(srcip,dstip,(int16_t) srcport, (int16_t) dstport, (int8_t) IPPROTO_TCP);
+                        // 1 = Illegal Function code, 2 = Illegal Data Address, 3 = Illegal Data Value
+                        if(funcode > 127 && exception_code <= 3)
+                        {
+                            // Length of a data pdu when exception code  
+                            req.__set_length(3);
+                            req.__set_funcode(funcode); 
+                            switches.push_back((int16_t) 0);
+                            client.block(req, switches);
+                        }
+                         
                     }
                 }
             }
@@ -514,9 +570,18 @@ int main(int argc, char **argv)
 
     fd = nfq_fd(h);
     std::thread broker_th(&broker_comm); 
-    while ((rv = recv(fd, buf, sizeof(buf), 0)) && rv >= 0) {
-            printf("pkt received\n");
-            nfq_handle_packet(h, buf, rv);
+    try {
+        m_ttransport->open();
+        while ((rv = recv(fd, buf, sizeof(buf), 0)) && rv >= 0) {
+                printf("pkt received\n");
+                nfq_handle_packet(h, buf, rv);
+        }
+        m_ttransport->close();
+    } catch (TTransportException e) {
+        std::cout << "Error starting client" << std::endl;
+
+    } catch (IDSControllerException e) {
+        std::cout << e.error_description << std::endl;
     }
     broker_th.join();
 

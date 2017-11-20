@@ -1,15 +1,27 @@
 @load base/protocols/conn
+@load base/protocols/modbus
+@load base/frameworks/analyzer
 
+# Set up Bro Server for client to connect to
 const broker_port: port = 12345/tcp &redef;
 redef exit_only_after_terminate = T;
 redef Broker::endpoint_name = "listener";
 
+global modbus_ports = { 502/tcp, 5020/tcp };
+
+# Event on which the Client can register
 global new_conn: event(srcip: addr, sport: port, proto: transport_proto, dstip: addr, dport: port);
 global end_conn: event(srcip: addr, sport: port, proto: transport_proto, dstip: addr, dport: port);
+global error_modbus: event(srcip: addr, sport: port, dstip: addr, dport: port, funcode: count, code: count);
+
 
 event bro_init()
     {
     print fmt("Starting Bro");
+    print fmt("Listening on port 12345");
+
+    print fmt("Setting up Modbus Analyzer");
+    Analyzer::register_for_ports(Analyzer::ANALYZER_MODBUS, modbus_ports);
     Broker::enable();
     Broker::auto_event("bro/event/new_conn", new_conn);
     Broker::auto_event("bro/event/end_conn", end_conn);
@@ -40,7 +52,13 @@ event connection_finished(c:connection)
     event end_conn(c$id$orig_h, c$id$orig_p, proto, c$id$resp_h, c$id$resp_p);
     }
 
+event modbus_execption(c: connection, headers: ModbusHeaders, code: count)
+    {
+    event error_modbus(c$id$orig_h, c$id$orig_p, c$id$resp_h, c$id$resp_p, headers$function_code,code); 
+    }
+
 event bro_done()
     {
     print fmt("Ending Bro");
     }
+
