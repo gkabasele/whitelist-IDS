@@ -263,8 +263,8 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                         /* TODO check if int is too big for short values*/
                         int8_t funcode = (int8_t) modbus_info->funcode;
                         int16_t modbus_length = (int16_t) ntohs(modbus_info->len);
-                        printf("Modbus Pkt: funcode: %d, length: %d\n", funcode, modbus_length);
-                        if (funcode < 127){
+                        printf("Modbus Pkt: funcode: %d, length: %d\n", modbus_info->funcode, ntohs(modbus_info->len));
+                        if (modbus_info->funcode < 128){
                             switches.push_back((int16_t) 0);
                             req.__set_length(modbus_length);
                             req.__set_funcode(funcode); 
@@ -483,6 +483,7 @@ void broker_comm()
 
                 if (ufds[2].revents & POLLIN) {
                     for(auto& msg : error_modbus_queue.want_pop()){
+                        std::cout << broker::to_string(msg) << std::endl;
                         std::string srcip = broker::to_string(msg[SRCIP]);
                         std::string dstip = broker::to_string(msg[DSTIP]);
                         unsigned long srcport = std::stoul(broker::to_string(msg[SPORT]));
@@ -490,7 +491,7 @@ void broker_comm()
                         unsigned long funcode = std::stoul(broker::to_string(msg[FUNCODE]));
                         unsigned long exception_code = std::stoul(broker::to_string(msg[EXP_CODE]));
                         req = form_request(srcip,dstip,(int16_t) srcport, (int16_t) dstport, (int8_t) IPPROTO_TCP);
-                        // 1 = Illegal Function code, 2 = Illegal Data Address, 3 = Illegal Data Value
+                        // block if either, 1 = Illegal Function code, 2 = Illegal Data Address, 3 = Illegal Data Value
                         if(funcode > 127 && exception_code <= 3)
                         {
                             // Length of a data pdu when exception code  

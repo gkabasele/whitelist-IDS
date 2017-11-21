@@ -25,6 +25,7 @@ event bro_init()
     Broker::enable();
     Broker::auto_event("bro/event/new_conn", new_conn);
     Broker::auto_event("bro/event/end_conn", end_conn);
+    Broker::auto_event("bro/event/error_modbus", error_modbus);
     Broker::listen(broker_port, "127.0.0.1");
     }
 
@@ -52,7 +53,7 @@ event connection_finished(c:connection)
     event end_conn(c$id$orig_h, c$id$orig_p, proto, c$id$resp_h, c$id$resp_p);
     }
 
-event modbus_execption(c: connection, headers: ModbusHeaders, code: count)
+event modbus_exception(c: connection, headers: ModbusHeaders, code: count)
     {
     event error_modbus(c$id$orig_h, c$id$orig_p, c$id$resp_h, c$id$resp_p, headers$function_code,code); 
     }

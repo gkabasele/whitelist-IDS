@@ -157,8 +157,10 @@ ADD_IDSTAG = 'add_ids_tag'
 
 # Value name
 CLONE_PKT_FLAG = '1'
+MAX_BLOCK_REQ = 3
 RULE_ALLOW = 1
 RULE_DROP = 0
+
 
 def create_switches(filename):
 
@@ -270,6 +272,8 @@ class Controller(Iface):
         self.flow_table = RuleTables(5)
         # Modbus : srcip, sport, funcode, payload_length
         self.modbus_table = RuleTables(4)
+        # Number of block request received for a flow
+        self.block_request_flow = {} 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def add_client(self, id_client, standard_client, switch):
@@ -315,8 +319,13 @@ class Controller(Iface):
         if req.funcode != None and req.length != None:
             u_funcode = (req.funcode & 0xff)
             u_length  = (req.length & 0xff)
-            funcode = str(u_funcode)
-            length = str(u_length)
+            # Only accept non exception code and valid length
+            if u_funcode > 127 and u_length < 3 :
+                err = IDSControllerException(1, "Invalid Funcode or payload length")    
+                raise err
+            else:
+                funcode = str(u_funcode)
+                length = str(u_length)
         return (req.srcip, sport, proto, req.dstip, dport, funcode, length)
 
     # Forward packet but send clone to ids
@@ -337,20 +346,32 @@ class Controller(Iface):
             err = IDSControllerException(2, "block: Could not retrieve value from request")
             raise err
         (srcip, sport, proto, dstip, dport, funcode, length) = resp
-    
+        flow = (srcip, sport, proto, dstip, dport)
+            
+        print "\n--------------------------"
+        print "Received Blocking request" 
         print "srcip: %s, sport: %s, proto: %s" % (srcip, sport, proto)
         print "dstip: %s, dport: %s" % (dstip, dport)
-        installed = self.is_flow_installed((srcip, sport, proto, dstip, dport))
-        if not installed:
+        print "funcode: %s, length: %s" % (funcode, length)
+        print "--------------------------\n" 
+        if ((flow in self.block_request_flow and
+            self.block_request_flow[flow] >= MAX_BLOCK_REQUEST)):
+            installed = self.is_flow_installed(flow)
+            """
+            if not installed:
+                resp_sw = self.get_resp_switch(req.srcip, req.dstip)
+                self.deploy_flow_id_rules(resp_sw, srcip, sport, proto, dstip, dport, self.block_flow_id_entry, RULE_DROP)"""
+
             resp_sw = self.get_resp_switch(req.srcip, req.dstip)
             self.deploy_flow_id_rules(resp_sw, srcip, sport, proto, dstip, dport, self.block_flow_id_entry, RULE_DROP)
-        elif installed and (funcode != None and length != None): 
-            print "funcode: %s, length: %s" % (funcode, length)
-            if not self.modbus_table.is_rule_installed((srcip, sport, funcode, length)):
-                resp_sw = self.flow_table.rule_to_switches((srcip, sport, proto, dstip, dport))
-                self.deploy_modbus_rules(resp_sw, srcip, sport, funcode, length, self.block_modbus_id_entry, RULE_DROP)  
-                
-
+            if installed and (funcode != None and length != None): 
+                if not self.modbus_table.is_rule_installed((srcip, sport, funcode, length)):
+                    resp_sw = self.flow_table.rule_to_switches(flow)
+                    self.deploy_modbus_rules(resp_sw, srcip, sport, funcode, length, self.block_modbus_id_entry, RULE_DROP)  
+        elif flow in self.block_request_flow:
+            self.block_request_flow[flow] += 1
+        else:
+            self.block_request_flow[flow] = 1
 
     #TODO verify if switch in req same as the one in responsible switch
     
@@ -363,20 +384,28 @@ class Controller(Iface):
             raise err
         
         (srcip, sport, proto, dstip, dport, funcode, length) = resp
+        flow = (srcip, sport, proto, dstip, dport)
+        print "\n-----------------------"
+        print "Received Allowing request"
         print "srcip: %s, sport: %s, proto: %s" % (srcip, sport, proto)
         print "dstip: %s, dport: %s" % (dstip, dport)
-        installed = self.is_flow_installed((srcip, sport, proto, dstip, dport))
+        print "funcode: %s, length: %s" % (funcode, length)
+        print "-------------------------\n" 
+        installed = self.is_flow_installed(flow)
         
+        """
         if not installed: 
             resp_sw = self.get_resp_switch(req.srcip, req.dstip)
             self.deploy_flow_id_rules(resp_sw, srcip, sport, proto, dstip, dport, self.add_flow_id_entry, RULE_ALLOW)
-            self.flow_table.dump_table()
-        elif installed and (funcode != None and length != None): 
-            print "funcode: %s, length: %s" % (funcode, length)
+            #self.flow_table.dump_table()"""
+        resp_sw = self.get_resp_switch(req.srcip, req.dstip)
+        self.deploy_flow_id_rules(resp_sw, srcip, sport, proto, dstip, dport, self.add_flow_id_entry, RULE_ALLOW)
+
+        if installed and (funcode != None and length != None): 
             if not self.modbus_table.is_rule_installed((srcip, sport, funcode, length)):
                 resp_sw = self.flow_table.rule_to_switches((srcip, sport, proto, dstip, dport))
                 self.deploy_modbus_rules(resp_sw, srcip, sport, funcode, length, self.add_modbus_entry, RULE_ALLOW)  
-
+        self.block_request_flow[flow] = 0
     # Delete flow from the whitelist    
     @checkreq
     def remove(self, req, sw):
@@ -385,9 +414,11 @@ class Controller(Iface):
             err = IDSControllerException(2, "remove: Could not retrieve value from request")
             raise err
         (srcip, sport, proto, dstip, dport, funcode, length) = resp
+        print "\n------------------------" 
+        print " Received Removing request"
         print "srcip: %s, sport: %s, proto: %s" % (srcip, sport, proto)
         print "dstip: %s, dport: %s" % (dstip, dport)
-        
+        print "--------------------------\n" 
         if self.is_flow_installed((srcip, sport, proto, dstip, dport)):
             resp_sw = self.get_resp_switch(srcip, dstip)
             for sw in resp_sw:
@@ -509,6 +540,7 @@ class Controller(Iface):
         rule = (srcip,sport,proto, dstip, dport)
         for sw in resp_sw:
             client = self.clients[sw.sw_id]
+            # Rule was not installed on this switch
             if ((self.flow_table.is_rule_installed(rule) and sw.sw_id not in self.flow_table.rule_to_switches(rule))
                 or not self.flow_table.is_rule_installed(rule)): 
                 f(client, srcip, sport, proto, dstip, dport)
@@ -519,7 +551,7 @@ class Controller(Iface):
                     self.flow_table.add_rule((dstip, dport, proto, srcip, sport), sw.sw_id, sw.p4_table[FLOW_ID],flag)
                     sw.p4_table[FLOW_ID] += 1
             else:
-                # if another rule was installed with a different action we need to remove it
+                # if another rule was installed on this switch with a different action we need to remove it
                 if self.flow_table.get_type_entry(rule, sw.sw_id) != flag:
                     entry_handle = self.flow_table.get_num_entry(rule, sw.sw_id)
                     self.table_delete_entry(client, FLOW_ID, entry_handle)
