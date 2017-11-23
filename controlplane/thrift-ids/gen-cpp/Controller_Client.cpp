@@ -5,6 +5,8 @@
 #include <cstdlib>
 #include <cstdint>
 #include <thread>
+#include <iterator>
+#include <algorithm>
 
 /* Netfilter queue */
 #include <netinet/in.h>
@@ -244,11 +246,11 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     struct sockaddr_in connection;
                     int sockfd;
                     int optval = 1;
-
+                    bool send_pkt = true;
                     //TODO checkmalformed modbus packet (wrong len and bad ip)
 
                     tcp_info = (struct tcphdr*) (data + (ip_info->ihl*4));
-                    unsigned short dest_port = ntohs(tcp_info->dest);
+                    __u16 dest_port = ntohs(tcp_info->dest);
                     std::string dstip = to_ipv4_string(ip_info->daddr);
                     printf("TCP : dest = %d\n", dest_port);
                     if (is_modbus_pkt(tcp_info)) { 
@@ -264,35 +266,48 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                         int8_t funcode = (int8_t) modbus_info->funcode;
                         int16_t modbus_length = (int16_t) ntohs(modbus_info->len);
                         printf("Modbus Pkt: funcode: %d, length: %d\n", modbus_info->funcode, ntohs(modbus_info->len));
-                        if (modbus_info->funcode < 128){
-                            switches.push_back((int16_t) 0);
-                            req.__set_length(modbus_length);
-                            req.__set_funcode(funcode); 
-                            m_client.allow(req, switches); 
+                        if (modbus_info->funcode < 128) {
+                            // Is it a Diagnostic function
+                            if (modbus_info->funcode == 8) {
+                                std::vector<__u16> risk_fct{1, 4, 10}; 
+                                struct modbus_diag_hdr* diag_info = (struct modbus_diag_hdr*) (data + index + sizeof(struct modbus_hdr));
+                                __u16 diag_func = diag_info->subfuncode;
+                                send_pkt = std::find(risk_fct.begin(), risk_fct.end(),diag_func) != risk_fct.end();
+                            }
+
+                            if (send_pkt) {
+                                switches.push_back((int16_t) 0);
+                                req.__set_length(modbus_length);
+                                req.__set_funcode(funcode); 
+                                m_client.allow(req, switches); 
+                            }
                         }
                     }
 
-                    /* Send packet */                
-                    if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP)) < 0){
-                        perror("socket");
-                        exit(EXIT_FAILURE);
-                    }
+                    if (send_pkt){
 
-                    /* IP_HDRINCL no default ip set by the kernel */
-                    if ((setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &optval, sizeof(int))) < 0){
-                        perror("setsockopt");
-                        exit(EXIT_FAILURE);
-                    }
-                    connection.sin_family = AF_INET;
-                    connection.sin_addr.s_addr = inet_addr(dstip.c_str());
+                        /* Send packet */                
+                        if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP)) < 0){
+                            perror("socket");
+                            exit(EXIT_FAILURE);
+                        }
 
-                    /* Forwarding packet */
-                    if (sendto(sockfd, data, ret, 0, (struct sockaddr *)&connection, sizeof(struct sockaddr)) < 0){
-                        perror("sendto");
-                        exit(EXIT_FAILURE);
-                    } 
-                    close(sockfd);
-                    //free(crafted_packet);
+                        /* IP_HDRINCL no default ip set by the kernel */
+                        if ((setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &optval, sizeof(int))) < 0){
+                            perror("setsockopt");
+                            exit(EXIT_FAILURE);
+                        }
+                        connection.sin_family = AF_INET;
+                        connection.sin_addr.s_addr = inet_addr(dstip.c_str());
+
+                        /* Forwarding packet */
+                        if (sendto(sockfd, data, ret, 0, (struct sockaddr *)&connection, sizeof(struct sockaddr)) < 0){
+                            perror("sendto");
+                            exit(EXIT_FAILURE);
+                        } 
+                        close(sockfd);
+                        //free(crafted_packet);
+                    }
 
                 }   break;
                 default:
@@ -484,15 +499,16 @@ void broker_comm()
                 if (ufds[2].revents & POLLIN) {
                     for(auto& msg : error_modbus_queue.want_pop()){
                         std::cout << broker::to_string(msg) << std::endl;
-                        std::string srcip = broker::to_string(msg[SRCIP]);
-                        std::string dstip = broker::to_string(msg[DSTIP]);
-                        unsigned long srcport = std::stoul(broker::to_string(msg[SPORT]));
-                        unsigned long dstport = std::stoul(broker::to_string(msg[DPORT]));
-                        unsigned long funcode = std::stoul(broker::to_string(msg[FUNCODE]));
-                        unsigned long exception_code = std::stoul(broker::to_string(msg[EXP_CODE]));
+                        // topic, srcip, sport, dstip, dport, funcode, code
+                        std::string srcip = broker::to_string(msg[1]);
+                        unsigned long srcport = std::stoul(broker::to_string(msg[2]));
+                        std::string dstip = broker::to_string(msg[3]);
+                        unsigned long dstport = std::stoul(broker::to_string(msg[4]));
+                        unsigned long funcode = std::stoul(broker::to_string(msg[5]));
+                        unsigned long exception_code = std::stoul(broker::to_string(msg[6]));
                         req = form_request(srcip,dstip,(int16_t) srcport, (int16_t) dstport, (int8_t) IPPROTO_TCP);
                         // block if either, 1 = Illegal Function code, 2 = Illegal Data Address, 3 = Illegal Data Value
-                        if(funcode > 127 && exception_code <= 3)
+                        if(funcode > 127 && exception_code <= 3 && srcport == 5020)
                         {
                             // Length of a data pdu when exception code  
                             req.__set_length(3);

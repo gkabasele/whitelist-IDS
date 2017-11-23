@@ -58,6 +58,15 @@ event modbus_exception(c: connection, headers: ModbusHeaders, code: count)
     event error_modbus(c$id$orig_h, c$id$orig_p, c$id$resp_h, c$id$resp_p, headers$function_code,code); 
     }
 
+event modbus_message(c: connection, headers: ModbusHeaders, is_orig: bool)
+    {
+    # exception from the server  
+    if( ( headers$function_code > 127) && (!is_orig) )
+        {
+        event error_modbus(c$id$resp_h, c$id$resp_p, c$id$orig_h, c$id$orig_p, headers$function_code,1);
+        }
+    }
+
 event bro_done()
     {
     print fmt("Ending Bro");

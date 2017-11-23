@@ -64,21 +64,24 @@ class RuleTables():
         rule : fields used for matching
         switch_id : datapath id of switch containing the flow
         num_entry : number entry of flow in the flow table on the switch
+        rule_type: ALLOW rule or DROP (for now, later REDIRECT,CLONED,...)
+        wl_orig: Was the rule in the original whitelist
 
         Add rule to the table
     '''
     @verify
-    def add_rule(self, rule, switch_id, num_entry, flag):
+    def add_rule(self, rule, switch_id, num_entry, rule_type, wl_orig=False):
         if rule not in self.rules:
-            self.rules[rule] = {switch_id : (num_entry,flag)}
+            self.rules[rule] = {switch_id : (num_entry,rule_type, wl_orig)}
         elif switch_id not in self.rules[rule]:
-            self.rules[rule][switch_id] = (num_entry, flag)
+            self.rules[rule][switch_id] = (num_entry, rule_type, wl_orig)
     '''
         rule : fields used for matching
         switch_id : datapath id of switch containing the flow
 
         delete rule in the table
     '''
+
     @verify
     def delete_rule(self, rule, switch_id):
         self.rules[rule].pop(switch_id, None)
@@ -101,14 +104,24 @@ class RuleTables():
     @verify
     def get_num_entry(self, rule, switch_id):
         return self.rules[rule][switch_id][0]
-    
+    '''
+        rule : fields used for matching
+        return the type (ALLOW,DROP) the rule in switch with switch_id
+    '''
     @verify
     def get_type_entry(self, rule, switch_id):
         return self.rules[rule][switch_id][1]
 
     @verify
+    def get_origin_entry(self, rule, switch_id):
+        return self.rules[rule][switch_id][2]
+
+    @verify
     def is_rule_installed(self, rule):
         return rule in self.rules
+
+    def get_rules(self):
+        return self.rules
 
     def dump_table(self):
         for rule, sw in self.rules.iteritems():
@@ -137,6 +150,7 @@ TCP_FLAGS = 'tcp_flags'
 SRTAG = 'srtag_tab'
 IDSTAG = 'idstag_tab'
 IDSTAG_ADD_TAB = 'add_tag_ids_tab'
+BLOCK_HOSTS = 'block_hosts'
 
 # Action name
 DROP = '_drop'
@@ -157,9 +171,10 @@ ADD_IDSTAG = 'add_ids_tag'
 
 # Value name
 CLONE_PKT_FLAG = '1'
-MAX_BLOCK_REQ = 3
+MAX_BLOCK_REQUESTS = 1
 RULE_ALLOW = 1
 RULE_DROP = 0
+RULE_ORIGINAL = True
 
 
 def create_switches(filename):
@@ -238,7 +253,8 @@ class Switch():
         self.ids_addr = ids_addr
         self.routing_table = routing_table
         self.arp_table = arp_table
-        self.p4_table = {FLOW_ID : 0 , MODBUS: 0}
+        # Current entry number in each important table
+        self.p4_table = {FLOW_ID : 0 , MODBUS : 0, BLOCK_HOSTS : 0}
 
     def is_responsible(self,ip_addr):
         r = False
@@ -272,8 +288,10 @@ class Controller(Iface):
         self.flow_table = RuleTables(5)
         # Modbus : srcip, sport, funcode, payload_length
         self.modbus_table = RuleTables(4)
-        # Number of block request received for a flow
-        self.block_request_flow = {} 
+        # Blocked host : srcip, proto, dstip, dport
+        self.block_hosts_table = RuleTables(4)
+        # Number of block request received for a host
+        self.block_request_host = {} 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def add_client(self, id_client, standard_client, switch):
@@ -338,6 +356,19 @@ class Controller(Iface):
     def redirect(self, req, sw):
         pass
 
+    def is_flow_origin(self, flow):
+        (srcip, sport, proto, dstip, dport) = flow
+        origin = False
+        for rule in self.flow_table.get_rules():
+            (srcip_o, sport_o, proto_o, dstip_o, dport_o) = rule 
+            # is there a flow from this host to that server in the original whitelist
+            if (srcip_o == srcip and proto == proto_o and dstip_o == dstip and dport_o == dport):
+                for sw_id in self.flow_table.rule_to_switches(rule):
+                    origin = self.flow_table.get_origin_entry(rule, sw_id) 
+                    if origin:
+                        return origin
+        return origin
+        
     # Block flow
     @checkreq
     def block(self, req, sw):
@@ -347,6 +378,8 @@ class Controller(Iface):
             raise err
         (srcip, sport, proto, dstip, dport, funcode, length) = resp
         flow = (srcip, sport, proto, dstip, dport)
+
+    
             
         print "\n--------------------------"
         print "Received Blocking request" 
@@ -354,24 +387,28 @@ class Controller(Iface):
         print "dstip: %s, dport: %s" % (dstip, dport)
         print "funcode: %s, length: %s" % (funcode, length)
         print "--------------------------\n" 
-        if ((flow in self.block_request_flow and
-            self.block_request_flow[flow] >= MAX_BLOCK_REQUEST)):
-            installed = self.is_flow_installed(flow)
-            """
-            if not installed:
-                resp_sw = self.get_resp_switch(req.srcip, req.dstip)
-                self.deploy_flow_id_rules(resp_sw, srcip, sport, proto, dstip, dport, self.block_flow_id_entry, RULE_DROP)"""
+        
+        self.flow_table.dump_table()
+        if ((dstip in self.block_request_host and
+            self.block_request_host[dstip] >= MAX_BLOCK_REQUESTS) and
+            not self.is_flow_origin((dstip, dport, proto, srcip, sport))):
 
+            print "Blocking host %s for service %s\n" % (dstip, sport)
+
+            #installed = self.is_flow_installed(flow)
             resp_sw = self.get_resp_switch(req.srcip, req.dstip)
+            #  The source is the modbus server and we want to block the other endpoint
+            self.deploy_block_host_rules(resp_sw, dstip, proto ,srcip, sport, self.add_block_entry ,RULE_DROP )  
+            """
             self.deploy_flow_id_rules(resp_sw, srcip, sport, proto, dstip, dport, self.block_flow_id_entry, RULE_DROP)
             if installed and (funcode != None and length != None): 
                 if not self.modbus_table.is_rule_installed((srcip, sport, funcode, length)):
                     resp_sw = self.flow_table.rule_to_switches(flow)
-                    self.deploy_modbus_rules(resp_sw, srcip, sport, funcode, length, self.block_modbus_id_entry, RULE_DROP)  
-        elif flow in self.block_request_flow:
-            self.block_request_flow[flow] += 1
+                    self.deploy_modbus_rules(resp_sw, srcip, sport, funcode, length, self.block_modbus_entry, RULE_DROP)"""
+        elif dstip in self.block_request_host:
+            self.block_request_host[dstip] += 1
         else:
-            self.block_request_flow[flow] = 1
+            self.block_request_host[dstip] = 1
 
     #TODO verify if switch in req same as the one in responsible switch
     
@@ -393,11 +430,6 @@ class Controller(Iface):
         print "-------------------------\n" 
         installed = self.is_flow_installed(flow)
         
-        """
-        if not installed: 
-            resp_sw = self.get_resp_switch(req.srcip, req.dstip)
-            self.deploy_flow_id_rules(resp_sw, srcip, sport, proto, dstip, dport, self.add_flow_id_entry, RULE_ALLOW)
-            #self.flow_table.dump_table()"""
         resp_sw = self.get_resp_switch(req.srcip, req.dstip)
         self.deploy_flow_id_rules(resp_sw, srcip, sport, proto, dstip, dport, self.add_flow_id_entry, RULE_ALLOW)
 
@@ -405,7 +437,8 @@ class Controller(Iface):
             if not self.modbus_table.is_rule_installed((srcip, sport, funcode, length)):
                 resp_sw = self.flow_table.rule_to_switches((srcip, sport, proto, dstip, dport))
                 self.deploy_modbus_rules(resp_sw, srcip, sport, funcode, length, self.add_modbus_entry, RULE_ALLOW)  
-        self.block_request_flow[flow] = 0
+        # Clear block request when new flow ?
+
     # Delete flow from the whitelist    
     @checkreq
     def remove(self, req, sw):
@@ -506,6 +539,9 @@ class Controller(Iface):
 
     def add_modbus_entry(self, client, srcip, sport, funcode, payload_length):
         self.table_add_entry(client, MODBUS, NO_OP, [srcip, sport, funcode, payload_length],[])
+
+    def add_block_entry(self, client, srcip, proto, dstip, dport):
+        self.table_add_entry(client, BLOCK_HOSTS, DROP, [srcip, proto, dstip, dport],[])
     
     def block_modbus_entry(self, client, srcip, sport, funcode, payload_length):
         self.table_add_entry(client, MODBUS, DROP, [srcip, sport, funcode, payload_length])
@@ -536,7 +572,7 @@ class Controller(Iface):
         return resp_switch
 
     # resp_sw is a list of switch object, f is a function (allow or drop flow)
-    def deploy_flow_id_rules(self, resp_sw, srcip, sport, proto, dstip, dport, f, flag):
+    def deploy_flow_id_rules(self, resp_sw, srcip, sport, proto, dstip, dport, f, flag, wl_orig=False):
         rule = (srcip,sport,proto, dstip, dport)
         for sw in resp_sw:
             client = self.clients[sw.sw_id]
@@ -544,11 +580,11 @@ class Controller(Iface):
             if ((self.flow_table.is_rule_installed(rule) and sw.sw_id not in self.flow_table.rule_to_switches(rule))
                 or not self.flow_table.is_rule_installed(rule)): 
                 f(client, srcip, sport, proto, dstip, dport)
-                self.flow_table.add_rule(rule,sw.sw_id, sw.p4_table[FLOW_ID],flag)
+                self.flow_table.add_rule(rule,sw.sw_id, sw.p4_table[FLOW_ID],flag, wl_orig)
                 sw.p4_table[FLOW_ID] += 1
                 if int(proto) == IP_PROTO_TCP:
                     f(client, dstip, dport, proto, srcip, sport) 
-                    self.flow_table.add_rule((dstip, dport, proto, srcip, sport), sw.sw_id, sw.p4_table[FLOW_ID],flag)
+                    self.flow_table.add_rule((dstip, dport, proto, srcip, sport), sw.sw_id, sw.p4_table[FLOW_ID],flag, wl_orig)
                     sw.p4_table[FLOW_ID] += 1
             else:
                 # if another rule was installed on this switch with a different action we need to remove it
@@ -557,15 +593,28 @@ class Controller(Iface):
                     self.table_delete_entry(client, FLOW_ID, entry_handle)
                     self.flow_table.delete_rule(rule, sw.sw_id)
                     f(client, srcip, sport, proto, dstip, dport)
-                    self.flow_table.add_rule(rule, sw.sw_id, sw.p4_table[FLOW_ID],flag)
+                    self.flow_table.add_rule(rule, sw.sw_id, sw.p4_table[FLOW_ID],flag, wl_orig)
                     sw.p4_table[FLOW_ID] += 1
                     if int(proto) == IP_PROTO_TCP:
                         f(client, dstip, dport, proto, srcip, sport) 
-                        self.flow_table.add_rule((dstip, dport, proto, srcip, sport), sw.sw_id, sw.p4_table[FLOW_ID],flag)
+                        self.flow_table.add_rule((dstip, dport, proto, srcip, sport), sw.sw_id, sw.p4_table[FLOW_ID],flag, wl_orig)
                         sw.p4_table[FLOW_ID] += 1
 
+    # resp_sw is a list of switch_id present in the path between two endpoints
+    def deploy_block_host_rules(self, resp_sw, srcip, proto, dstip, dport, f, flag, wl_orig=False):
+        rule = (srcip, proto, dstip, dport)
+        for sw in resp_sw:
+            client = self.clients[sw.sw_id]
+            if ((self.block_hosts_table.is_rule_installed(rule) and sw.sw_id not in self.block_hosts_table.rule_to_switches(rule))
+                or not self.block_hosts_table.is_rule_installed(rule)):
+                f(client, srcip, proto, dstip, dport)
+                self.block_hosts_table.add_rule(rule, sw.sw_id, sw.p4_table[BLOCK_HOSTS], flag, wl_orig)
+                sw.p4_table[BLOCK_HOSTS] += 1 
+            
+
+        
     # resp_sw is a list of switch_id present in the path between the two modbus endpoints
-    def deploy_modbus_rules(self, resp_sw, srcip, sport, funcode, payload_length, f, flag):
+    def deploy_modbus_rules(self, resp_sw, srcip, sport, funcode, payload_length, f, flag, wl_orig=False):
         rule = (srcip,sport, funcode, payload_length)
         for sw_id in resp_sw:
             switch = self.switches[sw_id]
@@ -573,7 +622,7 @@ class Controller(Iface):
             if ((self.modbus_table.is_rule_installed(rule) and sw_id not in self.modbus_table.rule_to_switches(rule))
                 or not self.modbus_table.is_rule_installed(rule)):
                 f(client, srcip, sport, funcode, payload_length)
-                self.modbus_table.add_rule(rule, sw_id, switch.p4_table[MODBUS],flag)
+                self.modbus_table.add_rule(rule, sw_id, switch.p4_table[MODBUS],flag, wl_orig)
                 switch.p4_table[MODBUS] += 1
             else:
                 if self.modbus_table.get_type_entry(rule, sw_id) != flag:
@@ -581,7 +630,7 @@ class Controller(Iface):
                     self.table_delete_entry(client, MODBUS, entry_handle)
                     self.flow_table.delete_rule(rule, sw.sw_id)
                     f(client, srcip, sport, funcode, payload_length)
-                    self.modbus_table.add_rule(rule, sw_id,sw.p4_table[MODBUS], flag)
+                    self.modbus_table.add_rule(rule, sw_id,sw.p4_table[MODBUS], flag, wl_orig)
                     sw.p4_table[MODBUS] += 1
 
     def is_flow_installed(self, flow):
@@ -606,7 +655,7 @@ class Controller(Iface):
                 dport = str(pkt[TCP].dport)
                 if not self.is_flow_installed((srcip, sport, proto, dstip, dport)):
                     resp_switch = self.get_resp_switch(srcip, dstip)  
-                    self.deploy_flow_id_rules(resp_switch, srcip, sport, proto, dstip, dport, self.add_flow_id_entry, RULE_ALLOW)
+                    self.deploy_flow_id_rules(resp_switch, srcip, sport, proto, dstip, dport, self.add_flow_id_entry, RULE_ALLOW, RULE_ORIGINAL)
 
                 flags = pkt[TCP].flags
                 if (flags & PSH) and (flags & ACK) and (sport == "5020" or dport == "5020"):
@@ -614,7 +663,7 @@ class Controller(Iface):
                     payload_length = str(pkt[Modbus].length)
                     if not self.modbus_table.is_rule_installed((srcip, sport, funcode, payload_length)):
                         resp_switch = self.flow_table.rule_to_switches((srcip, sport, proto, dstip, dport))
-                        self.deploy_modbus_rules(resp_switch, srcip, sport, funcode, payload_length, self.add_modbus_entry, RULE_ALLOW)
+                        self.deploy_modbus_rules(resp_switch, srcip, sport, funcode, payload_length, self.add_modbus_entry, RULE_ALLOW, RULE_ORIGINAL)
             #TODO UDP traffic
 
     def setup_default_entry(self):
@@ -651,6 +700,7 @@ class Controller(Iface):
             self.table_default_entry(client, SRTAG, NO_OP, [])
             self.table_default_entry(client, ARP_RESP, NO_OP, [])
             self.table_default_entry(client, ARP_FORW_RESP, FORWARD_ARP, [])
+            self.table_default_entry(client, BLOCK_HOSTS, NO_OP, [])
 
 
             for interface in sw.interfaces:

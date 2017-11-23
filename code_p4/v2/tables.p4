@@ -240,6 +240,19 @@ table flow_id {
     size : 1048576;
 }
 
+table block_hosts{
+    reads {
+        ipv4.srcAddr : exact;
+        ipv4.protocol : exact;
+        ipv4.dstAddr : exact;
+        tcp.dstPort : exact;
+    }
+    actions {
+        _drop;
+        _no_op;
+    }
+}
+
 table modbus {
     reads {
         ipv4.srcAddr : exact;

@@ -13,4 +13,8 @@ struct modbus_hdr {
     __u8        funcode;
 };
 
+struct modbus_diag_hdr {
+    __u16       subfuncode;
+};
+
 #endif
