@@ -7,6 +7,7 @@
 #include <thread>
 #include <iterator>
 #include <algorithm>
+#include <set>
 
 /* Netfilter queue */
 #include <netinet/in.h>
@@ -70,6 +71,9 @@ boost::shared_ptr<TProtocol> m_tprotocol(new TBinaryProtocol(ttransport));
 
 ControllerClient client(tprotocol); 
 ControllerClient m_client(m_tprotocol);
+
+// protocol requiring real-time communication
+std::set<__u16> real_com = {MODBUS_PORT};
 
 /* Convert u32 to an string ipv4 address */
 
@@ -269,12 +273,10 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                         if (modbus_info->funcode < 128) {
                             // Is it a Diagnostic function
                             if (modbus_info->funcode == 8) {
-                                std::vector<__u16> risk_fct{1, 4, 10}; 
                                 struct modbus_diag_hdr* diag_info = (struct modbus_diag_hdr*) (data + index + sizeof(struct modbus_hdr));
                                 __u16 diag_func = diag_info->subfuncode;
-                                send_pkt = std::find(risk_fct.begin(), risk_fct.end(),diag_func) != risk_fct.end();
+                                send_pkt = (diag_func == 1 || diag_func == 4 || diag_func == 10);
                             }
-
                             if (send_pkt) {
                                 switches.push_back((int16_t) 0);
                                 req.__set_length(modbus_length);
@@ -485,7 +487,11 @@ void broker_comm()
                         req = form_request(srcip,dstip, (int16_t) srcport, (int16_t) dstport, (int8_t) proto);
                         //FIXME retrieve switch from srcip
                         switches.push_back((int16_t) 0);
-                        client.allow(req, switches);
+                        // Checking it is a delay sensitive communication
+                        auto search  = real_com.find(dstport);
+                        if (search != real_com.end()){
+                            client.allow(req, switches);
+                        }
                     }
 
                 }
