@@ -21,7 +21,7 @@ from ipmininet.topologydb import TopologyDB
 from mininet.log import setLogLevel, info
 from ipmininet.cli import IPCLI
 from mininet.node import Switch, Host
-
+from ipmininet.link import IPLink, TCIntf
 from p4_mininet import P4Switch, P4Host
 from config_switch import SwitchConf
 from config_switch import SwitchCollection
@@ -79,7 +79,7 @@ class MultiSwitchTopo(IPTopo):
                              resp_network = ["10.0.10.0/24"])
                              
         host = self.addHost('mtu',mac = '00:05:00:00:00:00', ip="10.0.10.1/24")
-        self.addLink(host,sw_control)
+        self.addLink(host,sw_control, intf=TCIntf, params1={"delay":"5ms"})
 
         intf = str(sw_conf.current_intf)
         sw_conf.routing_table.append({"10.0.10.1/32":intf})
@@ -88,7 +88,7 @@ class MultiSwitchTopo(IPTopo):
 
         router_cc = self.addRouter('rcc')
 
-        self.addLink(router_cc , sw_control, igp_passive=True, params1={"ip":("10.0.10.30/24")})
+        self.addLink(router_cc , sw_control, intf=TCIntf, igp_passive=True, params1={"ip":("10.0.10.30/24"), "delay":"5ms"})
         intf = str(sw_conf.current_intf)
         sw_conf.add_interface({intf : "00:AA:BB:CC:00:01"})
         sw_conf.ids_port = intf
@@ -136,7 +136,7 @@ class MultiSwitchTopo(IPTopo):
                                         mac = mac,
                                         ip = ip) 
                     ids_added = True
-                    self.addLink(host, switch)
+                    self.addLink(host, switch, intf=TCIntf,params1={"delay":"5ms"})
 
                     self.host_switch_conf(sw_confg, intf_mac, mac, ip)
 
@@ -147,7 +147,7 @@ class MultiSwitchTopo(IPTopo):
                         host = self.addHost("s%d-h%d" % (switch_id, h + 2),
                                     mac = mac,
                                     ip = ip) 
-                        self.addLink(host, switch)
+                        self.addLink(host, switch,intf=TCIntf,params1={"delay":"5ms"})
                         self.host_switch_conf(sw_confg, intf_mac, mac, ip)
                         
                 else:
@@ -158,18 +158,18 @@ class MultiSwitchTopo(IPTopo):
                                             ip = "172.0.10.2/24", 
                                             inNamespace=False)
                     ids_addr = ip[:-3]
-                    self.addLink(ids, switch)
+                    self.addLink(ids, switch, intf=TCIntf,params1={"delay":"5ms"})
                     self.host_switch_conf(sw_confg, intf_mac, mac, ip) 
                     self.addLink(ids, root_gw,  params1={"ip":("172.0.10.1/24")})
 
-            self.addLink(router, switch, igp_passive=True, params1={"ip":("10.0.%d0.30/24"%(switch_id + 1))})
+            self.addLink(router, switch, intf=TCIntf,igp_passive=True,params1={"ip":("10.0.%d0.30/24"%(switch_id + 1)),"delay":"5ms"})
             self.router_switch_conf(sw_confg, "00:AA:BB:CC:%02x:01" %(switch_id +1))
 
-        self.addLink('rcc', 'r1', igp_area = "0.0.0.0", params1={"ip":("10.0.100.1/24")},params2={"ip":("10.0.100.2/24")}) 
-        self.addLink('r1', 'r2', igp_area = "0.0.0.0", params1={"ip":("10.0.101.1/24")},params2={"ip":("10.0.101.2/24")}) 
-        self.addLink('r2', 'r3', igp_area = "0.0.0.0", params1={"ip":("10.0.102.1/24")},params2={"ip":("10.0.102.2/24")}) 
-        self.addLink('r3', 'rcc', igp_area = "0.0.0.0", params1={"ip":("10.0.103.1/24")},params2={"ip":("10.0.103.2/24")}) 
-        self.addLink('r3', 'r1', igp_area = "0.0.0.0", params1={"ip":("10.0.105.1/24")},params2={"ip":("10.0.105.2/24")}) 
+        self.addLink('rcc', 'r1', intf=TCIntf,igp_area = "0.0.0.0", params1={"ip":("10.0.100.1/24"),"delay":"5ms"},params2={"ip":("10.0.100.2/24"), "delay":"5ms"}) 
+        self.addLink('r1', 'r2', intf=TCIntf,igp_area = "0.0.0.0", params1={"ip":("10.0.101.1/24"),"delay":"5ms"},params2={"ip":("10.0.101.2/24"), "delay":"5ms"}) 
+        self.addLink('r2', 'r3', intf=TCIntf, igp_area = "0.0.0.0", params1={"ip":("10.0.102.1/24"),"delay":"5ms"},params2={"ip":("10.0.102.2/24"), "delay":"5ms"}) 
+        self.addLink('r3', 'rcc', intf=TCIntf, igp_area = "0.0.0.0", params1={"ip":("10.0.103.1/24"),"delay":"5ms"},params2={"ip":("10.0.103.2/24"), "delay":"5ms"}) 
+        self.addLink('r3', 'r1', intf=TCIntf,igp_area = "0.0.0.0", params1={"ip":("10.0.105.1/24"),"delay":"5ms"},params2={"ip":("10.0.105.2/24"), "delay":"5ms"}) 
         
         self.set_ids_addr(encoder, ids_addr)
 
@@ -216,8 +216,11 @@ def main():
                 host = P4Host,
                 switch = P4Switch,
                 ipBase='10.0.0.0/16',
+                use_v6 = False,
                 allocate_IPs = False,
-                controller = None)
+                controller = None,
+                link = IPLink,
+                intf = TCIntf)
     net.start()
     
     #MTU connection    
@@ -265,6 +268,10 @@ def main():
     #h.cmd('sudo iptables -I INPUT -i eth0 -j NFQUEUE --queue-num 1')
     h.cmd('sudo iptables -I FORWARD -i eth0 -j NFQUEUE --queue-num 1')
     h.cmd('sysctl -w net.ipv4.ip_forward=1')
+
+    # Enable iptable for Force Listen Mode simulation
+    h = net.get('s2-h1')
+    h.cmd('sudo iptables -I INPUT -i eth0 -j NFQUEUE --queue-num 1')
     # Disabling reverse path filter
     for i in ['rcc','r1','r2','r3']:
         r = net.get(i)

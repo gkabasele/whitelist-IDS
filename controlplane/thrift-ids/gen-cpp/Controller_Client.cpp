@@ -74,6 +74,7 @@ ControllerClient m_client(m_tprotocol);
 
 // protocol requiring real-time communication
 std::set<__u16> real_com = {MODBUS_PORT};
+int number_recv_pkt = 0;
 
 /* Convert u32 to an string ipv4 address */
 
@@ -185,7 +186,8 @@ static u_int32_t print_pkt (struct nfq_data *tb)
     std::vector<int16_t> switches;
     Flow req;
     
-    
+    number_recv_pkt +=1; 
+    printf("Number of received packet: %d\n", number_recv_pkt);
     //struct sockaddr_in connection;
     //int sockfd;
     //int optval;
@@ -275,7 +277,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                             if (modbus_info->funcode == 8) {
                                 struct modbus_diag_hdr* diag_info = (struct modbus_diag_hdr*) (data + index + sizeof(struct modbus_hdr));
                                 __u16 diag_func = diag_info->subfuncode;
-                                send_pkt = (diag_func == 1 || diag_func == 4 || diag_func == 10);
+                                send_pkt = !(diag_func == 1 || diag_func == 4 || diag_func == 10);
                             }
                             if (send_pkt) {
                                 switches.push_back((int16_t) 0);
@@ -620,6 +622,7 @@ int main(int argc, char **argv)
 
     printf("closing library handle\n");
     nfq_close(h);
+
 
     return 0;
 }

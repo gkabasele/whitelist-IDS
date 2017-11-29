@@ -171,7 +171,7 @@ ADD_IDSTAG = 'add_ids_tag'
 
 # Value name
 CLONE_PKT_FLAG = '1'
-MAX_BLOCK_REQUESTS = 1
+MAX_BLOCK_REQUESTS = 3
 RULE_ALLOW = 1
 RULE_DROP = 0
 RULE_ORIGINAL = True
@@ -530,7 +530,7 @@ class Controller(Iface):
         runtime_data = parse_runtime_data(action, action_params)
         client.bm_mt_set_default_action(0, table_name, action_name, runtime_data)
 
-    # TODO Parametirize
+    # FIXME Parametrize
     def add_flow_id_entry(self, client, srcip, sport, proto, dstip, dport):
         self.table_add_entry(client, FLOW_ID, NO_OP,[srcip, sport, proto, dstip, dport],[])
 
@@ -740,7 +740,8 @@ def main(sw_config, capture, ip, port):
     controller.setup_connection(switches) 
     controller.setup_default_entry()
     print "Installing rules according to the capture"
-    controller.dessiminate_rules(capture)
+    if capture:
+        controller.dessiminate_rules(capture)
     processor = Processor(controller)
     transport = TSocket.TServerSocket(port=port)
     tfactory = TTransport.TBufferedTransportFactory()
@@ -751,7 +752,7 @@ def main(sw_config, capture, ip, port):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--conf', action='store', dest='conf', help='file containing description of switch')
-    parser.add_argument('--capture', action='store', dest='capture', help='training set capture for the whitelist')
+    parser.add_argument('--capture', action='store', dest='capture',default=None, help='training set capture for the whitelist')
     parser.add_argument('--ip', action='store', dest ='ip', default='172.0.10.2', help='ip address of the controller')
     parser.add_argument('--port', action='store', dest='port', type=int, default=2050, help='port used by controller')
     args = parser.parse_args()
