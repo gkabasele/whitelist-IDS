@@ -90,12 +90,24 @@ class RuleTables():
 
     '''
         rule : fields used for matching
+        switch_id : datapath id of switch containing the flow
+        
+        update rule entry number from the table
+    '''
+    @verify
+    def update_rule(self, rule, switch_id, num_entry, rule_type):
+        wl_orig = self.get_origin_entry(rule, switch_id) 
+        self.rules[rule][switch_id] = (num_entry, rule_type, wl_orig)
+        
+    '''
+        rule : fields used for matching
         
         return the list of switchs containing a rule for this fields
     '''
     @verify
     def rule_to_switches(self, rule):
-        return self.rules[rule].keys()
+        if rule in self.rules:
+            return self.rules[rule].keys()
 
     '''
         rule : fields used for matching
@@ -103,7 +115,8 @@ class RuleTables():
     '''
     @verify
     def get_num_entry(self, rule, switch_id):
-        return self.rules[rule][switch_id][0]
+        if rule in self.rules and switch_id in self.rules[rule]:
+            return self.rules[rule][switch_id][0]
     '''
         rule : fields used for matching
         return the type (ALLOW,DROP) the rule in switch with switch_id
@@ -124,11 +137,13 @@ class RuleTables():
         return self.rules
 
     def dump_table(self):
+        print "---------"
+        print "RuleTable"
         for rule, sw in self.rules.iteritems():
             print rule,":"
             for sw_id, entry_handle in sw.iteritems():
                 print "\tSwitch_id: ",sw_id," Entry: ",entry_handle , "\n"
-        
+        print "---------" 
 bind_layers(TCP, Modbus, dport=5020)
 bind_layers(TCP, Modbus, sport=5020)
 
@@ -298,6 +313,7 @@ class Controller(Iface):
         self.clients[id_client] = standard_client
         self.switches[id_client] = switch
 
+
     def setup_connection(self, switches):
         once = True
         for sw in switches:
@@ -379,8 +395,6 @@ class Controller(Iface):
         (srcip, sport, proto, dstip, dport, funcode, length) = resp
         flow = (srcip, sport, proto, dstip, dport)
 
-    
-            
         print "\n--------------------------"
         print "Received Blocking request" 
         print "srcip: %s, sport: %s, proto: %s" % (srcip, sport, proto)
@@ -399,12 +413,6 @@ class Controller(Iface):
             resp_sw = self.get_resp_switch(req.srcip, req.dstip)
             #  The source is the modbus server and we want to block the other endpoint
             self.deploy_block_host_rules(resp_sw, dstip, proto ,srcip, sport, self.add_block_entry ,RULE_DROP )  
-            """
-            self.deploy_flow_id_rules(resp_sw, srcip, sport, proto, dstip, dport, self.block_flow_id_entry, RULE_DROP)
-            if installed and (funcode != None and length != None): 
-                if not self.modbus_table.is_rule_installed((srcip, sport, funcode, length)):
-                    resp_sw = self.flow_table.rule_to_switches(flow)
-                    self.deploy_modbus_rules(resp_sw, srcip, sport, funcode, length, self.block_modbus_entry, RULE_DROP)"""
         elif dstip in self.block_request_host:
             self.block_request_host[dstip] += 1
         else:
@@ -611,6 +619,16 @@ class Controller(Iface):
                 self.block_hosts_table.add_rule(rule, sw.sw_id, sw.p4_table[BLOCK_HOSTS], flag, wl_orig)
                 sw.p4_table[BLOCK_HOSTS] += 1 
             
+    # resp_sw is a list of switch_id 
+    def deploy_delete_flow_rules(self, resp_sw, srcip, sport, proto, dstip, dport):
+        flow = (srcip, sport, proto, dstip, dport)
+        if self.flow_table.is_rule_installed(flow): 
+            for sw_id in resp_sw:
+                client = self.clients[sw_id]
+                if sw_id in self.flow_table.rule_to_switches(flow):
+                    entry_handle = self.flow_table.get_num_entry(flow, sw_id)
+                    self.table_delete_entry(client, FLOW_ID, entry_handle)
+                    self.flow_table.delete_rule(flow, sw_id)
 
         
     # resp_sw is a list of switch_id present in the path between the two modbus endpoints
@@ -645,26 +663,101 @@ class Controller(Iface):
         PSH = 0x08
         ACK = 0x10
         SYN = 0x02
+        FIN = 0x01
+        RST = 0x04
+        terminated_conn = {}
         capture = rdpcap(filename)    
         for pkt in capture:
-            srcip = pkt[IP].src
-            dstip = pkt[IP].dst
-            if pkt[IP].proto == IP_PROTO_TCP:
-                proto = str(pkt[IP].proto)
-                sport = str(pkt[TCP].sport)
-                dport = str(pkt[TCP].dport)
-                if not self.is_flow_installed((srcip, sport, proto, dstip, dport)):
-                    resp_switch = self.get_resp_switch(srcip, dstip)  
-                    self.deploy_flow_id_rules(resp_switch, srcip, sport, proto, dstip, dport, self.add_flow_id_entry, RULE_ALLOW, RULE_ORIGINAL)
+            if IP in pkt:
+                srcip = pkt[IP].src
+                dstip = pkt[IP].dst
+                if pkt[IP].proto == IP_PROTO_TCP:
+                    proto = str(pkt[IP].proto)
+                    sport = str(pkt[TCP].sport)
+                    dport = str(pkt[TCP].dport)
+                    flags = pkt[TCP].flags
+                    flow = (srcip, sport, proto, dstip, dport)
 
-                flags = pkt[TCP].flags
-                if (flags & PSH) and (flags & ACK) and (sport == "5020" or dport == "5020"):
-                    funcode = str(pkt[Modbus].funcode)
-                    payload_length = str(pkt[Modbus].length)
-                    if not self.modbus_table.is_rule_installed((srcip, sport, funcode, payload_length)):
-                        resp_switch = self.flow_table.rule_to_switches((srcip, sport, proto, dstip, dport))
-                        self.deploy_modbus_rules(resp_switch, srcip, sport, funcode, payload_length, self.add_modbus_entry, RULE_ALLOW, RULE_ORIGINAL)
-            #TODO UDP traffic
+                    if not self.is_flow_installed(flow) and terminated_conn.get(flow,-1) < 2:
+                        resp_switch = self.get_resp_switch(srcip, dstip)  
+                        self.deploy_flow_id_rules(resp_switch, srcip, sport, proto, dstip, dport, self.add_flow_id_entry, RULE_ALLOW, RULE_ORIGINAL)
+
+                    if (flags & PSH) and (flags & ACK) and (sport == "5020" or dport == "5020"):
+                        funcode = str(pkt[Modbus].funcode)
+                        payload_length = str(pkt[Modbus].length)
+                        if not self.modbus_table.is_rule_installed((srcip, sport, funcode, payload_length)):
+                            resp_switch = self.flow_table.rule_to_switches(flow)
+                            self.deploy_modbus_rules(resp_switch, srcip, sport, funcode, payload_length, self.add_modbus_entry, RULE_ALLOW, RULE_ORIGINAL)
+
+                    if (flags & RST):
+                        self.update_table(FLOW_ID)
+                        resp_switch = self.flow_table.rule_to_switches(flow)
+                        self.deploy_delete_flow_rules(resp_switch, srcip, sport, proto, dstip, dport)
+                        self.deploy_delete_flow_rules(resp_switch, dstip, dport, proto, srcip, sport)
+                    
+                    if (flags & FIN):
+                        #Register if server has send an FIN packet
+                        terminated_conn[flow] = terminated_conn.get(flow,0) + 1
+     
+                    if (flags & ACK):
+                        self.update_table(FLOW_ID)
+                        # Destination has received a FIN and send an ACK
+                        d_flow = (dstip, dport, proto, srcip, sport)
+                        if d_flow in terminated_conn:
+                            terminated_conn[d_flow] += 1 
+                            
+                        if terminated_conn.get(flow,-1) > 1 and terminated_conn.get(d_flow,-1) > 1: 
+                            resp_switch = self.flow_table.rule_to_switches(flow)
+                            self.deploy_delete_flow_rules(resp_switch, srcip, sport, proto, dstip, dport)
+                            self.deploy_delete_flow_rules(resp_switch, dstip, dport, proto, srcip, sport)
+
+                #TODO UDP traffic
+    def clear_table(self,table_name):
+        table = self.get_res("table", table_name, TABLES)
+        for client_id, client in self.clients.iteritems():
+            client.bm_mt_clear_entries(0, table_name, False) 
+
+    def hexstr(self, v):
+        return "".join("{:02x}".format(ord(c)) for c in v)
+
+    def parse_hexstr(self,s):
+        def ip_string(s):
+            ip = []
+            for i in xrange(0, len(s), 2):
+                block = int(s[i:i+2],16)
+                a = str(block) 
+                ip.append(a)
+            return ".".join(ip)
+
+                 
+        l = s.split(',')
+        assert len(l) == 5
+        srcip = ip_string(l[0]) 
+        sport = str(int(l[1],16))
+        proto = str(int(l[2],16))
+        dstip = ip_string(l[3])
+        dport = str(int(l[4],16))
+        return (srcip, sport, proto, dstip, dport) 
+
+    # FIXME For now only for flow table
+    def update_table(self, table_name):
+        for client_id, client in self.clients.iteritems():
+            entries = client.bm_mt_get_entries(0,table_name)
+            table = self.get_res("table", table_name, TABLES) 
+            for e in entries:
+                s = ""
+                for param in e.match_key:
+                   s += self.hexstr(param.exact.key) + ","
+                flow = self.parse_hexstr(s[:-1])
+                action = e.action_entry.action_name
+                if action == NO_OP:
+                    rule_type = RULE_ALLOW 
+                else:
+                    rule_type = RULE_DROP
+                self.flow_table.update_rule(flow, client_id, e.entry_handle, rule_type )
+                #print ("%s, %s, %s, %s") % (client_id, e.entry_handle, flow, e.action_entry.action_name)
+        
+
 
     def setup_default_entry(self):
         for switch in self.switches:
@@ -742,6 +835,9 @@ def main(sw_config, capture, ip, port):
     print "Installing rules according to the capture"
     if capture:
         controller.dessiminate_rules(capture)
+        controller.flow_table.dump_table()
+        controller.clear_table(FLOW_ID)
+        controller.flow_table.dump_table()
     processor = Processor(controller)
     transport = TSocket.TServerSocket(port=port)
     tfactory = TTransport.TBufferedTransportFactory()
