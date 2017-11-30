@@ -306,6 +306,7 @@ table add_tag_ids_tab {
         _drop;
         add_ids_tag;
     }
+    support_timeout: true;
 }
 
 table tcp_flags{

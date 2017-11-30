@@ -464,25 +464,28 @@ void broker_comm()
     broker::init();
     broker::endpoint bro_client("client");
     bro_client.peer("127.0.0.1",12345);
-    //FIXME Parameterization and create handler
+    //FIXME Parameterization and create handler for each queue
     broker::message_queue new_conn_queue("bro/event/new_conn", bro_client);
     broker::message_queue end_conn_queue("bro/event/end_conn", bro_client);
     broker::message_queue error_modbus_queue("bro/event/error_modbus", bro_client);
+    broker::message_queue flood_victim_queue("bro/event/flood_victim", bro_client);
 
-    pollfd ufds[3];
+    pollfd ufds[4];
     ufds[0].fd = new_conn_queue.fd();
     ufds[0].events = POLLIN;
     ufds[1].fd = end_conn_queue.fd();
     ufds[1].events = POLLIN;
     ufds[2].fd = error_modbus_queue.fd();
     ufds[2].events = POLLIN;
+    ufds[3].fd = flood_victim_queue.fd();
+    ufds[3].events = POLLIN;
     Flow req;
     std::vector<int16_t> switches;
     //catch exception
     try {
         ttransport->open();
         while(1){
-            int r = poll(ufds, 3, -1);
+            int r = poll(ufds, 4, -1);
             if (r == -1){
                 fprintf(stderr, "poll\n");
             } else {
@@ -541,7 +544,17 @@ void broker_comm()
                         }
                          
                     }
+
+                    
                 }
+
+                if (ufds[3].revents & POLLIN) {
+                    for(auto& msg : flood_victim_queue.want_pop()){
+                        std::cout << broker::to_string(msg) << std::endl;
+                        
+                    }
+                }
+                        
             }
 
         }
