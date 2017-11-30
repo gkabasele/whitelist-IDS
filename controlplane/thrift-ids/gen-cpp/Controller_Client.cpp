@@ -10,6 +10,7 @@
 #include <set>
 #include <random>
 #include <cmath>
+#include <mutex>
 
 /* Netfilter queue */
 #include <netinet/in.h>
@@ -73,6 +74,10 @@ boost::shared_ptr<TProtocol> m_tprotocol(new TBinaryProtocol(ttransport));
 
 ControllerClient client(tprotocol); 
 ControllerClient m_client(m_tprotocol);
+
+// List of possible targets of SYN FLOOD
+std::set<std::string> flood_targets;
+std::mutex flood_targets_mutex;
 
 // protocol requiring real-time communication
 std::set<__u16> real_com = {MODBUS_PORT};
@@ -267,6 +272,17 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     tcp_info = (struct tcphdr*) (data + (ip_info->ihl*4));
                     __u16 dest_port = ntohs(tcp_info->dest);
                     std::string dstip = to_ipv4_string(ip_info->daddr);
+
+                    // Check if dstip is a target victim
+                    flood_targets_mutex.lock();
+                    auto res = flood_targets.find(dstip);
+                    send_pkt = (res == flood_targets.end());
+                    flood_targets_mutex.unlock();
+                    if (! send_pkt){
+                       return id; 
+                    }
+
+                    
                     printf("TCP : dest = %d\n", dest_port);
                     /*TODO check for oveflow ?*/
                     int8_t proto = (int8_t) IPPROTO_TCP;
@@ -551,7 +567,11 @@ void broker_comm()
                 if (ufds[3].revents & POLLIN) {
                     for(auto& msg : flood_victim_queue.want_pop()){
                         std::cout << broker::to_string(msg) << std::endl;
-                        
+                        std::string srcip = broker::to_string(msg[1]);
+                        printf("Adding host %s to list of possible flooding target\n", srcip);
+                        flood_targets_mutex.lock();
+                        flood_targets.insert(srcip);  
+                        flood_targets_mutex.unlock();
                     }
                 }
                         
