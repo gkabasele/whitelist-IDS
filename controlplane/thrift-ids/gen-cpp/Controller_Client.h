@@ -38,4 +38,6 @@ unsigned short in_cksum(unsigned short *addr, int len);
 
 void broker_comm();
 
+__u64 generate_nounce();
+
 #endif

@@ -299,6 +299,8 @@ class Controller(Iface):
     def __init__(self):
         self.clients = {}
         self.switches = {}
+        self.ids_tag = {}
+        self.ids_sw_id = None
         # Flow : srcip, sport, proto, dstip, dport
         self.flow_table = RuleTables(5)
         # Modbus : srcip, sport, funcode, payload_length
@@ -362,15 +364,53 @@ class Controller(Iface):
                 length = str(u_length)
         return (req.srcip, sport, proto, req.dstip, dport, funcode, length)
 
+    def retrieve_nonce(self, sw):
+        nonce = 0
+        blocks = list(map(lambda x: (x & 0xffff), sw))
+        for i, val in enumerate(blocks):
+            nonce += (val << i*16) 
+        return nonce
     # Forward packet but send clone to ids
     @checkreq
     def mirror(self, req, sw):
         pass
 
-    # Forward packet to ids
+    # change the nonce when the IDS reforward the original packet
     @checkreq
-    def redirect(self, req, sw):
-        pass
+    def redirect(self, req, blocks):
+        resp = self.retrieve_value(req) 
+        if len(resp) != 7:
+            err = IDSControllerException(2, "redirect: Could not retrieve value from request")
+            raise err
+        if len(blocks) != 4:
+            err = IDSControllerException(3, "redirect: Could not retrieve nonce")
+            raise err
+        nonce = self.retrieve_nonce(blocks)
+        (srcip, sport, proto, dstip, dport, funcode, length) = resp
+
+        print "\n--------------------------"
+        print "Received Redirecting request" 
+        print "srcip: %s, sport: %s, proto: %s" % (srcip, sport, proto)
+        print "dstip: %s, dport: %s" % (dstip, dport)
+        print "funcode: %s, length: %s" % (funcode, length)
+        print "Nonce: %s" % nonce
+        print "--------------------------\n" 
+
+        
+        # 1) Remove IDS tag from the switch connected to the IDS 
+        # 2) Install IDS tag from the switch connected to the IDS 
+        client = self.clients[self.ids_sw_id] 
+        self.table_modify_entry(client, IDSTAG_ADD_TAB, ADD_IDSTAG, 0, [str(nonce)])
+
+        # 3) Remove IDS tag from corresponding switches
+        # 4) Install IDS tag from corresponding switches
+        resp_sw = self.get_resp_switch(srcip, dstip)
+        for sw in resp_sw:
+            client = self.clients[sw.sw_id]
+            # need to install a new rule for the switch
+            entry_handle = self.table_add_entry(client, IDSTAG, REMOVE_IDSTAG , [IP_PROTO_IDSTAG, str(nonce), sw.ids_port], [])
+            # Last argument set to 100ms
+            self.table_set_entry_timeout(client, IDSTAG, entry_handle, 100)
 
     def is_flow_origin(self, flow):
         (srcip, sport, proto, dstip, dport) = flow
@@ -477,6 +517,33 @@ class Controller(Iface):
             raise UIn_ResourceError(type_name, name)
         return array[name]
 
+    # timeout in ms
+    def table_set_entry_timeout(self, client, table_name, entry_handle, timeout):
+
+        table = self.get_res("table", table_name, TABLES)
+        if not table.support_timeout:
+            raise UIn_Error(
+                "Table {} does not support entry timeouts"  
+            )
+        print "Setting a", timeout, "ms timeout for entry", entry_handle
+        client.bm_mt_set_entry_ttl(0, table_name, entry_handle, timeout)
+
+    def table_modify_entry(self, client, table_name, action_name, entry_handle, action_params):
+
+        table = self.get_res("table", table_name, TABLES)
+        if action_name not in table.actions:
+            raise UIn_Error(
+                "Table %s has no action %s" % (table_name, action_name)
+            )
+        action = ACTIONS[action_name]
+        runtime_data = parse_runtime_data(action, action_params)
+        
+        print "Modifying entry", entry_handle, "for", MatchType.to_str(table.match_type), "match table", table_name
+        entry_handle = client.bm_mt_modify_entry(
+            0, table_name, entry_handle, action_name, runtime_data
+        )
+        return entry_handle
+
     def table_add_entry(self, client,table_name, action_name, match_key, action_params, prio=0):
         "Add entry to a match table: table_add <table name> <action name> <match fields> => <action parameters> [priority]"
         table = self.get_res("table", table_name, TABLES)
@@ -509,14 +576,13 @@ class Controller(Iface):
         
         print "Adding entry to", MatchType.to_str(table.match_type), "match table", table_name
         
-        
-        
         entry_handle = client.bm_mt_add_entry(
             0, table_name, match_key, action_name, runtime_data,
             BmAddEntryOptions(priority = priority)
         )
         
         print "Entry has been added with handle", entry_handle
+        return entry_handle
 
     def table_delete_entry(self, client, table_name, entry_handle):
         "Delete entry from a match table: table_delete <table name><entry handle>"
@@ -716,7 +782,7 @@ class Controller(Iface):
         table = self.get_res("table", table_name, TABLES)
         for client_id, client in self.clients.iteritems():
             client.bm_mt_clear_entries(0, table_name, False) 
-
+        # TODO clear self.flow_table
     def hexstr(self, v):
         return "".join("{:02x}".format(ord(c)) for c in v)
 
@@ -774,19 +840,22 @@ class Controller(Iface):
             #self.table_default_entry(client, TCP_FLAGS, CLONE_I2E, [])
             #self.table_add_entry(client, PKT_CLONED, ADD_TAG, [CLONE_PKT_FLAG],[sw.sw_id, sw.ids_addr, sw.ids_port]) 
             if is_ids_sw:
+                self.ids_sw_id = sw.sw_id
                 self.table_default_entry(client, FLOW_ID, NO_OP, [])
                 self.table_default_entry(client, MODBUS, NO_OP, [])
                 #self.table_add_entry(client, SRTAG, REMOVE_TAG, [IP_PROTO_SRTAG], [sw.ids_port])
                 self.table_add_entry(client, SRTAG, REMOVE_TAG, [IP_PROTO_SRTAG], ["1"])
                 self.table_default_entry(client, IDSTAG, NO_OP, [])
                 self.table_default_entry(client, IDSTAG_ADD_TAB, NO_OP, [])
-                self.table_add_entry(client, IDSTAG_ADD_TAB, ADD_IDSTAG, ["1"], [])
+                self.table_add_entry(client, IDSTAG_ADD_TAB, ADD_IDSTAG, ["1"], ["9"])
+                self.ids_tag[sw.sw_id] = 0
             else:
                 self.table_default_entry(client, FLOW_ID, ADD_TAG, [ sw.sw_id, sw.ids_addr, sw.ids_port])
                 self.table_default_entry(client, MODBUS, ADD_TAG, [sw.sw_id, sw.ids_addr, sw.ids_port])
                 self.table_default_entry(client, IDSTAG_ADD_TAB, NO_OP,[])
                 self.table_default_entry(client, IDSTAG, NO_OP, [])
-                self.table_add_entry(client, IDSTAG, REMOVE_IDSTAG , [IP_PROTO_IDSTAG, "1", sw.ids_port], [])
+                self.table_add_entry(client, IDSTAG, REMOVE_IDSTAG , [IP_PROTO_IDSTAG, "9", sw.ids_port], [])
+                self.ids_tag[sw.sw_id] = 0
 
             self.table_default_entry(client, ARP_FORW_REQ, STORE_ARP, [sw.gw_port])
             self.table_default_entry(client, IPV4_LPM, SET_EGRESS, [sw.gw_port])
@@ -835,9 +904,6 @@ def main(sw_config, capture, ip, port):
     print "Installing rules according to the capture"
     if capture:
         controller.dessiminate_rules(capture)
-        controller.flow_table.dump_table()
-        controller.clear_table(FLOW_ID)
-        controller.flow_table.dump_table()
     processor = Processor(controller)
     transport = TSocket.TServerSocket(port=port)
     tfactory = TTransport.TBufferedTransportFactory()

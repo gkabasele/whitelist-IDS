@@ -8,6 +8,8 @@
 #include <iterator>
 #include <algorithm>
 #include <set>
+#include <random>
+#include <cmath>
 
 /* Netfilter queue */
 #include <netinet/in.h>
@@ -171,6 +173,13 @@ void handle_tcp_pkt(struct iphdr* ip_info,struct srtag_hdr *srtag_info,
 
 
 
+__u64 generate_nonce()
+{
+    std::random_device rd;
+    std::mt19937_64 e2(rd());
+    std::uniform_int_distribution<long long int> dist(std::llround(std::pow(2,61)), std::llround(std::pow(2,62)));
+    return dist(e2);
+}
 
 /* returns packet id */
 static u_int32_t print_pkt (struct nfq_data *tb)
@@ -259,13 +268,12 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     __u16 dest_port = ntohs(tcp_info->dest);
                     std::string dstip = to_ipv4_string(ip_info->daddr);
                     printf("TCP : dest = %d\n", dest_port);
+                    /*TODO check for oveflow ?*/
+                    int8_t proto = (int8_t) IPPROTO_TCP;
+                    int16_t srcport = (int16_t) ntohs(tcp_info->source);
+                    int16_t dstport = (int16_t) ntohs(tcp_info->dest);
+                    req = form_request(srcip, dstip, srcport, dstport, proto);
                     if (is_modbus_pkt(tcp_info)) { 
-                        int8_t proto = (int8_t) IPPROTO_TCP;
-
-                        /*TODO check for oveflow ?*/
-                        int16_t srcport = (int16_t) ntohs(tcp_info->source);
-                        int16_t dstport = (int16_t) ntohs(tcp_info->dest);
-                        req = form_request(srcip, dstip, srcport, dstport, proto);
                         unsigned int index = (ip_info->ihl*4) + (tcp_info->doff*4);
                         struct modbus_hdr* modbus_info = (struct modbus_hdr*) (data + index);                
                         /* TODO check if int is too big for short values*/
@@ -289,7 +297,14 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     }
 
                     if (send_pkt){
-
+                        Flow n_req = form_request(srcip, dstip, srcport, dstport, proto);
+                        std::vector<int16_t> nonce_blocks;
+                        __u64 nonce = generate_nonce();  
+                        for (int i = 0; i < 4; i++) {
+                           __u16 block = (__u16) (nonce >> i*16); 
+                           nonce_blocks.push_back((int16_t)block);  
+                        }
+                        m_client.redirect(n_req, nonce_blocks);
                         /* Send packet */                
                         if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP)) < 0){
                             perror("socket");
