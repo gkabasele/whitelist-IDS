@@ -83,6 +83,53 @@ std::mutex flood_targets_mutex;
 std::set<__u16> real_com = {MODBUS_PORT};
 int number_recv_pkt = 0;
 
+std::vector<std::string> networks = {"10.0.0.0"};
+std::vector<std::string> masks = {"255.255.0.0"};
+
+/* Convert string to a u32 int*/
+__u32 to_ipv4_uint(std::string ip)
+{
+    int a, b, c, d;
+    __u32 addr = 0;
+    
+    // Check format of the string
+    if ( sscanf(ip.c_str(), "%d.%d.%d.%d", &a, &b, &c, &d) != 4)
+        return 0;
+
+    addr = a << 24;
+    addr |= b << 16;
+    addr |= c << 8;
+    addr |= d;
+    return addr;
+}
+
+/* Check if address in range*/
+bool is_in_range( __u32 ip_addr, std::string network, std::string mask)
+{
+    __u32 network_addr = to_ipv4_uint(network); 
+    __u32 mask_addr = to_ipv4_uint(mask);
+
+
+    // Get first and last address of the range
+    __u32 net_lower = (network_addr & mask_addr);
+    __u32 net_upper = (net_lower | (~mask_addr));
+    
+    return (ip_addr >= net_lower && ip_addr <= net_upper);
+}
+
+bool allowed_addr(__u32 ip_addr)
+{
+    bool allow = false;
+    // Check if srcip in range
+    for( unsigned int i = 0; i < networks.size() ; i++){
+        if(is_in_range(ip_addr, networks[i], masks[i]))
+        {
+            allow = true;
+            break;
+        }
+    }
+    return allow;
+}
 /* Convert u32 to an string ipv4 address */
 
 std::string to_ipv4_string(__u32 ip)
@@ -272,6 +319,11 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     tcp_info = (struct tcphdr*) (data + (ip_info->ihl*4));
                     __u16 dest_port = ntohs(tcp_info->dest);
                     std::string dstip = to_ipv4_string(ip_info->daddr);
+
+                    if (! allowed_addr(ntohl(ip_info->saddr)) || ! allowed_addr(ntohl(ip_info->daddr))){
+                        return id; 
+                    }
+                     
 
                     // Check if dstip is a target victim
                     flood_targets_mutex.lock();
@@ -520,6 +572,8 @@ void broker_comm()
                         } else {
                             exit(-1);
                         }
+                        if (! allowed_addr(to_ipv4_uint(srcip)) || ! allowed_addr(to_ipv4_uint(dstip)))
+                            break;
                         req = form_request(srcip,dstip, (int16_t) srcport, (int16_t) dstport, (int8_t) proto);
                         //FIXME retrieve switch from srcip
                         switches.push_back((int16_t) 0);
@@ -568,7 +622,7 @@ void broker_comm()
                     for(auto& msg : flood_victim_queue.want_pop()){
                         std::cout << broker::to_string(msg) << std::endl;
                         std::string srcip = broker::to_string(msg[1]);
-                        printf("Adding host %s to list of possible flooding target\n", srcip);
+                        std::cout <<"Adding host " << srcip << " to list of possible flooding target" << std::endl; 
                         flood_targets_mutex.lock();
                         flood_targets.insert(srcip);  
                         flood_targets_mutex.unlock();

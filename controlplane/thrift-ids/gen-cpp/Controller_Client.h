@@ -13,6 +13,10 @@
 #include "srtag.h"
 #include "flows.h"
 
+__u32 to_ipv4_uint(std::string ip);
+
+bool allowed_addr(__u32 ip_addr);
+bool is_in_range(__u32 ip_addr, std::string network, std::string mask);
 
 std::string to_ipv4_string(__u32 ip);
 
