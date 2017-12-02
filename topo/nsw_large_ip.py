@@ -162,7 +162,7 @@ class MultiSwitchTopo(IPTopo):
         
         self.set_ids_addr(encoder, ids_addr)
 
-        encoder.encode_switch_conf("sw_conf_large.json")
+        encoder.encode_switch_conf("sw_conf_large_v2.json")
         super(MultiSwitchTopo, self).build(*args, **kwargs)
 
     def int2dpid( self, dpid ):
@@ -258,7 +258,7 @@ def main():
             if sub_id != 3:
                 h = net.get('s%d-h%d' % (sub_id, n + 1))
                 h.describe()
-                mod = 'sudo python ~/client-server/modbus/modbus_server.py --ip 10.0.%d0.%d --port 5020' % ((sub_id + 1), (n+1))
+                mod = 'python ~/client-server/modbus/modbus_server.py --ip 10.0.%d0.%d --port 5020' % ((sub_id + 1), (n+1))
                 #h.cmd(mod)
     h = net.get('s3-h1')
     h.describe()
