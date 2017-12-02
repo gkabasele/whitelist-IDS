@@ -54,6 +54,7 @@
 #define EXP_CODE 6
 #define TCP_LABEL "tcp"
 #define UDP_LABEL "udp"
+#define IPERF_PORT 5021
 
 using namespace apache::thrift;
 using namespace apache::thrift::protocol;
@@ -80,7 +81,7 @@ std::set<std::string> flood_targets;
 std::mutex flood_targets_mutex;
 
 // protocol requiring real-time communication
-std::set<__u16> real_com = {MODBUS_PORT};
+std::set<__u16> real_com = {MODBUS_PORT, IPERF_PORT};
 int number_recv_pkt = 0;
 
 std::vector<std::string> networks = {"10.0.0.0"};

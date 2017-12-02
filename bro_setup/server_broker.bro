@@ -10,7 +10,7 @@ redef exit_only_after_terminate = T;
 redef Broker::endpoint_name = "listener";
 
 # Wait this long upon seeing an initial SYN
-redef tcp_attempt_delay = 1sec;
+redef tcp_attempt_delay = 5sec;
 
 global modbus_ports = { 502/tcp, 5020/tcp };
 
