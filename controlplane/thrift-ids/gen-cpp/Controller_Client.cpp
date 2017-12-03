@@ -11,6 +11,7 @@
 #include <random>
 #include <cmath>
 #include <mutex>
+#include <cerrno>
 
 /* Netfilter queue */
 #include <netinet/in.h>
@@ -20,6 +21,7 @@
 #include <linux/netfilter.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <poll.h>
+#include <sys/socket.h>
 
 /* Libcrafter */
 #include <crafter.h>
@@ -55,6 +57,11 @@
 #define TCP_LABEL "tcp"
 #define UDP_LABEL "udp"
 #define IPERF_PORT 5021
+/* Header size in bytes*/
+#define MBAP_LEN 6
+#define MAX_TCP_LEN 60
+#define MAX_IP_LEN 60
+#define MAX_MODBUS_LEN 255
 
 using namespace apache::thrift;
 using namespace apache::thrift::protocol;
@@ -84,9 +91,21 @@ std::mutex flood_targets_mutex;
 std::set<__u16> real_com = {MODBUS_PORT, IPERF_PORT};
 int number_recv_pkt = 0;
 
+// Use map ?  net->mask
 std::vector<std::string> networks = {"10.0.0.0"};
 std::vector<std::string> masks = {"255.255.0.0"};
+// IP addresses of MTU
+std::vector<std::string> mtus = {"10.0.10.1"};
 
+
+
+bool is_mtu(std::string ip)
+{
+
+ std::vector<std::string>::iterator it;
+ it = std::find(mtus.begin(),mtus.end(),ip);
+ return (it != mtus.end());
+}
 /* Convert string to a u32 int*/
 __u32 to_ipv4_uint(std::string ip)
 {
@@ -118,6 +137,7 @@ bool is_in_range( __u32 ip_addr, std::string network, std::string mask)
     return (ip_addr >= net_lower && ip_addr <= net_upper);
 }
 
+// FIXME use iterator
 bool allowed_addr(__u32 ip_addr)
 {
     bool allow = false;
@@ -315,7 +335,6 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     int sockfd;
                     int optval = 1;
                     bool send_pkt = true;
-                    //TODO checkmalformed modbus packet (wrong len and bad ip)
 
                     tcp_info = (struct tcphdr*) (data + (ip_info->ihl*4));
                     __u16 dest_port = ntohs(tcp_info->dest);
@@ -337,24 +356,31 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 
                     
                     printf("TCP : dest = %d\n", dest_port);
-                    /*TODO check for oveflow ?*/
                     int8_t proto = (int8_t) IPPROTO_TCP;
                     int16_t srcport = (int16_t) ntohs(tcp_info->source);
                     int16_t dstport = (int16_t) ntohs(tcp_info->dest);
                     req = form_request(srcip, dstip, srcport, dstport, proto);
                     if (is_modbus_pkt(tcp_info)) { 
+                        
                         unsigned int index = (ip_info->ihl*4) + (tcp_info->doff*4);
+                        // Check packet format, too large 
+                        if (ret > (MAX_IP_LEN + MAX_TCP_LEN + MAX_MODBUS_LEN))
+                            return id;
                         struct modbus_hdr* modbus_info = (struct modbus_hdr*) (data + index);                
-                        /* TODO check if int is too big for short values*/
                         int8_t funcode = (int8_t) modbus_info->funcode;
                         int16_t modbus_length = (int16_t) ntohs(modbus_info->len);
                         printf("Modbus Pkt: funcode: %d, length: %d\n", modbus_info->funcode, ntohs(modbus_info->len));
+                        // Check if packet malformed
+                        if ((unsigned int)ret != (index + MBAP_LEN + ntohs(modbus_info->len))) 
+                            return id;
+
                         if (modbus_info->funcode < 128) {
                             // Is it a Diagnostic function
                             if (modbus_info->funcode == 8) {
                                 struct modbus_diag_hdr* diag_info = (struct modbus_diag_hdr*) (data + index + sizeof(struct modbus_hdr));
                                 __u16 diag_func = diag_info->subfuncode;
-                                send_pkt = !(diag_func == 1 || diag_func == 4 || diag_func == 10);
+                                if (!(is_mtu(srcip) || is_mtu(dstip)))
+                                    send_pkt = !(diag_func == 1 || diag_func == 4 || diag_func == 10);
                             }
                             if (send_pkt) {
                                 switches.push_back((int16_t) 0);
@@ -656,7 +682,7 @@ int main(int argc, char **argv)
     int rv;
     // TODO: what happens if packet too big
     char buf[4096] __attribute__ ((aligned));
-
+    uint32_t queuelen = 2048;
     
 
     // NFQUEUE packet capture of packet
@@ -688,6 +714,14 @@ int main(int argc, char **argv)
             fprintf(stderr, "error during nfq_create_queue()\n");
             exit(1);
     }
+
+    // Increase size of kernel queue
+    printf("Increasing queue size\n");
+    if (nfq_set_queue_maxlen(qh, queuelen) < 0) {
+            fprintf(stderr, "can't set queue size\n");
+            exit(1);
+    }
+    
     // Sets the amount of data to be copied to userspace for each packet
     // Last argument, the siez of the packet that we want to get
     printf("setting copy_packet mode\n");
@@ -697,12 +731,19 @@ int main(int argc, char **argv)
     }
 
     fd = nfq_fd(h);
+
+    int enobuf_value = 1;
+    setsockopt(fd, SOL_NETLINK, NETLINK_NO_ENOBUFS, &enobuf_value, sizeof(enobuf_value));
     std::thread broker_th(&broker_comm); 
     try {
         m_ttransport->open();
         while ((rv = recv(fd, buf, sizeof(buf), 0)) && rv >= 0) {
                 printf("pkt received\n");
                 nfq_handle_packet(h, buf, rv);
+        }
+        if (rv <0) {
+            std::perror("Error when reading:\n");
+            exit(1);
         }
         m_ttransport->close();
     } catch (TTransportException e) {

@@ -825,12 +825,11 @@ class Controller(Iface):
         
 
 
-    def setup_default_entry(self):
+    def setup_default_entry(self, ids_sw_id):
         for switch in self.switches:
             sw = self.switches[switch]
             client = self.clients[sw.sw_id]
-            is_ids_sw = sw.is_responsible(sw.ids_addr)
-
+            self.ids_sw_id = ids_sw_id
             self.table_default_entry(client, SEND_FRAME, DROP, [])
             self.table_default_entry(client, FORWARD, NO_OP, [])
             self.table_default_entry(client, TCP_FLAGS, NO_OP, [])
@@ -839,8 +838,7 @@ class Controller(Iface):
             # Set rule in  PKT_CLONED to distinguish instance_type of packet
             #self.table_default_entry(client, TCP_FLAGS, CLONE_I2E, [])
             #self.table_add_entry(client, PKT_CLONED, ADD_TAG, [CLONE_PKT_FLAG],[sw.sw_id, sw.ids_addr, sw.ids_port]) 
-            if is_ids_sw:
-                self.ids_sw_id = sw.sw_id
+            if sw.sw_id == ids_sw_id:
                 self.table_default_entry(client, FLOW_ID, NO_OP, [])
                 self.table_default_entry(client, MODBUS, NO_OP, [])
                 #self.table_add_entry(client, SRTAG, REMOVE_TAG, [IP_PROTO_SRTAG], [sw.ids_port])
@@ -894,13 +892,13 @@ def load_json_config(standard_client=None, json_path=None):
     load_json_str(utils.get_json_config(standard_client, json_path))
 
 
-def main(sw_config, capture, ip, port):
+def main(sw_config, capture, ip, port, ids_sw_id):
     print "Creating switches"
     switches = create_switches(sw_config) 
     controller = Controller()
     print "Connecting to switches and setting default entry"
     controller.setup_connection(switches) 
-    controller.setup_default_entry()
+    controller.setup_default_entry(ids_sw_id)
     print "Installing rules according to the capture"
     if capture:
         controller.dessiminate_rules(capture)
@@ -917,5 +915,6 @@ if __name__ == '__main__':
     parser.add_argument('--capture', action='store', dest='capture',default=None, help='training set capture for the whitelist')
     parser.add_argument('--ip', action='store', dest ='ip', default='172.0.10.2', help='ip address of the controller')
     parser.add_argument('--port', action='store', dest='port', type=int, default=2050, help='port used by controller')
+    parser.add_argument('--ids', action='store', dest='ids_sw_id',default='3', help='datapath id of the switch connected to the IDS')
     args = parser.parse_args()
-    main(args.conf, args.capture, args.ip, args.port)
+    main(args.conf, args.capture, args.ip, args.port, args.ids_sw_id)

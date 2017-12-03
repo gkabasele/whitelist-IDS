@@ -79,7 +79,7 @@ class MultiSwitchTopo(IPTopo):
                              resp_network = ["10.0.10.0/24"])
                              
         host = self.addHost('mtu',mac = '00:05:00:00:00:00', ip="10.0.10.1/24")
-        self.addLink(host,sw_control, intf=TCIntf, params1={"delay":"5ms"})
+        self.addLink(host,sw_control, intf=TCIntf, params1={"delay":"5ms", "bw":10}, params2={"delay":"5ms", "bw":10})
 
         intf = str(sw_conf.current_intf)
         sw_conf.routing_table.append({"10.0.10.1/32":intf})
@@ -88,7 +88,7 @@ class MultiSwitchTopo(IPTopo):
 
         router_cc = self.addRouter('rcc')
 
-        self.addLink(router_cc , sw_control, intf=TCIntf, igp_passive=True, params1={"ip":("10.0.10.30/24"),"delay":"5ms"})
+        self.addLink(router_cc , sw_control, intf=TCIntf, igp_passive=True, params1={"ip":("10.0.10.30/24"),"delay":"5ms", "bw":10}, params2={"delay":"5ms", "bw":10})
         intf = str(sw_conf.current_intf)
         sw_conf.add_interface({intf : "00:AA:BB:CC:00:01"})
         sw_conf.ids_port = intf
@@ -137,7 +137,7 @@ class MultiSwitchTopo(IPTopo):
                     host = self.addHost("s%d-h%d" % (switch_id, h + 1),
                                         mac = mac,
                                         ip = ip) 
-                    self.addLink(host, switch, intf=TCIntf,params1={"delay":"5ms"})
+                    self.addLink(host, switch, intf=TCIntf,params1={"delay":"5ms", "bw":10},params2={"delay":"5ms", "bw":10})
 
                     self.host_switch_conf(sw_confg, intf_mac, mac, ip)
                     if switch_id == 3:
@@ -151,14 +151,14 @@ class MultiSwitchTopo(IPTopo):
                     self.addLink(host, root_gw,  params1={"ip":("172.0.10.1/24")})
                     num_ids += 1
 
-            self.addLink(router, switch, intf=TCIntf,igp_passive=True,params1={"ip":("10.0.%d0.30/24"%(switch_id + 1)), "delay":"5ms"})
+            self.addLink(router, switch, intf=TCIntf,igp_passive=True,params1={"ip":("10.0.%d0.30/24"%(switch_id + 1)), "delay":"5ms","bw":10}, params2={"delay":"5ms","bw":10})
             self.router_switch_conf(sw_confg, "00:AA:BB:CC:%02x:01" %(switch_id +1))
 
-        self.addLink('rcc', 'r1', intf=TCIntf,igp_area = "0.0.0.0", params1={"ip":("10.0.100.1/24"),"delay":"5ms"},params2={"ip":("10.0.100.2/24"), "delay":"5ms"}) 
-        self.addLink('r1', 'r2', intf=TCIntf,igp_area = "0.0.0.0", params1={"ip":("10.0.101.1/24"),"delay":"5ms"},params2={"ip":("10.0.101.2/24"), "delay":"5ms"}) 
-        self.addLink('r2', 'r3', intf=TCIntf, igp_area = "0.0.0.0", params1={"ip":("10.0.102.1/24"),"delay":"5ms"},params2={"ip":("10.0.102.2/24"), "delay":"5ms"}) 
-        self.addLink('r3', 'rcc', intf=TCIntf, igp_area = "0.0.0.0", params1={"ip":("10.0.103.1/24"),"delay":"5ms"},params2={"ip":("10.0.103.2/24"), "delay":"5ms"}) 
-        self.addLink('r3', 'r1', intf=TCIntf,igp_area = "0.0.0.0", params1={"ip":("10.0.105.1/24"),"delay":"5ms"},params2={"ip":("10.0.105.2/24"), "delay":"5ms"}) 
+        self.addLink('rcc', 'r1', intf=TCIntf,igp_area = "0.0.0.0", params1={"ip":("10.0.100.1/24"),"delay":"5ms", "bw":10},params2={"ip":("10.0.100.2/24"), "delay":"5ms", "bw":10}) 
+        self.addLink('r1', 'r2', intf=TCIntf,igp_area = "0.0.0.0", params1={"ip":("10.0.101.1/24"),"delay":"5ms", "bw":10},params2={"ip":("10.0.101.2/24"), "delay":"5ms", "bw":10}) 
+        self.addLink('r2', 'r3', intf=TCIntf, igp_area = "0.0.0.0", params1={"ip":("10.0.102.1/24"),"delay":"5ms", "bw":10},params2={"ip":("10.0.102.2/24"), "delay":"5ms", "bw":10}) 
+        self.addLink('r3', 'rcc', intf=TCIntf, igp_area = "0.0.0.0", params1={"ip":("10.0.103.1/24"),"delay":"5ms", "bw":10},params2={"ip":("10.0.103.2/24"), "delay":"5ms", "bw":10}) 
+        self.addLink('r3', 'r1', intf=TCIntf,igp_area = "0.0.0.0", params1={"ip":("10.0.105.1/24"),"delay":"5ms", "bw":10},params2={"ip":("10.0.105.2/24"), "delay":"5ms", "bw":10}) 
         
         self.set_ids_addr(encoder, ids_addr)
 
@@ -258,8 +258,8 @@ def main():
             if sub_id != 3:
                 h = net.get('s%d-h%d' % (sub_id, n + 1))
                 h.describe()
-                mod = 'python ~/client-server/modbus/modbus_server.py --ip 10.0.%d0.%d --port 5020' % ((sub_id + 1), (n+1))
-                #h.cmd(mod)
+                mod = 'python ~/client-server/modbus/modbus_server.py --ip 10.0.%d0.%d --port 5020&' % ((sub_id + 1), (n+1))
+                h.cmd(mod)
     h = net.get('s3-h1')
     h.describe()
     h_gw = net.get('s3-h2')

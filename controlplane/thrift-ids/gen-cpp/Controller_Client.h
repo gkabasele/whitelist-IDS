@@ -15,6 +15,7 @@
 
 __u32 to_ipv4_uint(std::string ip);
 
+bool is_mtu(std::string ip);
 bool allowed_addr(__u32 ip_addr);
 bool is_in_range(__u32 ip_addr, std::string network, std::string mask);
 
