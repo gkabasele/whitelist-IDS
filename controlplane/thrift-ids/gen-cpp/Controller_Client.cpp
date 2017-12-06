@@ -12,6 +12,8 @@
 #include <cmath>
 #include <mutex>
 #include <cerrno>
+#include <memory>
+#include <chrono>
 
 /* Netfilter queue */
 #include <netinet/in.h>
@@ -46,8 +48,7 @@
 #include "flows.h"
 
 /* Logging */
-#define LOGURU_IMPLEMENTATION 1
-#include "loguru.hpp"
+#include <spdlog/spdlog.h>
 
 
 /* Index of value in message vector from broker agent*/
@@ -88,6 +89,9 @@ boost::shared_ptr<TProtocol> m_tprotocol(new TBinaryProtocol(ttransport));
 ControllerClient client(tprotocol); 
 ControllerClient m_client(m_tprotocol);
 
+// Logging init
+auto ids_logger = spdlog::rotating_logger_mt("basic_logger", "logs/ids", 1048576*5,3);
+
 // List of possible targets of SYN FLOOD
 std::set<std::string> flood_targets;
 std::mutex flood_targets_mutex;
@@ -101,8 +105,6 @@ std::vector<std::string> networks = {"10.0.0.0"};
 std::vector<std::string> masks = {"255.255.0.0"};
 // IP addresses of MTU
 std::vector<std::string> mtus = {"10.0.10.1"};
-
-
 
 bool is_mtu(std::string ip)
 {
@@ -274,11 +276,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
     Flow req;
     
     number_recv_pkt +=1; 
-    //printf("Number of received packet: %d\n", number_recv_pkt);
-    //LOG_F(INFO,"Number of received packet: %d\n", number_recv_pkt);
-    //struct sockaddr_in connection;
-    //int sockfd;
-    //int optval;
+    ids_logger->info("Number of received packet: %d", number_recv_pkt);
     
     unsigned char *data;
 
@@ -286,33 +284,14 @@ static u_int32_t print_pkt (struct nfq_data *tb)
     ph = nfq_get_msg_packet_hdr(tb);
     if (ph) {
             id = ntohl(ph->packet_id);
-            //printf("hw_protocol=0x%04x hook=%u id=%u ",
-            //        ntohs(ph->hw_protocol), ph->hook, id);
-            /*LOG_F(INFO, "hw_protocol=0x%04x hook=%u id=%u ",
-              ntohs(ph->hw_protocol), ph->hook, id);*/
+            ids_logger->info("hw_protocol=0x%04x hook=%u id=%u ",
+              ntohs(ph->hw_protocol), ph->hook, id);
     }
-    // Retrieves the hardware address associated with the given queued packet. 
-    //hwph = nfq_get_packet_hw(tb);
-    //if (hwph) {
-    //        int i, hlen = ntohs(hwph->hw_addrlen);
-    //        printf("hw_src_addr=");
-    //        for (i = 0; i < hlen-1; i++)
-    //                printf("%02x:", hwph->hw_addr[i]);
-    //        printf("%02x ", hwph->hw_addr[hlen-1]);
-    //}
-   
-    /* Return the netfilet mark currently assiged to the given queued packet 
-    mark = nfq_get_nfmark(tb);
-    if (mark)
-            printf("mark=%u ", mark);*/
-    
+       
     ret = nfq_get_payload(tb, &data);
     if (ret >= 0){
-            //LOG_F(INFO, "payload_len=%d ", ret);
-            //printf("payload_len=%d ", ret);
+            ids_logger->info( "payload_len=%d ", ret);
             ip_info  = (struct iphdr *) data;
-            //printf("IP : src = %u , dest = %u\n " , ip_info->saddr, ip_info->daddr);
-            //LOG_F(INFO, "IP : src = %u , dest = %u\n " , ip_info->saddr, ip_info->daddr);
             std::string srcip = to_ipv4_string(ip_info->saddr);
             switch(ip_info->protocol) {
                 case IPPROTO_SRTAG: 
@@ -348,6 +327,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 
                     tcp_info = (struct tcphdr*) (data + (ip_info->ihl*4));
                     __u16 dest_port = ntohs(tcp_info->dest);
+                    __u16 src_port = ntohs(tcp_info->source);
                     std::string dstip = to_ipv4_string(ip_info->daddr);
 
                     if (! allowed_addr(ntohl(ip_info->saddr)) || ! allowed_addr(ntohl(ip_info->daddr))){
@@ -356,6 +336,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     }
                      
 
+                    ids_logger->info("srcip: %u , destip: %u, sport: %u, dport: %u  " , ip_info->saddr, ip_info->daddr, src_port,dest_port);
                     // Check if dstip is a target victim
                     flood_targets_mutex.lock();
                     auto res = flood_targets.find(dstip);
@@ -367,12 +348,9 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                        return id; 
                     }
 
-                    
-                    //printf("TCP : dest = %d\n", dest_port);
-                    //LOG_F(INFO, "TCP : dest = %d\n", dest_port);
                     int8_t proto = (int8_t) IPPROTO_TCP;
-                    int16_t srcport = (int16_t) ntohs(tcp_info->source);
-                    int16_t dstport = (int16_t) ntohs(tcp_info->dest);
+                    int16_t srcport = (int16_t) src_port;
+                    int16_t dstport = (int16_t) dest_port;
                     req = form_request(srcip, dstip, srcport, dstport, proto);
                     if (is_modbus_pkt(tcp_info)) { 
                         
@@ -383,8 +361,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                         struct modbus_hdr* modbus_info = (struct modbus_hdr*) (data + index);                
                         int8_t funcode = (int8_t) modbus_info->funcode;
                         int16_t modbus_length = (int16_t) ntohs(modbus_info->len);
-                        //printf("Modbus Pkt: funcode: %d, length: %d\n", modbus_info->funcode, ntohs(modbus_info->len));
-                        //LOG_F(INFO, "Modbus Pkt: funcode: %d, length: %d\n", modbus_info->funcode, ntohs(modbus_info->len));
+                        ids_logger->info("Modbus Pkt: funcode: %d, length: %d", modbus_info->funcode, ntohs(modbus_info->len));
                         // Check if packet malformed
                         if ((unsigned int)ret != (index + MBAP_LEN + ntohs(modbus_info->len))) 
                             return id;
@@ -441,7 +418,6 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                 }   break;
                 default:
                 {
-                    printf("Unknown protocol");
                     break;
                 }
             }
@@ -699,14 +675,16 @@ int main(int argc, char **argv)
     // TODO: what happens if packet too big
     char buf[4096] __attribute__ ((aligned));
     uint32_t queuelen = 2048;
-    
-    // Logging init
-    loguru::init(argc, argv);
-    loguru::add_file("ids.log", loguru::Append, loguru::Verbosity_INFO);
-        
+
+    // setting async mode
+    spdlog::set_level(spdlog::level::info);
+    spdlog::set_async_mode(4096, spdlog::async_overflow_policy::block_retry,
+                       nullptr,
+                       std::chrono::seconds(2)); 
+
+            
     // NFQUEUE packet capture of packet
-    //printf("opening library handle\n");
-    //LOG_F(INFO, "Opening library handle");
+    ids_logger->info("Opening library handle");
     h = nfq_open();
     if (!h) {
             //fprintf(stderr, "error during nfq_open()\n");
@@ -715,23 +693,21 @@ int main(int argc, char **argv)
 
     
     //obsolete since kernel 3.8
-    //printf("unbinding existing nf_queue handler for AF_INET (if any)\n");
-    //LOG_F(INFO, "unbinding existing nf_queue handler for AF_INET (if any)\n");
+    ids_logger->info("unbinding existing nf_queue handler for AF_INET (if any)");
     if (nfq_unbind_pf(h, AF_INET) < 0) {
             fprintf(stderr, "error during nfq_unbind_pf()\n");
             exit(1);
     }
 
     //printf("binding nfnetlink_queue as nf_queue handler for AF_INET\n");
-    //LOG_F(INFO, "binding nfnetlink_queue as nf_queue handler for AF_INET\n");
+    ids_logger->info("binding nfnetlink_queue as nf_queue handler for AF_INET");
     if (nfq_bind_pf(h, AF_INET) < 0) {
             fprintf(stderr, "error during nfq_bind_pf()\n");
             exit(1);
     }
 
     // Last argument, some data to pass to the callback function
-    //printf("binding this socket to queue '1'\n");
-    //LOG_F(INFO, "binding this socket to queue '1'\n");
+    ids_logger->info("binding this socket to queue '1'");
     qh = nfq_create_queue(h,  1, &callback, NULL);
     if (!qh) {
             fprintf(stderr, "error during nfq_create_queue()\n");
@@ -739,8 +715,7 @@ int main(int argc, char **argv)
     }
 
     // Increase size of kernel queue
-    //printf("Increasing queue size\n");
-    //LOG_F(INFO, "Increasing queue size\n");
+    ids_logger->info("Increasing queue size");
     if (nfq_set_queue_maxlen(qh, queuelen) < 0) {
             fprintf(stderr, "can't set queue size\n");
             exit(1);
@@ -748,8 +723,7 @@ int main(int argc, char **argv)
     
     // Sets the amount of data to be copied to userspace for each packet
     // Last argument, the siez of the packet that we want to get
-    //printf("setting copy_packet mode\n");
-    //LOG_F(INFO, "setting copy_packet mode\n");
+    ids_logger->info("setting copy_packet mode");
     if (nfq_set_mode(qh, NFQNL_COPY_PACKET, 0xffff) < 0) {
             fprintf(stderr, "can't set packet_copy mode\n");
             exit(1);
@@ -778,8 +752,7 @@ int main(int argc, char **argv)
     }
     broker_th.join();
 
-    //printf("unbinding from queue 0\n");
-    //LOG_F(INFO,"unbinding from queue 0\n");
+    ids_logger->info("unbinding from queue 0");
     nfq_destroy_queue(qh);
 
     #ifdef INSANE
@@ -789,10 +762,9 @@ int main(int argc, char **argv)
     nfq_unbind_pf(h, AF_INET);
     #endif
 
-    //printf("closing library handle\n");
-    //LOG_F(INFO,"closing library handle\n");
+    ids_logger->info("Closing library handle");
     nfq_close(h);
-
+    spdlog::drop_all();
 
     return 0;
 }

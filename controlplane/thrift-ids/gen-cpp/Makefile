@@ -3,16 +3,17 @@ GEN_OBJ := $(patsubst %.cpp,%.o, $(GEN_SRC))
 
 THRIFT_DIR := /usr/local/include/thrift
 BOOST_DIR := /usr/local/include
+SPDLOG_DIR := /usr/local/include/spdlog
 
 
-INC := -I$(THRIFT_DIR) -I$(BOOST_DIR)
+INC := -I$(THRIFT_DIR) -I$(BOOST_DIR) -I$(SPDLOG_DIR)
 
 .PHONY: all clean
 
 all: controller_client
 
 %.o: %.cpp
-	$(CXX) -g -Wall -std=gnu++0x -DHAVE_INTTYPES_H -DHAVE_NETINET_IN_H $(INC) -c $< -o $@
+	$(CXX) -g -Wall -std=gnu++0x -DHAVE_INTTYPES_H -DHAVE_NETINET_IN_H -DSPDLOG_FMT_PRINTF $(INC) -c $< -o $@
 
 
 controller_client: Controller_Client.o $(GEN_OBJ)
