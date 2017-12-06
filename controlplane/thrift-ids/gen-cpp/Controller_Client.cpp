@@ -45,6 +45,11 @@
 #include "modbus.h"
 #include "flows.h"
 
+/* Logging */
+#define LOGURU_IMPLEMENTATION 1
+#include "loguru.hpp"
+
+
 /* Index of value in message vector from broker agent*/
 #define TOPIC 0
 #define SRCIP 1
@@ -259,7 +264,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 {
     int id = 0;
     struct nfqnl_msg_packet_hdr *ph;
-    struct nfqnl_msg_packet_hw *hwph;
+    //struct nfqnl_msg_packet_hw *hwph;
     //u_int32_t mark,ifi; 
     int ret;
     struct iphdr *ip_info;
@@ -269,7 +274,8 @@ static u_int32_t print_pkt (struct nfq_data *tb)
     Flow req;
     
     number_recv_pkt +=1; 
-    printf("Number of received packet: %d\n", number_recv_pkt);
+    //printf("Number of received packet: %d\n", number_recv_pkt);
+    //LOG_F(INFO,"Number of received packet: %d\n", number_recv_pkt);
     //struct sockaddr_in connection;
     //int sockfd;
     //int optval;
@@ -280,18 +286,20 @@ static u_int32_t print_pkt (struct nfq_data *tb)
     ph = nfq_get_msg_packet_hdr(tb);
     if (ph) {
             id = ntohl(ph->packet_id);
-            printf("hw_protocol=0x%04x hook=%u id=%u ",
-                    ntohs(ph->hw_protocol), ph->hook, id);
+            //printf("hw_protocol=0x%04x hook=%u id=%u ",
+            //        ntohs(ph->hw_protocol), ph->hook, id);
+            /*LOG_F(INFO, "hw_protocol=0x%04x hook=%u id=%u ",
+              ntohs(ph->hw_protocol), ph->hook, id);*/
     }
     // Retrieves the hardware address associated with the given queued packet. 
-    hwph = nfq_get_packet_hw(tb);
-    if (hwph) {
-            int i, hlen = ntohs(hwph->hw_addrlen);
-            printf("hw_src_addr=");
-            for (i = 0; i < hlen-1; i++)
-                    printf("%02x:", hwph->hw_addr[i]);
-            printf("%02x ", hwph->hw_addr[hlen-1]);
-    }
+    //hwph = nfq_get_packet_hw(tb);
+    //if (hwph) {
+    //        int i, hlen = ntohs(hwph->hw_addrlen);
+    //        printf("hw_src_addr=");
+    //        for (i = 0; i < hlen-1; i++)
+    //                printf("%02x:", hwph->hw_addr[i]);
+    //        printf("%02x ", hwph->hw_addr[hlen-1]);
+    //}
    
     /* Return the netfilet mark currently assiged to the given queued packet 
     mark = nfq_get_nfmark(tb);
@@ -300,9 +308,11 @@ static u_int32_t print_pkt (struct nfq_data *tb)
     
     ret = nfq_get_payload(tb, &data);
     if (ret >= 0){
-            printf("payload_len=%d ", ret);
+            //LOG_F(INFO, "payload_len=%d ", ret);
+            //printf("payload_len=%d ", ret);
             ip_info  = (struct iphdr *) data;
-            printf("IP : src = %u , dest = %u\n " , ip_info->saddr, ip_info->daddr);
+            //printf("IP : src = %u , dest = %u\n " , ip_info->saddr, ip_info->daddr);
+            //LOG_F(INFO, "IP : src = %u , dest = %u\n " , ip_info->saddr, ip_info->daddr);
             std::string srcip = to_ipv4_string(ip_info->saddr);
             switch(ip_info->protocol) {
                 case IPPROTO_SRTAG: 
@@ -341,6 +351,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     std::string dstip = to_ipv4_string(ip_info->daddr);
 
                     if (! allowed_addr(ntohl(ip_info->saddr)) || ! allowed_addr(ntohl(ip_info->daddr))){
+                        printf(" Dropping packet: Invalid Ip\n");
                         return id; 
                     }
                      
@@ -348,14 +359,17 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     // Check if dstip is a target victim
                     flood_targets_mutex.lock();
                     auto res = flood_targets.find(dstip);
-                    send_pkt = (res == flood_targets.end());
+                    bool is_target = (res != flood_targets.end());
+                    send_pkt = !( tcp_info->syn == 1 &&  is_target);
                     flood_targets_mutex.unlock();
                     if (! send_pkt){
+                       printf(" Dropping packet: Syn Flood\n");
                        return id; 
                     }
 
                     
-                    printf("TCP : dest = %d\n", dest_port);
+                    //printf("TCP : dest = %d\n", dest_port);
+                    //LOG_F(INFO, "TCP : dest = %d\n", dest_port);
                     int8_t proto = (int8_t) IPPROTO_TCP;
                     int16_t srcport = (int16_t) ntohs(tcp_info->source);
                     int16_t dstport = (int16_t) ntohs(tcp_info->dest);
@@ -369,7 +383,8 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                         struct modbus_hdr* modbus_info = (struct modbus_hdr*) (data + index);                
                         int8_t funcode = (int8_t) modbus_info->funcode;
                         int16_t modbus_length = (int16_t) ntohs(modbus_info->len);
-                        printf("Modbus Pkt: funcode: %d, length: %d\n", modbus_info->funcode, ntohs(modbus_info->len));
+                        //printf("Modbus Pkt: funcode: %d, length: %d\n", modbus_info->funcode, ntohs(modbus_info->len));
+                        //LOG_F(INFO, "Modbus Pkt: funcode: %d, length: %d\n", modbus_info->funcode, ntohs(modbus_info->len));
                         // Check if packet malformed
                         if ((unsigned int)ret != (index + MBAP_LEN + ntohs(modbus_info->len))) 
                             return id;
@@ -433,7 +448,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
       }
     
     
-    fputc('\n', stdout);
+    //fputc('\n', stdout);
     
     return id;
 }
@@ -675,6 +690,7 @@ void broker_comm()
 int main(int argc, char **argv)
 {
         
+
     struct nfq_handle *h;
     struct nfq_q_handle *qh;
     //struct nfnl_handle *nh;
@@ -684,31 +700,38 @@ int main(int argc, char **argv)
     char buf[4096] __attribute__ ((aligned));
     uint32_t queuelen = 2048;
     
-
+    // Logging init
+    loguru::init(argc, argv);
+    loguru::add_file("ids.log", loguru::Append, loguru::Verbosity_INFO);
+        
     // NFQUEUE packet capture of packet
-    printf("opening library handle\n");
+    //printf("opening library handle\n");
+    //LOG_F(INFO, "Opening library handle");
     h = nfq_open();
     if (!h) {
-            fprintf(stderr, "error during nfq_open()\n");
+            //fprintf(stderr, "error during nfq_open()\n");
             exit(1);
     }
 
     
     //obsolete since kernel 3.8
-    printf("unbinding existing nf_queue handler for AF_INET (if any)\n");
+    //printf("unbinding existing nf_queue handler for AF_INET (if any)\n");
+    //LOG_F(INFO, "unbinding existing nf_queue handler for AF_INET (if any)\n");
     if (nfq_unbind_pf(h, AF_INET) < 0) {
             fprintf(stderr, "error during nfq_unbind_pf()\n");
             exit(1);
     }
 
-    printf("binding nfnetlink_queue as nf_queue handler for AF_INET\n");
+    //printf("binding nfnetlink_queue as nf_queue handler for AF_INET\n");
+    //LOG_F(INFO, "binding nfnetlink_queue as nf_queue handler for AF_INET\n");
     if (nfq_bind_pf(h, AF_INET) < 0) {
             fprintf(stderr, "error during nfq_bind_pf()\n");
             exit(1);
     }
 
     // Last argument, some data to pass to the callback function
-    printf("binding this socket to queue '1'\n");
+    //printf("binding this socket to queue '1'\n");
+    //LOG_F(INFO, "binding this socket to queue '1'\n");
     qh = nfq_create_queue(h,  1, &callback, NULL);
     if (!qh) {
             fprintf(stderr, "error during nfq_create_queue()\n");
@@ -716,7 +739,8 @@ int main(int argc, char **argv)
     }
 
     // Increase size of kernel queue
-    printf("Increasing queue size\n");
+    //printf("Increasing queue size\n");
+    //LOG_F(INFO, "Increasing queue size\n");
     if (nfq_set_queue_maxlen(qh, queuelen) < 0) {
             fprintf(stderr, "can't set queue size\n");
             exit(1);
@@ -724,7 +748,8 @@ int main(int argc, char **argv)
     
     // Sets the amount of data to be copied to userspace for each packet
     // Last argument, the siez of the packet that we want to get
-    printf("setting copy_packet mode\n");
+    //printf("setting copy_packet mode\n");
+    //LOG_F(INFO, "setting copy_packet mode\n");
     if (nfq_set_mode(qh, NFQNL_COPY_PACKET, 0xffff) < 0) {
             fprintf(stderr, "can't set packet_copy mode\n");
             exit(1);
@@ -738,7 +763,6 @@ int main(int argc, char **argv)
     try {
         m_ttransport->open();
         while ((rv = recv(fd, buf, sizeof(buf), 0)) && rv >= 0) {
-                printf("pkt received\n");
                 nfq_handle_packet(h, buf, rv);
         }
         if (rv <0) {
@@ -754,7 +778,8 @@ int main(int argc, char **argv)
     }
     broker_th.join();
 
-    printf("unbinding from queue 0\n");
+    //printf("unbinding from queue 0\n");
+    //LOG_F(INFO,"unbinding from queue 0\n");
     nfq_destroy_queue(qh);
 
     #ifdef INSANE
@@ -764,7 +789,8 @@ int main(int argc, char **argv)
     nfq_unbind_pf(h, AF_INET);
     #endif
 
-    printf("closing library handle\n");
+    //printf("closing library handle\n");
+    //LOG_F(INFO,"closing library handle\n");
     nfq_close(h);
 
 
