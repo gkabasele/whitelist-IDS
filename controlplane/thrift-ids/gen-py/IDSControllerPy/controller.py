@@ -829,8 +829,7 @@ class Controller(Iface):
         for switch in self.switches:
             sw = self.switches[switch]
             client = self.clients[sw.sw_id]
-            #self.ids_sw_id = ids_sw_id
-            is_ids_sw_id = sw.is_responsible(sw.ids_addr)
+            self.ids_sw_id = ids_sw_id
             self.table_default_entry(client, SEND_FRAME, DROP, [])
             self.table_default_entry(client, FORWARD, NO_OP, [])
             self.table_default_entry(client, TCP_FLAGS, NO_OP, [])
@@ -839,8 +838,7 @@ class Controller(Iface):
             # Set rule in  PKT_CLONED to distinguish instance_type of packet
             #self.table_default_entry(client, TCP_FLAGS, CLONE_I2E, [])
             #self.table_add_entry(client, PKT_CLONED, ADD_TAG, [CLONE_PKT_FLAG],[sw.sw_id, sw.ids_addr, sw.ids_port]) 
-            if is_ids_sw_id:
-                self.ids_sw_id = sw.sw_id 
+            if self.ids_sw_id == sw.sw_id:
                 self.table_default_entry(client, FLOW_ID, NO_OP, [])
                 self.table_default_entry(client, MODBUS, NO_OP, [])
                 #self.table_add_entry(client, SRTAG, REMOVE_TAG, [IP_PROTO_SRTAG], [sw.ids_port])
