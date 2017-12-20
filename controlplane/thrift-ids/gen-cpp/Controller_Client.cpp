@@ -14,8 +14,8 @@
 #include <cerrno>
 #include <memory>
 #include <chrono>
-#include <GetOpt.h>
 #include <fstream>
+#include <unistd.h>
 
 /* Netfilter queue */
 #include <netinet/in.h>
@@ -92,21 +92,26 @@ ControllerClient client(tprotocol);
 ControllerClient m_client(m_tprotocol);
 
 // Logging init
-std::shared_ptr<logger> ids_logger; 
+auto ids_logger = spdlog::rotating_logger_mt("basic_logger", "logs/ids", 1048576*5,3);
+ 
 
 // List of possible targets of SYN FLOOD
 std::set<std::string> flood_targets;
 std::mutex flood_targets_mutex;
 
 // protocol requiring real-time communication
-std::set<__u16> real_com = {MODBUS_PORT, IPERF_PORT};
+//std::set<__u16> real_com = {MODBUS_PORT, IPERF_PORT};
+std::set<__u16> real_com;
 int number_recv_pkt = 0;
 
 // Use map ?  net->mask
-std::vector<std::string> networks = {"10.0.0.0"};
-std::vector<std::string> masks = {"255.255.0.0"};
+//std::vector<std::string> networks = {"10.0.0.0"};
+std::vector<std::string> networks;
+//std::vector<std::string> masks = {"255.255.0.0"};
+std::vector<std::string> masks;
 // IP addresses of MTU
-std::set<std::string> mtus = {"10.0.10.1"};
+//std::set<std::string> mtus = {"10.0.10.1"};
+std::set<std::string> mtus;
 
 bool is_mtu(std::string ip)
 {
@@ -667,34 +672,31 @@ void parse_config_file(std::string name, std::string value)
 {
     if(name == "MTUS" || name == "REALCOM" || name == "NETWORKS") {
         std::string res;
-        for(std::string::iterator it=str.begin(); it != str.end(); ++it)
+        for(std::string::iterator it=value.begin(); it != value.end(); ++it)
         {
             if(*it =='[')
-                continue 
-            else if(*it == ','){
+                continue; 
+            else if(*it == ',' || *it == ']'){
                 if (name == "MTUS"){
                     mtus.insert(res);         
                     res.clear();
                 }
                 else if(name == "REALCOM") {
-                    real_com.insert((__u16)atoi(res));
+                    real_com.insert((__u16)stoi(res));
                     res.clear();
                 }
                 else if(name == "NETWORKS") {
                     auto delimiterPos = res.find('/');
                     auto network = res.substr(0, delimiterPos); 
-                    auto slash = (__u32)atoi(res.substr(delimiterPos + 1));
-                    __u32 mask = 0; 
-                    __u32 slash_mask = ~0;
-                    // TODO 0 & slash * F
-                    
+                    auto slash = (__u32)stoi(res.substr(delimiterPos + 1));
+                    __u32 mask = 0xFFFF << slash; 
+                    networks.push_back(network);
+                    masks.push_back(to_ipv4_string(htonl(mask)));
                     res.clear();
                 }
             }
-            else if (it == ']')
-                continue
             else
-                res.append(*it);
+                res += *it;
         }
 
     }
@@ -706,9 +708,11 @@ void read_config_file(std::string filename)
     std::ifstream cFile(filename);
     if(cFile.is_open())
     {
-        while(getline(cFile, line)){
+        ids_logger->info("Opening Configuration file");
+        std::string line;
+        while(std::getline(cFile, line)){
             // Remove space from line
-            line.erase(remove_if(line.begin(), line.end(), isspace), line.end());
+            line.erase(std::remove_if(line.begin(), line.end(), isspace), line.end());
             if(line[0] == '#' || line.empty())
                 continue;
             auto delimiterPos = line.find(":");
@@ -718,10 +722,9 @@ void read_config_file(std::string filename)
         } 
         cFile.close();
     } else {
-        ids_logger->info("Unable to open config file");
+        fprintf(stderr, "Unable to open config file %s", filename );
         exit(1);
     }
-
 }
 
 int main(int argc, char **argv)
@@ -739,23 +742,42 @@ int main(int argc, char **argv)
     std::string config_filename;
     std::string logging_filename;
 
-
-    GetOpt getopt(argc, argv, "c:l:");
-    int option_char;
-    while((option_char = get_opt()) != EOF) {
-        switch (option_char)
+    int opt;
+    while((opt = getopt(argc, argv, "c:l:")) != -1) {
+        switch (opt)
         {
-            case 'c': config_filename = getopt.optarg; break;
-            case 'l': logging_filename = getopt.optarg; break;
-            case '?': fprintf (stderr, "usage: %s -c <config file> -l <logging file>", argv[0]);
-
+            case 'c': 
+                config_filename = optarg; 
+                break;
+            case 'l': 
+                logging_filename = optarg; 
+                break;
+            default: 
+                fprintf (stderr, "usage: %s -c <config file> -l <logging file>\n", argv[0]);
+                exit(1);
         }
-
     }
 
     read_config_file(config_filename); 
 
-    ids_logger = spdlog::rotating_logger_mt("basic_logger", logging_filename, 1048576*5,3);
+    std::cout << "MTU: " << std::endl;
+    for (auto it = mtus.begin(); it != mtus.end();++it){
+        std::cout << *it << std::endl;     
+    }
+    std::cout << "Networks: " << std::endl;
+    for (auto it = networks.begin(); it != networks.end(); ++it){
+        std::cout << *it << std::endl;
+    }
+    std::cout << "Mask: " << std::endl;
+    for (auto it = masks.begin(); it != masks.end(); ++it) {
+        std::cout << *it << std::endl;
+    }
+    std::cout << "Real comm: " << std::endl;
+    for (auto it = real_com.begin(); it != real_com.end(); ++it) {
+        std::cout << *it << std::endl;
+    } 
+
+    //ids_logger = spdlog::rotating_logger_mt("basic_logger", logging_filename, 1048576*5,3);
 
     // setting async mode
     spdlog::set_level(spdlog::level::info);
@@ -768,7 +790,7 @@ int main(int argc, char **argv)
     ids_logger->info("Opening library handle");
     h = nfq_open();
     if (!h) {
-            //fprintf(stderr, "error during nfq_open()\n");
+            fprintf(stderr, "error during nfq_open()\n");
             exit(1);
     }
 
