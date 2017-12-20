@@ -4,6 +4,7 @@
 *.pcapng
 *.jpg
 *.o
+*.obj
 *.log
 sw_conf.json
 logs/
