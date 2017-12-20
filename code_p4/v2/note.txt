@@ -1,5 +1,0 @@
-more scalable version, no hierarchical matching of the rule
-hosts -> multiple communication
-modbus funcode -> multiple length for payload
-To monitor flow life, packet with an RST and FIN flags are duplicated and
-send to the IDS
