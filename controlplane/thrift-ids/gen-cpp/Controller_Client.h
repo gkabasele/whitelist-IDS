@@ -13,6 +13,9 @@
 #include "srtag.h"
 #include "flows.h"
 
+void read_config_file(std::string filename); 
+void parse_config_file(std::string name, std::string value);
+
 __u32 to_ipv4_uint(std::string ip);
 
 bool is_mtu(std::string ip);

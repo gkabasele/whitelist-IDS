@@ -14,6 +14,8 @@
 #include <cerrno>
 #include <memory>
 #include <chrono>
+#include <GetOpt.h>
+#include <fstream>
 
 /* Netfilter queue */
 #include <netinet/in.h>
@@ -90,7 +92,7 @@ ControllerClient client(tprotocol);
 ControllerClient m_client(m_tprotocol);
 
 // Logging init
-auto ids_logger = spdlog::rotating_logger_mt("basic_logger", "logs/ids", 1048576*5,3);
+std::shared_ptr<logger> ids_logger; 
 
 // List of possible targets of SYN FLOOD
 std::set<std::string> flood_targets;
@@ -104,14 +106,12 @@ int number_recv_pkt = 0;
 std::vector<std::string> networks = {"10.0.0.0"};
 std::vector<std::string> masks = {"255.255.0.0"};
 // IP addresses of MTU
-std::vector<std::string> mtus = {"10.0.10.1"};
+std::set<std::string> mtus = {"10.0.10.1"};
 
 bool is_mtu(std::string ip)
 {
-
- std::vector<std::string>::iterator it;
- it = std::find(mtus.begin(),mtus.end(),ip);
- return (it != mtus.end());
+    auto res = mtus.find(ip); 
+    return (res != mtus.end());
 }
 /* Convert string to a u32 int*/
 __u32 to_ipv4_uint(std::string ip)
@@ -663,6 +663,67 @@ void broker_comm()
     exit(0);
 }
 
+void parse_config_file(std::string name, std::string value)
+{
+    if(name == "MTUS" || name == "REALCOM" || name == "NETWORKS") {
+        std::string res;
+        for(std::string::iterator it=str.begin(); it != str.end(); ++it)
+        {
+            if(*it =='[')
+                continue 
+            else if(*it == ','){
+                if (name == "MTUS"){
+                    mtus.insert(res);         
+                    res.clear();
+                }
+                else if(name == "REALCOM") {
+                    real_com.insert((__u16)atoi(res));
+                    res.clear();
+                }
+                else if(name == "NETWORKS") {
+                    auto delimiterPos = res.find('/');
+                    auto network = res.substr(0, delimiterPos); 
+                    auto slash = (__u32)atoi(res.substr(delimiterPos + 1));
+                    __u32 mask = 0; 
+                    __u32 slash_mask = ~0;
+                    // TODO 0 & slash * F
+                    
+                    res.clear();
+                }
+            }
+            else if (it == ']')
+                continue
+            else
+                res.append(*it);
+        }
+
+    }
+
+}
+
+void read_config_file(std::string filename)
+{
+    std::ifstream cFile(filename);
+    if(cFile.is_open())
+    {
+        while(getline(cFile, line)){
+            // Remove space from line
+            line.erase(remove_if(line.begin(), line.end(), isspace), line.end());
+            if(line[0] == '#' || line.empty())
+                continue;
+            auto delimiterPos = line.find(":");
+            auto name = line.substr(0, delimiterPos);
+            auto value = line.substr(delimiterPos + 1);
+            parse_config_file(name, value);
+        } 
+        cFile.close();
+    } else {
+        ids_logger->info("Unable to open config file");
+        exit(1);
+    }
+
+}
+
 int main(int argc, char **argv)
 {
         
@@ -675,6 +736,26 @@ int main(int argc, char **argv)
     // TODO: what happens if packet too big
     char buf[4096] __attribute__ ((aligned));
     uint32_t queuelen = 2048;
+    std::string config_filename;
+    std::string logging_filename;
+
+
+    GetOpt getopt(argc, argv, "c:l:");
+    int option_char;
+    while((option_char = get_opt()) != EOF) {
+        switch (option_char)
+        {
+            case 'c': config_filename = getopt.optarg; break;
+            case 'l': logging_filename = getopt.optarg; break;
+            case '?': fprintf (stderr, "usage: %s -c <config file> -l <logging file>", argv[0]);
+
+        }
+
+    }
+
+    read_config_file(config_filename); 
+
+    ids_logger = spdlog::rotating_logger_mt("basic_logger", logging_filename, 1048576*5,3);
 
     // setting async mode
     spdlog::set_level(spdlog::level::info);
