@@ -39,7 +39,7 @@ except:
 
 import logging
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(filename= 'controller.log',level=logging.INFO)
 
 def verify(func):
     def wrapper(self, *args, **kwargs):
@@ -364,6 +364,12 @@ class Controller(Iface):
                 length = str(u_length)
         return (req.srcip, sport, proto, req.dstip, dport, funcode, length)
 
+    def logging_request(self, name, srcip, sport, proto, dstip, dport, funcode, length, nonce):
+        logging.info(' Received request : %s', name)
+        logging.info('(%s) %s:%s -> %s:%s', proto , srcip, sport, dstip, dport)
+        logging.info('funcode:%s, length:%',funcode, length)
+        logging.debug('nonce:%s', nonce)
+
     def retrieve_nonce(self, sw):
         nonce = 0
         blocks = list(map(lambda x: (x & 0xffff), sw))
@@ -387,7 +393,7 @@ class Controller(Iface):
             raise err
         nonce = self.retrieve_nonce(blocks)
         (srcip, sport, proto, dstip, dport, funcode, length) = resp
-
+       
         print "\n--------------------------"
         print "Received Redirecting request" 
         print "srcip: %s, sport: %s, proto: %s" % (srcip, sport, proto)
