@@ -49,7 +49,7 @@ LOG_LEVEL = logging.INFO
 
 # Initialization of the two logs
 RPC_LOG_FILE = "logs/rpc.log"
-rpc_logger = logging.getLogger()
+rpc_logger = logging.getLogger('rpc')
 rpc_logger.setLevel(LOG_LEVEL)
 rpc_logger_handler =  FileHandler(RPC_LOG_FILE)
 rpc_logger_handler.setLevel(LOG_LEVEL)
@@ -57,7 +57,7 @@ rpc_logger_handler.setFormatter(Formatter(LOG_FORMAT))
 rpc_logger.addHandler(rpc_logger_handler)
 
 CTRL_LOG_FILE = "logs/ctrl.log"
-ctrl_logger = logging.getLogger()
+ctrl_logger = logging.getLogger('ctrl')
 ctrl_logger.setLevel(LOG_LEVEL)
 ctrl_logger_handler = FileHandler(CTRL_LOG_FILE)
 ctrl_logger_handler.setLevel(LOG_LEVEL)
