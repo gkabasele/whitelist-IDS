@@ -19,9 +19,11 @@ from thrift.transport import TTransport
 from thrift.protocol import TBinaryProtocol
 from thrift.server import TServer
 
+from rulestable import RuleTables
 from utils import *
 from P4SwitchCom import *
 import argparse
+import P4Constants
 
 from functools import wraps
 import  bmpy_utils as utils
@@ -39,249 +41,34 @@ except:
 
 import logging
 
-logging.basicConfig(filename= 'controller.log',level=logging.INFO)
+from logging import FileHandler
+from logging import Formatter
 
-def verify(func):
-    def wrapper(self, *args, **kwargs):
-        a = list(args)
-        assert len(a[0]) == self.num_fields, "Number of fields for the rule does not match"
-        return func(self, *args)
-    return wrapper
+LOG_FORMAT = ("[%(asctime)s] [%(levelname)s]:%(message)s")
+LOG_LEVEL = logging.INFO
 
-class RuleTables():
-    '''
-        rule : fields used for matching, ex :5-tuples (srcip, sport, dstip, dport, proto)
-        resp_switch : list of switch concerned by this rule
-        num_entry : dict {switch_id : num_entry} where entry is the id of the rule in
-                  the table
-    '''
+# Initialization of the two logs
+RPC_LOG_FILE = "logs/rpc.log"
+rpc_logger = logging.getLogger()
+rpc_logger.setLevel(LOG_LEVEL)
+rpc_logger_handler =  FileHandler(RPC_LOG_FILE)
+rpc_logger_handler.setLevel(LOG_LEVEL)
+rpc_logger_handler.setFormatter(Formatter(LOG_FORMAT))
+rpc_logger.addHandler(rpc_logger_handler)
 
-    def __init__(self, num_fields) :
-        self.rules = {}
-        self.num_fields = num_fields 
+CTRL_LOG_FILE = "logs/ctrl.log"
+ctrl_logger = logging.getLogger()
+ctrl_logger.setLevel(LOG_LEVEL)
+ctrl_logger_handler = FileHandler(CTRL_LOG_FILE)
+ctrl_logger_handler.setLevel(LOG_LEVEL)
+ctrl_logger_handler.setFormatter(Formatter(LOG_FORMAT))
+ctrl_logger.addHandler(ctrl_logger_handler)
 
-    ''' 
-        rule : fields used for matching
-        switch_id : datapath id of switch containing the flow
-        num_entry : number entry of flow in the flow table on the switch
-        rule_type: ALLOW rule or DROP (for now, later REDIRECT,CLONED,...)
-        wl_orig: Was the rule in the original whitelist
 
-        Add rule to the table
-    '''
-    @verify
-    def add_rule(self, rule, switch_id, num_entry, rule_type, wl_orig=False):
-        if rule not in self.rules:
-            self.rules[rule] = {switch_id : (num_entry,rule_type, wl_orig)}
-        elif switch_id not in self.rules[rule]:
-            self.rules[rule][switch_id] = (num_entry, rule_type, wl_orig)
-    '''
-        rule : fields used for matching
-        switch_id : datapath id of switch containing the flow
-
-        delete rule in the table
-    '''
-
-    @verify
-    def delete_rule(self, rule, switch_id):
-        self.rules[rule].pop(switch_id, None)
-        if len(self.rules[rule]) == 0:
-            self.rules.pop(rule,None)
-
-    '''
-        rule : fields used for matching
-        switch_id : datapath id of switch containing the flow
-        
-        update rule entry number from the table
-    '''
-    @verify
-    def update_rule(self, rule, switch_id, num_entry, rule_type):
-        wl_orig = self.get_origin_entry(rule, switch_id) 
-        self.rules[rule][switch_id] = (num_entry, rule_type, wl_orig)
-        
-    '''
-        rule : fields used for matching
-        
-        return the list of switchs containing a rule for this fields
-    '''
-    @verify
-    def rule_to_switches(self, rule):
-        if rule in self.rules:
-            return self.rules[rule].keys()
-
-    '''
-        rule : fields used for matching
-        return the entry number of the rule in switch with switch_id
-    '''
-    @verify
-    def get_num_entry(self, rule, switch_id):
-        if rule in self.rules and switch_id in self.rules[rule]:
-            return self.rules[rule][switch_id][0]
-    '''
-        rule : fields used for matching
-        return the type (ALLOW,DROP) the rule in switch with switch_id
-    '''
-    @verify
-    def get_type_entry(self, rule, switch_id):
-        return self.rules[rule][switch_id][1]
-
-    @verify
-    def get_origin_entry(self, rule, switch_id):
-        return self.rules[rule][switch_id][2]
-
-    @verify
-    def is_rule_installed(self, rule):
-        return rule in self.rules
-
-    def get_rules(self):
-        return self.rules
-
-    def dump_table(self):
-        print "---------"
-        print "RuleTable"
-        for rule, sw in self.rules.iteritems():
-            print rule,":"
-            for sw_id, entry_handle in sw.iteritems():
-                print "\tSwitch_id: ",sw_id," Entry: ",entry_handle , "\n"
-        print "---------" 
 bind_layers(TCP, Modbus, dport=5020)
 bind_layers(TCP, Modbus, sport=5020)
 
-IP_PROTO_TCP = 6
-IP_PROTO_SRTAG = '200' 
-IP_PROTO_IDSTAG = '201'
-# Table name
-SEND_FRAME = 'send_frame'
-FORWARD = 'forward'
-IPV4_LPM = 'ipv4_lpm'
-FLOW_ID = 'flow_id'
-MODBUS = 'modbus'
-MISS_TAG= 'miss_tag_table'
-ARP_RESP = 'arp_response'
-ARP_FORW_REQ = 'arp_forward_req'
-ARP_FORW_RESP = 'arp_forward_resp'
-PKT_CLONED = 'pkt_cloned'
-TCP_FLAGS = 'tcp_flags'
-SRTAG = 'srtag_tab'
-IDSTAG = 'idstag_tab'
-IDSTAG_ADD_TAB = 'add_tag_ids_tab'
-BLOCK_HOSTS = 'block_hosts'
-
-# Action name
-DROP = '_drop'
-NO_OP = '_no_op'
-ADD_TAG = 'add_miss_tag'
-REMOVE_TAG = 'remove_miss_tag'
-REWRITE = 'rewrite_mac'
-DMAC = 'set_dmac'
-SET_EGRESS = 'set_egress_port'
-ADD_PORT = 'add_expected_port'
-RESP = 'respond_arp'
-STORE_ARP = 'store_arp_in'
-FORWARD_ARP = 'forward_arp'
-CLONE_I2E = '_clone_i2e'
-REMOVE_IDSTAG = 'remove_ids_tag'
-ADD_IDSTAG = 'add_ids_tag'
-
-
-# Value name
-CLONE_PKT_FLAG = '1'
-MAX_BLOCK_REQUESTS = 3
-RULE_ALLOW = 1
-RULE_DROP = 0
-RULE_ORIGINAL = True
-
-
-def create_switches(filename):
-
-    json_data=open(filename)
-    topo = json.load(json_data)
-    switches = []
-    for sw in topo['switches']:
-        sw_id = sw['dpid']
-        ip_addr = sw['ip_address']
-        real_ip = sw['real_ip']
-        port = sw['port']
-        resp = sw['resp_network']
-        routing_table = sw['routing_table']
-        arp_table = sw['arp_table']
-        ids_port = sw['ids_port']
-        gw_port = sw['gw_port']
-        interfaces = sw['interfaces']
-        ids_addr = sw['ids_addr']
-        
-    
-        switch = Switch(sw_id, 
-                        ip_addr,
-                        real_ip,
-                        port, 
-                        resp,
-                        interfaces,
-                        ids_port, 
-                        gw_port,
-                        ids_addr,
-                        routing_table,
-                        arp_table)
-        switches.append(switch)
-    
-    json_data.close() 
-    return switches
-
-class Switch():
-    '''
-        sw_id : Id of the switch
-        ip_address: IP address used by the thrift server
-        port : port used by thrift server
-        resp : list of address that the switch handles
-        interface: list of interface the switch has (name:mac)
-        ids_port: outport on the switch to reach the IDS
-        gw_port : outport on the switch to reach gateway
-        ids_addr: ip address of IDS
-        routing_table : dest ip : port
-        arp_table : arp table for entry in subnet work
-        p4_table : matching table
-    '''
-    def __init__(self, 
-                 sw_id,
-                 ip_addr,
-                 real_ip,
-                 port,
-                 resp,
-                 interfaces,
-                 ids_port,
-                 gw_port,
-                 ids_addr,
-                 routing_table,
-                 arp_table):
-
-        self.sw_id = sw_id
-        self.ip_address = IPNetwork(ip_addr)
-        self.real_ip = real_ip
-        self.port = port
-        self.resp = []
-        for network in resp:
-            ip_network = IPNetwork(network)
-            self.resp.append(ip_network)
-        self.interfaces = interfaces
-        self.ids_port = ids_port
-        self.gw_port = gw_port
-        self.ids_addr = ids_addr
-        self.routing_table = routing_table
-        self.arp_table = arp_table
-        # Current entry number in each important table
-        self.p4_table = {FLOW_ID : 0 , MODBUS : 0, BLOCK_HOSTS : 0}
-
-    def is_responsible(self,ip_addr):
-        r = False
-        ip = IPAddress(ip_addr)
-        for subnet in self.resp:
-            if ip in subnet:
-                r = True
-                break
-        return r
-
 class Controller(Iface):
-
 
     @staticmethod
     def get_thrift_services(pre_type):
@@ -364,11 +151,13 @@ class Controller(Iface):
                 length = str(u_length)
         return (req.srcip, sport, proto, req.dstip, dport, funcode, length)
 
-    def logging_request(self, name, srcip, sport, proto, dstip, dport, funcode, length, nonce):
-        logging.info(' Received request : %s', name)
-        logging.info('(%s) %s:%s -> %s:%s', proto , srcip, sport, dstip, dport)
-        logging.info('funcode:%s, length:%',funcode, length)
-        logging.debug('nonce:%s', nonce)
+    def logging_request(self, name, srcip, sport, proto, dstip, dport, funcode, length, nonce=None):
+        rpc_logger.info(' Received request : %s', name)
+        rpc_logger.info('(%s) %s:%s -> %s:%s', proto , srcip, sport, dstip, dport)
+        if funcode and length:
+            rpc_logger.info('funcode:%s, length:%',funcode, length)
+        if nonce:
+            rpc_logger.debug('nonce:%s', nonce)
 
     def retrieve_nonce(self, sw):
         nonce = 0
@@ -376,12 +165,14 @@ class Controller(Iface):
         for i, val in enumerate(blocks):
             nonce += (val << i*16) 
         return nonce
+
     # Forward packet but send clone to ids
     @checkreq
     def mirror(self, req, sw):
         pass
 
     # change the nonce when the IDS reforward the original packet
+    # block is a list of length 4 where each entry is a 2byte values used to create a 64-bit nonce
     @checkreq
     def redirect(self, req, blocks):
         resp = self.retrieve_value(req) 
@@ -393,18 +184,9 @@ class Controller(Iface):
             raise err
         nonce = self.retrieve_nonce(blocks)
         (srcip, sport, proto, dstip, dport, funcode, length) = resp
-       
-        print "\n--------------------------"
-        print "Received Redirecting request" 
-        print "srcip: %s, sport: %s, proto: %s" % (srcip, sport, proto)
-        print "dstip: %s, dport: %s" % (dstip, dport)
-        print "funcode: %s, length: %s" % (funcode, length)
-        print "Nonce: %s" % nonce
-        print "--------------------------\n" 
+        self.logging_request("Redirect", srcip, sport, proto, dstip, dport, funcode, length, nonce)      
 
-        
-        # 1) Remove IDS tag from the switch connected to the IDS 
-        # 2) Install IDS tag from the switch connected to the IDS 
+        # Modify the value of the tag used by the switch connected to the IDS
         client = self.clients[self.ids_sw_id] 
         self.table_modify_entry(client, IDSTAG_ADD_TAB, ADD_IDSTAG, 0, [str(nonce)])
 
@@ -441,21 +223,13 @@ class Controller(Iface):
         (srcip, sport, proto, dstip, dport, funcode, length) = resp
         flow = (srcip, sport, proto, dstip, dport)
 
-        print "\n--------------------------"
-        print "Received Blocking request" 
-        print "srcip: %s, sport: %s, proto: %s" % (srcip, sport, proto)
-        print "dstip: %s, dport: %s" % (dstip, dport)
-        print "funcode: %s, length: %s" % (funcode, length)
-        print "--------------------------\n" 
-        
-        self.flow_table.dump_table()
+        self.logging_request("Block", srcip, sport, proto, dstip, dport, funcode, length, nonce)
+                
+        #self.flow_table.dump_table()
         if ((dstip in self.block_request_host and
             self.block_request_host[dstip] >= MAX_BLOCK_REQUESTS) and
             not self.is_flow_origin((dstip, dport, proto, srcip, sport))):
-
-            print "Blocking host %s for service %s\n" % (dstip, sport)
-
-            #installed = self.is_flow_installed(flow)
+            logging.info('Blocking host %s for service %s', dstip, sport)
             resp_sw = self.get_resp_switch(req.srcip, req.dstip)
             #  The source is the modbus server and we want to block the other endpoint
             self.deploy_block_host_rules(resp_sw, dstip, proto ,srcip, sport, self.add_block_entry ,RULE_DROP )  
@@ -476,12 +250,7 @@ class Controller(Iface):
         
         (srcip, sport, proto, dstip, dport, funcode, length) = resp
         flow = (srcip, sport, proto, dstip, dport)
-        print "\n-----------------------"
-        print "Received Allowing request"
-        print "srcip: %s, sport: %s, proto: %s" % (srcip, sport, proto)
-        print "dstip: %s, dport: %s" % (dstip, dport)
-        print "funcode: %s, length: %s" % (funcode, length)
-        print "-------------------------\n" 
+        self.logging_request("Allow", srcip, sport, proto, dstip, dport, funcode, length)
         installed = self.is_flow_installed(flow)
         
         resp_sw = self.get_resp_switch(req.srcip, req.dstip)
@@ -501,11 +270,7 @@ class Controller(Iface):
             err = IDSControllerException(2, "remove: Could not retrieve value from request")
             raise err
         (srcip, sport, proto, dstip, dport, funcode, length) = resp
-        print "\n------------------------" 
-        print " Received Removing request"
-        print "srcip: %s, sport: %s, proto: %s" % (srcip, sport, proto)
-        print "dstip: %s, dport: %s" % (dstip, dport)
-        print "--------------------------\n" 
+        self.logging_request("Remove", srcip, sport, proto, dstip, dport, funcode, lenght)
         if self.is_flow_installed((srcip, sport, proto, dstip, dport)):
             resp_sw = self.get_resp_switch(srcip, dstip)
             for sw in resp_sw:
@@ -531,7 +296,7 @@ class Controller(Iface):
             raise UIn_Error(
                 "Table {} does not support entry timeouts"  
             )
-        print "Setting a", timeout, "ms timeout for entry", entry_handle
+        ctrl_logger.info("Setting a %s ms timeout for entry %s" %(timeout, entry_handle))
         client.bm_mt_set_entry_ttl(0, table_name, entry_handle, timeout)
 
     def table_modify_entry(self, client, table_name, action_name, entry_handle, action_params):
@@ -543,8 +308,7 @@ class Controller(Iface):
             )
         action = ACTIONS[action_name]
         runtime_data = parse_runtime_data(action, action_params)
-        
-        print "Modifying entry", entry_handle, "for", MatchType.to_str(table.match_type), "match table", table_name
+        ctrl_logger.info("Modifying entry %s for %s match table %s" % (entry_handle, MatchType.to_str(table.match_type), table_name)) 
         entry_handle = client.bm_mt_modify_entry(
             0, table_name, entry_handle, action_name, runtime_data
         )
@@ -580,20 +344,18 @@ class Controller(Iface):
         
         match_key = parse_match_key(table, match_key)
         
-        print "Adding entry to", MatchType.to_str(table.match_type), "match table", table_name
-        
+        ctrl_logger.info("Adding entry %s to match table %s", MatchType.to_str(table.match_type), table_name)
         entry_handle = client.bm_mt_add_entry(
             0, table_name, match_key, action_name, runtime_data,
             BmAddEntryOptions(priority = priority)
         )
-        
-        print "Entry has been added with handle", entry_handle
+        ctrl_logger.info("Entry has been added with handle %s", entry_handle)
         return entry_handle
 
     def table_delete_entry(self, client, table_name, entry_handle):
         "Delete entry from a match table: table_delete <table name><entry handle>"
         table = self.get_res("table", table_name, TABLES)
-        print "Deleting entry", entry_handle, "from", table_name
+        ctrl_logger.info("Deleting entry %s from %s" % (entry_handle, table_name))
         client.bm_mt_delete_entry(0, table_name, entry_handle)  
 
     def table_default_entry(self, client,table_name, action_name, action_params):
@@ -899,13 +661,12 @@ def load_json_config(standard_client=None, json_path=None):
 
 
 def main(sw_config, capture, ip, port, ids_sw_id):
-    print "Creating switches"
+    ctrl_logger.info("Creating switches")
     switches = create_switches(sw_config) 
     controller = Controller()
-    print "Connecting to switches and setting default entry"
+    ctrl_logger.info("Connecting to switches and setting default entry")
     controller.setup_connection(switches) 
     controller.setup_default_entry(ids_sw_id)
-    print "Installing rules according to the capture"
     if capture:
         controller.dessiminate_rules(capture)
     processor = Processor(controller)

@@ -4,6 +4,10 @@ import socket
 import ssl
 import cPickle as pickle
 import sys
+import json
+from P4Constants import *
+from netaddr import IPNetwork
+from netaddr import IPAddress
 
 
 class SRTag(Packet):
@@ -27,76 +31,95 @@ class ModbusDiag(Packet):
     name = "ModbusDiag"
     fields_desc=[ ShortField("subfuncode",None)]
 
-class FlowRequest():
-
-    req_id = 0
-
+class Switch():
+    '''
+        sw_id : Id of the switch
+        ip_address: IP address used by the thrift server
+        port : port used by thrift server
+        resp : list of address that the switch handles
+        interface: list of interface the switch has (name:mac)
+        ids_port: outport on the switch to reach the IDS
+        gw_port : outport on the switch to reach gateway
+        ids_addr: ip address of IDS
+        routing_table : dest ip : port
+        arp_table : arp table for entry in subnet work
+        p4_table : matching table
+    '''
     def __init__(self, 
-                 reason,
-                 srcip,
-                 sport,
-                 dstip,
-                 dport,
-                 proto,
-                 funcode,
-                 length,
-                 identifier):
+                 sw_id,
+                 ip_addr,
+                 real_ip,
+                 port,
+                 resp,
+                 interfaces,
+                 ids_port,
+                 gw_port,
+                 ids_addr,
+                 routing_table,
+                 arp_table):
 
-            self.req_id = FlowRequest.req_id
-            FlowRequest.req_id += 1
-            self.reason = reason
-            self.srcip = srcip
-            self.sport = sport
-            self.dstip = dstip
-            self.dport = dport
-            self.proto = proto 
-            self.funcode = funcode
-            self.length = length
-            self.identifier = identifier
+        self.sw_id = sw_id
+        self.ip_address = IPNetwork(ip_addr)
+        self.real_ip = real_ip
+        self.port = port
+        self.resp = []
+        for network in resp:
+            ip_network = IPNetwork(network)
+            self.resp.append(ip_network)
+        self.interfaces = interfaces
+        self.ids_port = ids_port
+        self.gw_port = gw_port
+        self.ids_addr = ids_addr
+        self.routing_table = routing_table
+        self.arp_table = arp_table
+        # Current entry number in each important table
+        self.p4_table = {FLOW_ID : 0 , MODBUS : 0, BLOCK_HOSTS : 0}
 
-            self.install = True
+    def is_responsible(self,ip_addr):
+        r = False
+        ip = IPAddress(ip_addr)
+        for subnet in self.resp:
+            if ip in subnet:
+                r = True
+                break
+        return r
 
-    def __len__(self):
-        return sys.getsizeof(self)
+'''
+    -Creates the switches from a json file containing their configuration
+'''
+def create_switches(filename):
 
-class FlowResponse():
+    json_data=open(filename)
+    topo = json.load(json_data)
+    switches = []
+    for sw in topo['switches']:
+        sw_id = sw['dpid']
+        ip_addr = sw['ip_address']
+        real_ip = sw['real_ip']
+        port = sw['port']
+        resp = sw['resp_network']
+        routing_table = sw['routing_table']
+        arp_table = sw['arp_table']
+        ids_port = sw['ids_port']
+        gw_port = sw['gw_port']
+        interfaces = sw['interfaces']
+        ids_addr = sw['ids_addr']
+        
     
-    def __init__(self, req_id, code):
-        self.req_id = req_id
-        self.code = code    
-
-    def __len__(self):
-        return sys.getsizeof(self)
-
-class Communication():
-
-   CERT_PATH = "/home/mininet/p4-tutorials/whitelist/server.crt"
-   KEY_PATH = "/home/mininet/p4-tutotrials/whitelist/server.key"
-   PEM_PATH = "/home/mininet/p4-tutorials/whitelist/server.pem"
-
-   @staticmethod
-   def recvall(sock, n):
-        data = ''
-        while len(data) < n:
-            packet = sock.recv(n - len(data))
-            if not packet:
-                return None
-            data += packet
-        return data
+        switch = Switch(sw_id, 
+                        ip_addr,
+                        real_ip,
+                        port, 
+                        resp,
+                        interfaces,
+                        ids_port, 
+                        gw_port,
+                        ids_addr,
+                        routing_table,
+                        arp_table)
+        switches.append(switch)
     
-   @staticmethod
-   def recv_msg(sock):
-        raw_msglen = Communication.recvall(sock, 4)
-        if not raw_msglen:
-            return None
-        msglen = struct.unpack('>I', raw_msglen)[0]
-        return Communication.recvall(sock, msglen)
-    
-    
-   @staticmethod
-   def send(data, sock):
-        length = len(data)
-        if length > 0:
-            data = pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL)
-            data = struct.pack('>I', len(data)) + data
-            sock.sendall(data)
+    json_data.close() 
+    return switches
+
+
