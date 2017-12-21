@@ -92,25 +92,22 @@ ControllerClient client(tprotocol);
 ControllerClient m_client(m_tprotocol);
 
 // Logging init
-auto ids_logger = spdlog::rotating_logger_mt("basic_logger", "logs/ids", 1048576*5,3);
- 
+// setting async mode
+auto ids_logger = spdlog::basic_logger_mt("basic_logger", "logs/ids.txt");
+
 
 // List of possible targets of SYN FLOOD
 std::set<std::string> flood_targets;
 std::mutex flood_targets_mutex;
 
 // protocol requiring real-time communication
-//std::set<__u16> real_com = {MODBUS_PORT, IPERF_PORT};
 std::set<__u16> real_com;
 int number_recv_pkt = 0;
 
 // Use map ?  net->mask
-//std::vector<std::string> networks = {"10.0.0.0"};
 std::vector<std::string> networks;
-//std::vector<std::string> masks = {"255.255.0.0"};
 std::vector<std::string> masks;
 // IP addresses of MTU
-//std::set<std::string> mtus = {"10.0.10.1"};
 std::set<std::string> mtus;
 
 bool is_mtu(std::string ip)
@@ -202,8 +199,6 @@ void handle_tcp_pkt(struct iphdr* ip_info,struct srtag_hdr *srtag_info,
     /*TODO check for oveflow ?*/
     int16_t srcport = (int16_t) ntohs(tcp_info->source);
     int16_t dstport = (int16_t) ntohs(tcp_info->dest);
-    //int32_t l_sport = (int32_t) ntohs(tcp_info->source);
-    //int32_t l_dport = (int32_t) ntohs(tcp_info->dest);
     req = form_request(srcip, dstip, srcport, dstport, proto);
 
     /* Get TCP header options */
@@ -212,7 +207,6 @@ void handle_tcp_pkt(struct iphdr* ip_info,struct srtag_hdr *srtag_info,
         modbus_info = (struct modbus_hdr*) (data + index);                
         /* TODO check if int is too big for short values*/
         int8_t funcode = (int8_t) modbus_info->funcode;
-        //int16_t length = (int16_t) ret;
         int16_t modbus_length = (int16_t) ntohs(modbus_info->len);
         printf("Modbus Pkt: funcode: %d, length: %d\n", funcode, modbus_length);
         req.__set_length(modbus_length);
@@ -271,8 +265,6 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 {
     int id = 0;
     struct nfqnl_msg_packet_hdr *ph;
-    //struct nfqnl_msg_packet_hw *hwph;
-    //u_int32_t mark,ifi; 
     int ret;
     struct iphdr *ip_info;
     struct tcphdr *tcp_info;
@@ -313,12 +305,12 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                         }                        
                         case IPPROTO_UDP:
                         {
-                            printf("UDP packet");
+                            ids_logger->info("Received UDP packet");
                             break;
                         }                         
                         default:
                         {
-                            printf("Unknown protocol");
+                            ids_logger->info("Received packet from an unknown protocol");
                             break;
                         }
                     }
@@ -336,7 +328,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     std::string dstip = to_ipv4_string(ip_info->daddr);
 
                     if (! allowed_addr(ntohl(ip_info->saddr)) || ! allowed_addr(ntohl(ip_info->daddr))){
-                        printf(" Dropping packet: Invalid Ip\n");
+                        std::cout << "Dropping packet: Invalid Ip" << std::endl;
                         return id; 
                     }
                      
@@ -349,7 +341,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     send_pkt = !( tcp_info->syn == 1 &&  is_target);
                     flood_targets_mutex.unlock();
                     if (! send_pkt){
-                       printf(" Dropping packet: Syn Flood\n");
+                       std::cout << "Dropping packet: Syn Flood" << std::endl;
                        return id; 
                     }
 
@@ -480,9 +472,6 @@ unsigned char* forge_packet(unsigned int length, struct iphdr* ip_info, struct s
     if (remaining_len >= sizeof(*ip_info))
     {
         std::memcpy(forged_packet, ip_info, iph_len); 
-        //struct iphdr* ip_inv = (struct iphdr*) (forged_packet);
-        //ip_inv-> daddr = srtag_info->dest;
-        //ip_inv-> tot_len = length;
         remaining_len = remaining_len - iph_len;
     } else {
         exit(1);
@@ -542,11 +531,7 @@ void treat_pkt(char* data, int* verdict)
 static int callback(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
                     struct nfq_data *nfa, void *data)
 {
-    //int verdict;
     u_int32_t id = print_pkt(nfa);
-
-    //treat_pkt(nfa, &verdict);  Send request to controller
-    //return nfq_set_verdict(qh, id, verdict, 0, NULL);  Verdict packet
     return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
 }
 
@@ -578,7 +563,7 @@ void broker_comm()
         while(1){
             int r = poll(ufds, 4, -1);
             if (r == -1){
-                fprintf(stderr, "poll\n");
+                std::cerr << "Error in poll" << std::endl;
             } else {
                 if (ufds[0].revents & POLLIN) {
                     for(auto& msg : new_conn_queue.want_pop()){
@@ -722,7 +707,7 @@ void read_config_file(std::string filename)
         } 
         cFile.close();
     } else {
-        fprintf(stderr, "Unable to open config file %s", filename );
+        std::cerr << "Unable to open config file " << filename << std::endl;
         exit(1);
     }
 }
@@ -733,27 +718,22 @@ int main(int argc, char **argv)
 
     struct nfq_handle *h;
     struct nfq_q_handle *qh;
-    //struct nfnl_handle *nh;
     int fd;
     int rv;
     // TODO: what happens if packet too big
     char buf[4096] __attribute__ ((aligned));
     uint32_t queuelen = 2048;
     std::string config_filename;
-    std::string logging_filename;
 
     int opt;
-    while((opt = getopt(argc, argv, "c:l:")) != -1) {
+    while((opt = getopt(argc, argv, "c:")) != -1) {
         switch (opt)
         {
             case 'c': 
                 config_filename = optarg; 
                 break;
-            case 'l': 
-                logging_filename = optarg; 
-                break;
             default: 
-                fprintf (stderr, "usage: %s -c <config file> -l <logging file>\n", argv[0]);
+                std::cerr << "Usage: " << argv[0] << " -c <config file>" << std::endl;
                 exit(1);
         }
     }
@@ -777,20 +757,15 @@ int main(int argc, char **argv)
         std::cout << *it << std::endl;
     } 
 
-    //ids_logger = spdlog::rotating_logger_mt("basic_logger", logging_filename, 1048576*5,3);
-
-    // setting async mode
-    spdlog::set_level(spdlog::level::info);
-    spdlog::set_async_mode(4096, spdlog::async_overflow_policy::block_retry,
-                       nullptr,
-                       std::chrono::seconds(2)); 
-
-            
+    spdlog::set_async_mode(8192, spdlog::async_overflow_policy::block_retry,
+                           nullptr,
+                           std::chrono::seconds(2)); 
+                
     // NFQUEUE packet capture of packet
     ids_logger->info("Opening library handle");
     h = nfq_open();
     if (!h) {
-            fprintf(stderr, "error during nfq_open()\n");
+            std::cerr << "error during nfq_open" << std::endl;
             exit(1);
     }
 
@@ -798,14 +773,13 @@ int main(int argc, char **argv)
     //obsolete since kernel 3.8
     ids_logger->info("unbinding existing nf_queue handler for AF_INET (if any)");
     if (nfq_unbind_pf(h, AF_INET) < 0) {
-            fprintf(stderr, "error during nfq_unbind_pf()\n");
+            std::cerr << "error during nfq_unbind_pf" << std::endl;
             exit(1);
     }
 
-    //printf("binding nfnetlink_queue as nf_queue handler for AF_INET\n");
     ids_logger->info("binding nfnetlink_queue as nf_queue handler for AF_INET");
     if (nfq_bind_pf(h, AF_INET) < 0) {
-            fprintf(stderr, "error during nfq_bind_pf()\n");
+            std::cerr << "error during nfq_bind_pf" << std::endl;
             exit(1);
     }
 
@@ -813,14 +787,14 @@ int main(int argc, char **argv)
     ids_logger->info("binding this socket to queue '1'");
     qh = nfq_create_queue(h,  1, &callback, NULL);
     if (!qh) {
-            fprintf(stderr, "error during nfq_create_queue()\n");
+            std::cerr << "error during nfq_create_queue" << std::endl;
             exit(1);
     }
 
     // Increase size of kernel queue
     ids_logger->info("Increasing queue size");
     if (nfq_set_queue_maxlen(qh, queuelen) < 0) {
-            fprintf(stderr, "can't set queue size\n");
+            std::cerr << "can't set queue size" << std::endl;
             exit(1);
     }
     
@@ -828,7 +802,7 @@ int main(int argc, char **argv)
     // Last argument, the siez of the packet that we want to get
     ids_logger->info("setting copy_packet mode");
     if (nfq_set_mode(qh, NFQNL_COPY_PACKET, 0xffff) < 0) {
-            fprintf(stderr, "can't set packet_copy mode\n");
+            std::cerr << "can't set packet_copy mode" << std::endl;
             exit(1);
     }
 
@@ -843,9 +817,9 @@ int main(int argc, char **argv)
                 nfq_handle_packet(h, buf, rv);
         }
         if (rv <0) {
-            std::perror("Error when reading:\n");
+            std::cerr << "Error when reading" << std::endl;
             exit(1);
-        }
+    }
         m_ttransport->close();
     } catch (TTransportException e) {
         std::cout << "Error starting client" << std::endl;
@@ -861,12 +835,13 @@ int main(int argc, char **argv)
     #ifdef INSANE
     // normally, applications SHOULD NOT issue this command, since
     // it detaches other programs/sockets from AF_INET, too ! 
-    printf("unbinding from AF_INET\n");
+    std::cout << "unbinding from AF_INET" << std::endl;
     nfq_unbind_pf(h, AF_INET);
     #endif
 
     ids_logger->info("Closing library handle");
     nfq_close(h);
+    ids_logger->flush();
     spdlog::drop_all();
 
     return 0;

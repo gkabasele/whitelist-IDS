@@ -3,7 +3,7 @@ GEN_OBJ := $(patsubst %.cpp,%.o, $(GEN_SRC))
 
 THRIFT_DIR := /usr/local/include/thrift
 BOOST_DIR := /usr/local/include
-SPDLOG_DIR := /usr/local/include/spdlog
+SPDLOG_DIR := ./include
 
 
 INC := -I$(THRIFT_DIR) -I$(BOOST_DIR) -I$(SPDLOG_DIR)
