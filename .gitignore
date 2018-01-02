@@ -8,5 +8,6 @@
 *.log
 sw_conf.json
 logs/
+results/
 */controller_client
 *.state
