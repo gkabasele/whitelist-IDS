@@ -539,6 +539,7 @@ void broker_comm()
 {
     broker::init();
     broker::endpoint bro_client("client");
+    ids_logger->info("Connecting to Bro Agent");
     bro_client.peer("127.0.0.1",12345);
     //FIXME Parameterization and create handler for each queue
     broker::message_queue new_conn_queue("bro/event/new_conn", bro_client);
@@ -563,7 +564,7 @@ void broker_comm()
         while(1){
             int r = poll(ufds, 4, -1);
             if (r == -1){
-                std::cerr << "Error in poll" << std::endl;
+                ids_logger->error("Error in poll");
             } else {
                 if (ufds[0].revents & POLLIN) {
                     for(auto& msg : new_conn_queue.want_pop()){
@@ -630,7 +631,7 @@ void broker_comm()
                     for(auto& msg : flood_victim_queue.want_pop()){
                         std::cout << broker::to_string(msg) << std::endl;
                         std::string srcip = broker::to_string(msg[1]);
-                        std::cout <<"Adding host " << srcip << " to list of possible flooding target" << std::endl; 
+                        ids_logger->info("Adding host: %s to list of possible flooding target", srcip );
                         flood_targets_mutex.lock();
                         flood_targets.insert(srcip);  
                         flood_targets_mutex.unlock();
@@ -644,7 +645,7 @@ void broker_comm()
         ttransport->close();
 
     } catch (TTransportException e) {
-            std::cout << "Error starting client" << std::endl; 
+            ids_logger->info("Error starting client");
 
     } catch (IDSControllerException e) {
             std::cout << e.error_description << std::endl;
@@ -707,7 +708,7 @@ void read_config_file(std::string filename)
         } 
         cFile.close();
     } else {
-        std::cerr << "Unable to open config file " << filename << std::endl;
+        ids_logger->info("Unable to open config file %s",filename);
         exit(1);
     }
 }
@@ -765,7 +766,7 @@ int main(int argc, char **argv)
     ids_logger->info("Opening library handle");
     h = nfq_open();
     if (!h) {
-            std::cerr << "error during nfq_open" << std::endl;
+            ids_logger->error("error during nfq_open");
             exit(1);
     }
 
@@ -773,13 +774,13 @@ int main(int argc, char **argv)
     //obsolete since kernel 3.8
     ids_logger->info("unbinding existing nf_queue handler for AF_INET (if any)");
     if (nfq_unbind_pf(h, AF_INET) < 0) {
-            std::cerr << "error during nfq_unbind_pf" << std::endl;
+            ids_logger->error("error during nfq_unbind_pf");
             exit(1);
     }
 
     ids_logger->info("binding nfnetlink_queue as nf_queue handler for AF_INET");
     if (nfq_bind_pf(h, AF_INET) < 0) {
-            std::cerr << "error during nfq_bind_pf" << std::endl;
+            ids_logger->error("error during nfq_bind_pf");
             exit(1);
     }
 
@@ -787,14 +788,14 @@ int main(int argc, char **argv)
     ids_logger->info("binding this socket to queue '1'");
     qh = nfq_create_queue(h,  1, &callback, NULL);
     if (!qh) {
-            std::cerr << "error during nfq_create_queue" << std::endl;
+            ids_logger->error("error during nfq_create_queue");
             exit(1);
     }
 
     // Increase size of kernel queue
     ids_logger->info("Increasing queue size");
     if (nfq_set_queue_maxlen(qh, queuelen) < 0) {
-            std::cerr << "can't set queue size" << std::endl;
+            ids_logger->error("can't set queue size");
             exit(1);
     }
     
@@ -802,7 +803,7 @@ int main(int argc, char **argv)
     // Last argument, the siez of the packet that we want to get
     ids_logger->info("setting copy_packet mode");
     if (nfq_set_mode(qh, NFQNL_COPY_PACKET, 0xffff) < 0) {
-            std::cerr << "can't set packet_copy mode" << std::endl;
+            ids_logger->error("can't set packet_copy mode");
             exit(1);
     }
 
@@ -817,7 +818,7 @@ int main(int argc, char **argv)
                 nfq_handle_packet(h, buf, rv);
         }
         if (rv <0) {
-            std::cerr << "Error when reading" << std::endl;
+            ids_logger->error("Error when reading");
             exit(1);
     }
         m_ttransport->close();
