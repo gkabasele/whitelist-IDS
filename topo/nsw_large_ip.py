@@ -258,12 +258,15 @@ def main():
         sub_id = i+1
         for n in xrange(num_hosts):
             if sub_id != 3:
-                h = net.get('s%d-h%d' % (sub_id, n + 1))
+                name = 's%d-h%d' % (sub_id, n +1)
+                h = net.get(name)
                 h.describe()
                 ip = "10.0.%d0.%d" % ((sub_id + 1), (n + 1))
                 modbus_servers.append(ip)
                 mod = 'python '+ cur_dir + '/modbus/modbus_server.py --ip 10.0.%d0.%d --port 5020&' % ((sub_id + 1), (n+1))
+                capt = 'tcpdump -i eth0 -w ' + cur_dir + '/capture/' + name + '.pcap&' 
                 h.cmd(mod)
+                h.cmd(capt)
     ids = net.get('s3-h1')
     ids.describe()
     ctrl = net.get('s3-h2')
@@ -316,13 +319,14 @@ def main():
     # Run IDS
     comd = cur_dir +"/controlplane/thrift-ids/gen-cpp/controller_client -c " + cur_dir + "/ids.cfg&"
     ids.cmd(comd)
-    sleep(1)
+    sleep(5)
     # Run Modbus Client
-    comd = "python " + cur_dir + "/modbus/modbus_client.py --rate 1 --ip-master 10.0.10.1 --port-master 3000"
+    comd = "python " + cur_dir + "/modbus/modbus_client.py --ip-master 10.0.10.1 --port-master 3000"
     for s in modbus_servers:
         comd += " --ip-slaves %s --port-slaves 5020" % s
     comd +="&"
     mtu.cmd(comd)
+    mtu.cmd("tcpdump -i eth0 -w " + cur_dir + "/capture/mtu.pcap tcp&") 
     #topodb = TopologyDB(net=net)
     #topodb.save("topo.json")
     print "Ready !"

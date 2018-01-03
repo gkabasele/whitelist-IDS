@@ -9,5 +9,6 @@
 sw_conf.json
 logs/
 results/
+capture/
 controlplane/thrift-ids/gen-cpp/controller_client
 *.state
