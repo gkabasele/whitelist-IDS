@@ -237,8 +237,8 @@ table flow_id {
         _no_op;
         add_miss_tag;
     }
-    support_timeout: true;
     size : 1048576;
+    support_timeout: true;
 }
 
 table block_hosts{

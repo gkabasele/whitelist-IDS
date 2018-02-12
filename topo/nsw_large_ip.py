@@ -45,6 +45,7 @@ parser.add_argument('--json', help='Path to JSON config file',
 parser.add_argument('--pcap-dump', help='Dump packets on interfaces to pcap files',
                     type=str, action="store", required=False, default=False)
 
+parser.add_argument('--auto', help='Automatically run command', type=bool, default=False)
 args = parser.parse_args()
 
 # TODO TopologyDB to generate json file   
@@ -194,6 +195,7 @@ def main():
     num_hosts = args.num_hosts
     num_subnet = args.num_subnet
     mode = args.mode
+    auto = args.auto
 
     kwargs =  {"sw_path" : args.behavioral_exe,
                "json_path" : args.json,
@@ -263,15 +265,18 @@ def main():
                 h.describe()
                 ip = "10.0.%d0.%d" % ((sub_id + 1), (n + 1))
                 modbus_servers.append(ip)
-                mod = 'python '+ cur_dir + '/modbus/modbus_server.py --ip 10.0.%d0.%d --port 5020&' % ((sub_id + 1), (n+1))
-                capt = 'tcpdump -i eth0 -w ' + cur_dir + '/capture/' + name + '.pcap&' 
-                h.cmd(mod)
-                h.cmd(capt)
+                if auto:
+                    mod = 'python '+ cur_dir + '/modbus/modbus_server.py --ip 10.0.%d0.%d --port 5020&' % ((sub_id + 1), (n+1))
+                    capt = 'tcpdump -i eth0 -w ' + cur_dir + '/capture/' + name + '.pcap&' 
+                    h.cmd(mod)
+                    h.cmd(capt)
     ids = net.get('s3-h1')
     ids.describe()
     ctrl = net.get('s3-h2')
     ctrl.describe()
     ctrl.cmd('ip link set s3-h2-eth0 up')  
+    if auto:
+        ids.cmd('tcpdump -i eth0 -w' + cur_dir + '/capture/' + 'ids.pcap&')
     #ids.cmd('sudo iptables -I INPUT -i eth0 -j NFQUEUE --queue-num 1')
     ids.cmd('sudo iptables -I FORWARD -i eth0 -j NFQUEUE --queue-num 1')
     ids.cmd('sysctl -w net.ipv4.ip_forward=1')
@@ -309,24 +314,25 @@ def main():
     sleep(1)
     
     # Run the controller
-    comd = "python " + cur_dir + "/controlplane/thrift-ids/gen-py/IDSControllerPy/controller.py --conf " + cur_dir +"/sw_conf_large_v2.json --capture " + cur_dir + "/controlplane/capture_wl/modbus_capture_tcp.pcap&"
-    ctrl.cmd(comd) 
-    sleep(1)
-    # Run Bro
-    comd = "cd " + cur_dir + "/bro_setup && bro -b -C -i eth0 " + cur_dir + "/bro_setup/server_broker.bro&"
-    ids.cmd(comd)
-    sleep(1)
-    # Run IDS
-    comd = cur_dir +"/controlplane/thrift-ids/gen-cpp/controller_client -c " + cur_dir + "/ids.cfg&"
-    ids.cmd(comd)
-    sleep(5)
-    # Run Modbus Client
-    comd = "python " + cur_dir + "/modbus/modbus_client.py --ip-master 10.0.10.1 --port-master 3000"
-    for s in modbus_servers:
-        comd += " --ip-slaves %s --port-slaves 5020" % s
-    comd +="&"
-    mtu.cmd(comd)
-    mtu.cmd("tcpdump -i eth0 -w " + cur_dir + "/capture/mtu.pcap tcp&") 
+    if auto:
+        comd = "python " + cur_dir + "/controlplane/thrift-ids/gen-py/IDSControllerPy/controller.py --conf " + cur_dir +"/sw_conf_large_v2.json --capture " + cur_dir + "/controlplane/capture_wl/modbus_capture_tcp.pcap&"
+        ctrl.cmd(comd) 
+        sleep(1)
+        # Run Bro
+        comd = "cd " + cur_dir + "/bro_setup && bro -b -C -i eth0 " + cur_dir + "/bro_setup/server_broker.bro&"
+        ids.cmd(comd)
+        sleep(1)
+        # Run IDS
+        comd = cur_dir +"/controlplane/thrift-ids/gen-cpp/controller_client -c " + cur_dir + "/ids.cfg&"
+        ids.cmd(comd)
+        sleep(5)
+        # Run Modbus Client
+        comd = "python " + cur_dir + "/modbus/modbus_client.py --ip-master 10.0.10.1 --port-master 3000"
+        for s in modbus_servers:
+            comd += " --ip-slaves %s --port-slaves 5020" % s
+        comd +="&"
+        mtu.cmd(comd)
+        mtu.cmd("tcpdump -i eth0 -w " + cur_dir + "/capture/mtu.pcap tcp&") 
     #topodb = TopologyDB(net=net)
     #topodb.save("topo.json")
     print "Ready !"
