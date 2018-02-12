@@ -241,7 +241,6 @@ def main():
         sub_id  = i+1
         sw = net.get('s%d'%sub_id)
         sw_mac = ["00:aa:bb:00:%02x:%02x" % (sub_id, n) for n in xrange(num_hosts)]
-
         sw_addr = ["10.0.%d0.%d0" % (sub_id + 1, n + 1) for n in xrange(num_hosts)]
 
         for n in xrange(num_hosts):

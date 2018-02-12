@@ -282,6 +282,7 @@ table srtag_tab {
 
 }
 
+// Stored on non IDS switch to remove the tag before forwarding packet to destination
 table idstag_tab {
     reads {
         ipv4.protocol : exact;
@@ -297,6 +298,8 @@ table idstag_tab {
 
 }
 
+
+// Stored on IDS switch which add an header containing a nonce
 table add_tag_ids_tab {
     reads {
         standard_metadata.ingress_port : exact;

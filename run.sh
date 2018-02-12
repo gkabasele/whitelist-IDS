@@ -6,4 +6,8 @@ sudo rm logs/*
 sudo rm capture/*
 sudo p4c-bmv2 --json whitelist_v4.json code_p4/v3/ingress_switch.p4
 #sudo python topo/nsw_ip.py --behavioral-exe $TARGET --json $1
-sudo  python $1 --num-host $2 --behavioral-exe $TARGET --json $3
+if [ "$#" -le 3 ]; then
+    sudo python $1 --num-host $2 --behavioral-exe $TARGET --json $3
+else
+    sudo  python $1 --num-host $2 --auto $3 --behavioral-exe $TARGET --json $4
+fi

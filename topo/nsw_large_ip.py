@@ -315,6 +315,7 @@ def main():
     
     # Run the controller
     if auto:
+        print "Starting Controller"
         comd = "python " + cur_dir + "/controlplane/thrift-ids/gen-py/IDSControllerPy/controller.py --conf " + cur_dir +"/sw_conf_large_v2.json --capture " + cur_dir + "/controlplane/capture_wl/modbus_capture_tcp.pcap&"
         ctrl.cmd(comd) 
         sleep(1)
@@ -323,10 +324,12 @@ def main():
         ids.cmd(comd)
         sleep(1)
         # Run IDS
+        print "Starting Intrusion Detection System"
         comd = cur_dir +"/controlplane/thrift-ids/gen-cpp/controller_client -c " + cur_dir + "/ids.cfg&"
         ids.cmd(comd)
         sleep(5)
         # Run Modbus Client
+        print "Starting Master Terminal Unit"
         comd = "python " + cur_dir + "/modbus/modbus_client.py --ip-master 10.0.10.1 --port-master 3000"
         for s in modbus_servers:
             comd += " --ip-slaves %s --port-slaves 5020" % s
