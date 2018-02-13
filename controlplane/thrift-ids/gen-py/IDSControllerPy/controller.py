@@ -6,6 +6,7 @@ import cPickle as pickle
 import inspect
 import socket
 import ssl
+import re
 from netaddr import IPNetwork
 from netaddr import IPAddress
 from scapy.all import *
@@ -22,6 +23,7 @@ from thrift.server import TServer
 from rulestable import RuleTables
 from utils import *
 from P4SwitchCom import *
+from sswitch_runtime import SimpleSwitch
 import argparse
 import P4Constants
 
@@ -81,6 +83,7 @@ class Controller(Iface):
         else:
             services += [(None, None)]
 
+        services += [("simple_switch"), SimpleSwitch.Client)]
         return services
 
     def __init__(self):
@@ -98,15 +101,16 @@ class Controller(Iface):
         self.block_request_host = {} 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    def add_client(self, id_client, standard_client, switch):
+    def add_client(self, id_client, standard_client, sswitch_client, switch):
         self.clients[id_client] = standard_client
+        self.sw_client[id_client] = sswitch_client
         self.switches[id_client] = switch
 
 
     def setup_connection(self, switches):
         once = True
         for sw in switches:
-            standard_client, mc_client = thrift_connect(
+            standard_client, mc_client, sswitch_client = thrift_connect(
                 str(sw.ip_address.ip), int(sw.port), Controller.get_thrift_services(PreType.SimplePre)
             ) 
             # Loading config only once
@@ -114,7 +118,7 @@ class Controller(Iface):
             if once:
                 load_json_config(standard_client)
                 once = False
-            self.add_client(sw.sw_id, standard_client, sw)  
+            self.add_client(sw.sw_id, standard_client, sswitch_client, sw)  
     
     def checkreq(func):
         def wrapper(self, *args, **kwargs):
@@ -169,7 +173,15 @@ class Controller(Iface):
     # Forward packet but send clone to ids
     @checkreq
     def mirror(self, req, sw):
-        pass
+        resp = self.retrieve_value(req)         
+        if len(resp) != 7:
+            err = IDSControllerException(2, "mirror: Could not retrieve value from request")
+            raise err
+        (srcip, sport, proto, dstip, dport, funcode, length) = resp
+        self.logging_request("Mirror", srcip, sport, proto, dstip, dport, funcode, length, nonce)      
+
+        # Must change the transaction id on the switch 
+  
 
     # change the nonce when the IDS reforward the original packet
     # block is a list of length 4 where each entry is a 2byte values used to create a 64-bit nonce
@@ -372,6 +384,12 @@ class Controller(Iface):
         runtime_data = parse_runtime_data(action, action_params)
         client.bm_mt_set_default_action(0, table_name, action_name, runtime_data)
 
+    def table_add_mirror_session(self, sw_client, mirror_id, egress_port):
+        sw_client.mirroring_mapping_add(mirror_id, egress_port)
+
+    def table_del_mirror_session(self, sw_client, mirror_id):
+        sw_client.mirroring_mapping_delete(mirror_id) 
+
     # FIXME Parametrize
     def add_flow_id_entry(self, client, srcip, sport, proto, dstip, dport):
         self.table_add_entry(client, FLOW_ID, NO_OP,[srcip, sport, proto, dstip, dport],[])
@@ -409,7 +427,7 @@ class Controller(Iface):
         resp_switch = [] 
         for switch in self.switches: 
             sw = self.switches[switch]
-            if sw.is_responsible(srcip) or sw.is_responsible(dstip):
+            if sw.is_responsible(srcip) or (dstip is not None and sw.is_responsible(dstip)):
                 resp_switch.append(sw)
         return resp_switch
 
@@ -546,6 +564,36 @@ class Controller(Iface):
                             self.deploy_delete_flow_rules(resp_switch, dstip, dport, proto, srcip, sport)
 
                 #TODO UDP traffic
+
+    def install_phys_variable(self, filename):
+        '''
+            Install physical variable representation on the switch (ip:port:type:addr)
+            name[ip:port:fun:addr]
+        '''
+        with open(filename, 'r') as f:
+            for line in f:
+                (ip, port, fun, addr)  = re.search('\[.+\]',line).group(0).strip('[]').split(':')
+                client = None
+                sw = None
+                for switch in self.switches:
+                    _sw = self.switches[switch]
+                    if filter(lambda x: x[0] == ip, sw.routing_table):
+                       client = self.clients[_sw.sw_id]
+                       break
+                if fun == 'co' and sw and client :
+                    for i in [1, 5, 15]: 
+                        self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, str(i), addr], []) 
+                          
+                elif fun == 'di' and sw and client :
+                    self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, '2', addr],[])
+
+                elif fun == 'hr' and sw and client :
+                    for i in [3, 6, 10, 22, 23]:
+                        self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, str(i), addr], [])
+
+                elif fun == 'ir' and sw and client :
+                    self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, '4', addr], [])
+                
     def clear_table(self,table_name):
         table = self.get_res("table", table_name, TABLES)
         for client_id, client in self.clients.iteritems():
@@ -597,6 +645,7 @@ class Controller(Iface):
         for switch in self.switches:
             sw = self.switches[switch]
             client = self.clients[sw.sw_id]
+            sw_client = self.sw_clients[sw.sw_id]
             self.ids_sw_id = ids_sw_id
             self.table_default_entry(client, SEND_FRAME, DROP, [])
             self.table_default_entry(client, FORWARD, NO_OP, [])
@@ -622,6 +671,9 @@ class Controller(Iface):
                 self.table_default_entry(client, IDSTAG, NO_OP, [])
                 self.table_add_entry(client, IDSTAG, REMOVE_IDSTAG , [IP_PROTO_IDSTAG, "9", sw.ids_port], [])
                 self.ids_tag[sw.sw_id] = 0
+                # clone
+                self.table_add_entry(client, PKT_CLONED, ADD_MIRROR_TAG, ["1"], [sw.sw_id, sw.ids_addr])
+                self.table_add_mirror_session(sw_client, "1", sw.ids_port)
 
             self.table_default_entry(client, ARP_FORW_REQ, STORE_ARP, [sw.gw_port])
             self.table_default_entry(client, IPV4_LPM, SET_EGRESS, [sw.gw_port])
@@ -660,13 +712,14 @@ def load_json_config(standard_client=None, json_path=None):
     load_json_str(utils.get_json_config(standard_client, json_path))
 
 
-def main(sw_config, capture, ip, port, ids_sw_id):
+def main(sw_config, capture, ip, port, ids_sw_id, phys_desc):
     ctrl_logger.info("Creating switches")
     switches = create_switches(sw_config) 
     controller = Controller()
     ctrl_logger.info("Connecting to switches and setting default entry")
     controller.setup_connection(switches) 
     controller.setup_default_entry(ids_sw_id)
+    controller.install_phys_variable(phys_desc)
     if capture:
         controller.dessiminate_rules(capture)
     processor = Processor(controller)
@@ -683,5 +736,6 @@ if __name__ == '__main__':
     parser.add_argument('--ip', action='store', dest ='ip', default='172.0.10.2', help='ip address of the controller')
     parser.add_argument('--port', action='store', dest='port', type=int, default=2050, help='port used by controller')
     parser.add_argument('--ids', action='store', dest='ids_sw_id',default='3', help='datapath id of the switch connected to the IDS')
+    parser.add_argument('--desc', action='store', dest='phys_desc', default='phys.map', help='filename of the mapping between the physical process variable and the PLC registers')
     args = parser.parse_args()
-    main(args.conf, args.capture, args.ip, args.port, args.ids_sw_id)
+    main(args.conf, args.capture, args.ip, args.port, args.ids_sw_id, args.phys_desc)

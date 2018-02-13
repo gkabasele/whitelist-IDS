@@ -129,6 +129,7 @@ header_type modbus_t {
         len: 16;
         unitId: 8;
         funcode: 8;
+        startAddr: 16;
     }
 }
 
@@ -150,7 +151,6 @@ metadata intrinsic_metadata_t intrinsic_metadata;
 field_list clone_FL {
     standard_metadata;
 }
-
 
 field_list_calculation ipv4_checksum {
     input {

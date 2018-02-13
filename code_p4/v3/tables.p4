@@ -1,5 +1,7 @@
 #include "parsers.p4"
 
+#define SESSION_ID 1
+
 
 action _drop() {
     drop();
@@ -70,6 +72,25 @@ action add_miss_tag(id, ids_addr, egress_port) {
     modify_field(standard_metadata.egress_spec, egress_port);
 }
 
+action add_mirror_tag(id, ids_addr) {
+    add_header(srtag);
+
+    // Set type of tag
+    modify_field(srtag.id, id);
+    modify_field(srtag.dstAddr, ipv4.dstAddr);
+    modify_field(srtag.proto, ipv4.protocol);
+    modify_field(srtag.padding, 0x0001);
+
+    //Change protocol to specify presence of tag
+    modify_field(ipv4.protocol, 0x00c8);
+    
+    // Incrementing the lenght by the size of the tag
+    add_to_field(ipv4.totalLen, 8);
+
+    // Setting IDS ip
+    modify_field(ipv4.dstAddr, ids_addr);
+}
+
 action add_ids_tag(val) {
     add_header(idstag);
 
@@ -130,8 +151,7 @@ register arp_index {
 
 action _clone_i2e(){
     // Distinguish between original and cloned packet
-    modify_field(standard_metadata.instance_type, 1);
-    clone_ingress_pkt_to_egress(1,clone_FL);
+    clone_ingress_pkt_to_egress(SESSION_ID, clone_FL);
 }
 
 action store_arp_in(egress_port){
@@ -309,16 +329,34 @@ table add_tag_ids_tab {
     support_timeout: true;
 }
 
-table tcp_flags{
-    reads {
-        tcp.fin: exact;
-        tcp.rst: exact;
+table phys_var_req { 
+   reads {
+        ipv4.dstAddr : exact;
+        ipv4.dstPort : exact;
+        modbus.funcode : exact;
+        modbus.startAddr: exact;
     }
-    actions { 
-        _clone_i2e;    
+    actions {
         _no_op;
+        _drop;
+        _clone_i2e;
     }
 }
+
+table phys_var_res {
+    reads {
+        ipv4.srcAddr : exact;
+        ipv4.srcPort : exact;
+        modbus.transId : exact;
+    }
+    actions {
+        _no_op;
+        _drop;
+        _clone_i2e;
+    }
+    support_timeout: true;
+}
+
 
 table pkt_cloned {
     reads {
@@ -327,7 +365,7 @@ table pkt_cloned {
     actions {
         _drop;
         _no_op;
-        add_miss_tag;
+        add_mirror_tag;
     }
 } 
 

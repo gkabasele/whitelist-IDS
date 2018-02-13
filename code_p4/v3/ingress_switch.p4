@@ -25,6 +25,7 @@ control ingress {
                 apply(idstag_tab){
                     miss{
                         // Check if tag header present
+                        // FIXME not necessarly accept srtag directly
                         apply(srtag_tab){
                             miss {
                                 if(ipv4.protocol == 0x0006 and (tcp.fin == 1 or tcp.rst == 1 )){
@@ -39,6 +40,13 @@ control ingress {
                                                         //nothing to do here                
                                                     } else {
                                                         apply(modbus);                                      
+                                                        if (modbus.funcode < 7 or modbus.funcode == 10 or modbus.funcode == 15 or modbus.funcode == 22 or modbus.funcode == 23){
+                                                            if (tcp.dstPort == 5020){
+                                                                apply(phys_var_req); 
+                                                            } else {
+                                                                apply(phys_var_res);
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }

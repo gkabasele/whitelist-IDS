@@ -1,6 +1,7 @@
 IP_PROTO_TCP = 6
 IP_PROTO_SRTAG = '200' 
 IP_PROTO_IDSTAG = '201'
+
 # Table name
 SEND_FRAME = 'send_frame'
 FORWARD = 'forward'
@@ -17,6 +18,8 @@ SRTAG = 'srtag_tab'
 IDSTAG = 'idstag_tab'
 IDSTAG_ADD_TAB = 'add_tag_ids_tab'
 BLOCK_HOSTS = 'block_hosts'
+PHYS_VAR_REQ = 'phys_var_req'
+PHYS_VAR_RES = 'phys_var_res'
 
 # Action name
 DROP = '_drop'
@@ -33,6 +36,7 @@ FORWARD_ARP = 'forward_arp'
 CLONE_I2E = '_clone_i2e'
 REMOVE_IDSTAG = 'remove_ids_tag'
 ADD_IDSTAG = 'add_ids_tag'
+ADD_MIRROR_TAG = 'add_mirror_tag'
 
 
 # Value name
@@ -41,4 +45,5 @@ MAX_BLOCK_REQUESTS = 3
 RULE_ALLOW = 1
 RULE_DROP = 0
 RULE_ORIGINAL = True
+SESSION_ID = "1"
 
