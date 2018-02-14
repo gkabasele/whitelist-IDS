@@ -257,8 +257,8 @@ table flow_id {
         _no_op;
         add_miss_tag;
     }
-    support_timeout: true;
     size : 1048576;
+    support_timeout: true;
 }
 
 table block_hosts{
@@ -332,7 +332,7 @@ table add_tag_ids_tab {
 table phys_var_req { 
    reads {
         ipv4.dstAddr : exact;
-        ipv4.dstPort : exact;
+        tcp.dstPort : exact;
         modbus.funcode : exact;
         modbus.startAddr: exact;
     }
@@ -346,7 +346,7 @@ table phys_var_req {
 table phys_var_res {
     reads {
         ipv4.srcAddr : exact;
-        ipv4.srcPort : exact;
+        tcp.srcPort : exact;
         modbus.transId : exact;
     }
     actions {

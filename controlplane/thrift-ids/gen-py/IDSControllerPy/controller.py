@@ -580,19 +580,22 @@ class Controller(Iface):
                     if filter(lambda x: x[0] == ip, sw.routing_table):
                        client = self.clients[_sw.sw_id]
                        break
-                if fun == 'co' and sw and client :
-                    for i in [1, 5, 15]: 
-                        self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, str(i), addr], []) 
-                          
-                elif fun == 'di' and sw and client :
-                    self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, '2', addr],[])
+                if client and sw :
+                    if fun == 'co' :
+                        for i in [1, 5, 15]: 
+                            self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, str(i), addr], []) 
+                              
+                    elif fun == 'di' :
+                        self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, '2', addr],[])
 
-                elif fun == 'hr' and sw and client :
-                    for i in [3, 6, 10, 22, 23]:
-                        self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, str(i), addr], [])
+                    elif fun == 'hr' :
+                        for i in [3, 6, 10, 22, 23]:
+                            self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, str(i), addr], [])
 
-                elif fun == 'ir' and sw and client :
-                    self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, '4', addr], [])
+                    elif fun == 'ir' :
+                        self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, '4', addr], [])
+
+                
                 
     def clear_table(self,table_name):
         table = self.get_res("table", table_name, TABLES)

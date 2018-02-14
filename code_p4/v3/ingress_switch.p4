@@ -28,9 +28,6 @@ control ingress {
                         // FIXME not necessarly accept srtag directly
                         apply(srtag_tab){
                             miss {
-                                if(ipv4.protocol == 0x0006 and (tcp.fin == 1 or tcp.rst == 1 )){
-                                    apply(tcp_flags);
-                                }
                                 apply(block_hosts){
                                     miss {
                                         apply(flow_id){
