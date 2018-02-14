@@ -83,12 +83,13 @@ class Controller(Iface):
         else:
             services += [(None, None)]
 
-        services += [("simple_switch"), SimpleSwitch.Client)]
+        services += [("simple_switch", SimpleSwitch.Client)]
         return services
 
     def __init__(self):
         self.clients = {}
         self.switches = {}
+        self.sw_clients = {}
         self.ids_tag = {}
         self.ids_sw_id = None
         # Flow : srcip, sport, proto, dstip, dport
@@ -103,7 +104,7 @@ class Controller(Iface):
 
     def add_client(self, id_client, standard_client, sswitch_client, switch):
         self.clients[id_client] = standard_client
-        self.sw_client[id_client] = sswitch_client
+        self.sw_clients[id_client] = sswitch_client
         self.switches[id_client] = switch
 
 
@@ -385,10 +386,10 @@ class Controller(Iface):
         client.bm_mt_set_default_action(0, table_name, action_name, runtime_data)
 
     def table_add_mirror_session(self, sw_client, mirror_id, egress_port):
-        sw_client.mirroring_mapping_add(mirror_id, egress_port)
+        sw_client.mirroring_mapping_add(int(mirror_id), int(egress_port))
 
     def table_del_mirror_session(self, sw_client, mirror_id):
-        sw_client.mirroring_mapping_delete(mirror_id) 
+        sw_client.mirroring_mapping_delete(int(mirror_id) )
 
     # FIXME Parametrize
     def add_flow_id_entry(self, client, srcip, sport, proto, dstip, dport):
@@ -574,13 +575,14 @@ class Controller(Iface):
             for line in f:
                 (ip, port, fun, addr)  = re.search('\[.+\]',line).group(0).strip('[]').split(':')
                 client = None
-                sw = None
                 for switch in self.switches:
-                    _sw = self.switches[switch]
-                    if filter(lambda x: x[0] == ip, sw.routing_table):
-                       client = self.clients[_sw.sw_id]
-                       break
-                if client and sw :
+                    sw = self.switches[switch]
+                    print sw.routing_table[0].keys()[0].encode('utf-8')[:-3]
+                    if filter(lambda x: x.keys()[0].encode('utf-8')[:-3] == ip, sw.routing_table):
+                        client = self.clients[sw.sw_id]
+                        break
+                if client is not None :
+                    print fun
                     if fun == 'co' :
                         for i in [1, 5, 15]: 
                             self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, str(i), addr], []) 
@@ -652,12 +654,8 @@ class Controller(Iface):
             self.ids_sw_id = ids_sw_id
             self.table_default_entry(client, SEND_FRAME, DROP, [])
             self.table_default_entry(client, FORWARD, NO_OP, [])
-            self.table_default_entry(client, TCP_FLAGS, NO_OP, [])
             self.table_default_entry(client, PKT_CLONED, NO_OP, [])
 
-            # Set rule in  PKT_CLONED to distinguish instance_type of packet
-            #self.table_default_entry(client, TCP_FLAGS, CLONE_I2E, [])
-            #self.table_add_entry(client, PKT_CLONED, ADD_TAG, [CLONE_PKT_FLAG],[sw.sw_id, sw.ids_addr, sw.ids_port]) 
             if self.ids_sw_id == sw.sw_id:
                 self.table_default_entry(client, FLOW_ID, NO_OP, [])
                 self.table_default_entry(client, MODBUS, NO_OP, [])
@@ -674,7 +672,7 @@ class Controller(Iface):
                 self.table_default_entry(client, IDSTAG, NO_OP, [])
                 self.table_add_entry(client, IDSTAG, REMOVE_IDSTAG , [IP_PROTO_IDSTAG, "9", sw.ids_port], [])
                 self.ids_tag[sw.sw_id] = 0
-                # clone
+                # distinguish cloned packet
                 self.table_add_entry(client, PKT_CLONED, ADD_MIRROR_TAG, ["1"], [sw.sw_id, sw.ids_addr])
                 self.table_add_mirror_session(sw_client, "1", sw.ids_port)
 
@@ -739,6 +737,6 @@ if __name__ == '__main__':
     parser.add_argument('--ip', action='store', dest ='ip', default='172.0.10.2', help='ip address of the controller')
     parser.add_argument('--port', action='store', dest='port', type=int, default=2050, help='port used by controller')
     parser.add_argument('--ids', action='store', dest='ids_sw_id',default='3', help='datapath id of the switch connected to the IDS')
-    parser.add_argument('--desc', action='store', dest='phys_desc', default='phys.map', help='filename of the mapping between the physical process variable and the PLC registers')
+    parser.add_argument('--desc', action='store', dest='phys_desc', default='varphys.map', help='filename of the mapping between the physical process variable and the PLC registers')
     args = parser.parse_args()
     main(args.conf, args.capture, args.ip, args.port, args.ids_sw_id, args.phys_desc)
