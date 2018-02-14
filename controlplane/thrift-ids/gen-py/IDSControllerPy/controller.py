@@ -577,12 +577,10 @@ class Controller(Iface):
                 client = None
                 for switch in self.switches:
                     sw = self.switches[switch]
-                    print sw.routing_table[0].keys()[0].encode('utf-8')[:-3]
                     if filter(lambda x: x.keys()[0].encode('utf-8')[:-3] == ip, sw.routing_table):
                         client = self.clients[sw.sw_id]
                         break
                 if client is not None :
-                    print fun
                     if fun == 'co' :
                         for i in [1, 5, 15]: 
                             self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, str(i), addr], []) 
@@ -660,7 +658,8 @@ class Controller(Iface):
                 self.table_default_entry(client, FLOW_ID, NO_OP, [])
                 self.table_default_entry(client, MODBUS, NO_OP, [])
                 #self.table_add_entry(client, SRTAG, REMOVE_TAG, [IP_PROTO_SRTAG], [sw.ids_port])
-                self.table_add_entry(client, SRTAG, REMOVE_TAG, [IP_PROTO_SRTAG], ["1"])
+                self.table_add_entry(client, SRTAG, REMOVE_TAG, [IP_PROTO_SRTAG, "0"], ["1"])
+                self.table_add_entry(client, SRTAG, SET_EGRESS, [IP_PROTO_SRTAG, "1"], ["1"])
                 self.table_default_entry(client, IDSTAG, NO_OP, [])
                 self.table_default_entry(client, IDSTAG_ADD_TAB, NO_OP, [])
                 self.table_add_entry(client, IDSTAG_ADD_TAB, ADD_IDSTAG, ["1"], ["9"])

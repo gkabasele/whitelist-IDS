@@ -56,7 +56,7 @@ action add_miss_tag(id, ids_addr, egress_port) {
     modify_field(srtag.id, id);
     modify_field(srtag.dstAddr, ipv4.dstAddr);
     modify_field(srtag.proto, ipv4.protocol);
-    modify_field(srtag.padding, 0x0000);
+    modify_field(srtag.reason, 0x0000);
 
     // Change protocol to specify presence of tag
     modify_field(ipv4.protocol, 0x00c8);
@@ -79,13 +79,18 @@ action add_mirror_tag(id, ids_addr) {
     modify_field(srtag.id, id);
     modify_field(srtag.dstAddr, ipv4.dstAddr);
     modify_field(srtag.proto, ipv4.protocol);
-    modify_field(srtag.padding, 0x0001);
+    modify_field(srtag.reason, 0x0001);
 
     //Change protocol to specify presence of tag
     modify_field(ipv4.protocol, 0x00c8);
     
-    // Incrementing the lenght by the size of the tag
+    // Incrementing the length by the size of the tag
     add_to_field(ipv4.totalLen, 8);
+
+    // The mac addresses must be inverted since the packet goes the other way
+    modify_field(tmp_ether.hwAddr, ethernet.srcAddr);
+    modify_field(ethernet.srcAddr, ethernet.dstAddr);
+    modify_field(ethernet.dstAddr, tmp_ether.hwAddr);
 
     // Setting IDS ip
     modify_field(ipv4.dstAddr, ids_addr);
@@ -280,7 +285,6 @@ table modbus {
         tcp.srcPort : exact;
         modbus.funcode : exact;
         modbus.len: exact;
-        //standard_metadata.packet_length: exact;
     }
     actions {
         _drop;
@@ -293,11 +297,13 @@ table modbus {
 table srtag_tab {
     reads {
         ipv4.protocol : exact;
+        srtag.reason : exact;
     }
     actions {
         _drop;
         _no_op;
         remove_miss_tag;
+        set_egress_port;
     }
 
 }

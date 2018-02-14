@@ -22,31 +22,27 @@ control ingress {
         //TODO check for funcode
         apply(add_tag_ids_tab){
             miss{
-                apply(idstag_tab){
-                    miss{
-                        // Check if tag header present
-                        // FIXME not necessarly accept srtag directly
-                        apply(srtag_tab){
-                            miss {
-                                apply(block_hosts){
-                                    miss {
-                                        apply(flow_id){
-                                            hit{
-                                                if (ipv4.protocol == 0x0006 and (tcp.dstPort == 5020 or tcp.srcPort == 5020)){
-                                                    if(tcp.syn == 1 or tcp.fin == 1 or (tcp.ack == 1 and tcp.psh == 0)) {
-                                                        //nothing to do here                
-                                                    } else {
-                                                        apply(modbus);                                      
-                                                        if (modbus.funcode < 7 or modbus.funcode == 10 or modbus.funcode == 15 or modbus.funcode == 22 or modbus.funcode == 23){
-                                                            if (tcp.dstPort == 5020){
-                                                                apply(phys_var_req); 
-                                                            } else {
-                                                                apply(phys_var_res);
-                                                            }
-                                                        }
-                                                    }
+                if (valid(idstag)){
+                    apply(idstag_tab);
+                } else if (valid(srtag)){
+                    apply(srtag_tab);
+                } else {
+                    apply(block_hosts){
+                        miss {
+                            apply(flow_id){
+                                hit{
+                                    if (ipv4.protocol == 0x0006 and (tcp.dstPort == 5020 or tcp.srcPort == 5020)){
+                                        if(tcp.syn == 1 or tcp.fin == 1 or (tcp.ack == 1 and tcp.psh == 0)) {
+                                            //nothing to do here                
+                                        } else {
+                                            apply(modbus);                                      
+                                            if (modbus.funcode < 7 or modbus.funcode == 10 or modbus.funcode == 15 or modbus.funcode == 22 or modbus.funcode == 23){
+                                                if (tcp.dstPort == 5020){
+                                                    apply(phys_var_req); 
+                                                } else {
+                                                    apply(phys_var_res);
                                                 }
-                                            }
+                                             }
                                         }
                                     }
                                 }
@@ -54,9 +50,9 @@ control ingress {
                         }
                     }
                 }
-            }
+                apply(forward);
+            } 
         }
-        apply(forward);
     } else if (valid(arp)) {
         apply(arp_response);
         if(tmp_arp.is_dest == 0){
@@ -74,7 +70,9 @@ control ingress {
 
 //Called when the packet is dequeued
 control egress {
-    apply(pkt_cloned);
+    if (standard_metadata.instance_type == 1){
+        apply(pkt_cloned);
+    }
     apply(send_frame);
 }
 
