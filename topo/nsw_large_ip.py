@@ -277,7 +277,7 @@ def main():
     ctrl.cmd('ip link set s3-h2-eth0 up')  
     if auto:
         ids.cmd('tcpdump -i eth0 -w' + cur_dir + '/capture/' + 'ids.pcap&')
-    #ids.cmd('sudo iptables -I INPUT -i eth0 -j NFQUEUE --queue-num 1')
+    ids.cmd('sudo iptables -I INPUT -i eth0 -j NFQUEUE --queue-num 1')
     ids.cmd('sudo iptables -I FORWARD -i eth0 -j NFQUEUE --queue-num 1')
     ids.cmd('sysctl -w net.ipv4.ip_forward=1')
 

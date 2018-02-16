@@ -293,13 +293,15 @@ static u_int32_t print_pkt (struct nfq_data *tb)
             switch(ip_info->protocol) {
                 case IPPROTO_SRTAG: 
                 {
+                    std::cout<< "Received duplicate packet" <<std::endl;
                     srtag_info = (struct srtag_hdr*) (data + (ip_info->ihl*4));
                     std::string dstip = to_ipv4_string(srtag_info->dest); 
                     int8_t proto = (int8_t)(srtag_info->protocol);
                     switch(proto) {
                         case IPPROTO_TCP:
                         {
-                            handle_tcp_pkt(ip_info, srtag_info, switches, data, ret);
+                            //handle_tcp_pkt(ip_info, srtag_info, switches, data, ret);
+                            ids_logger->info("Received Duplicate TCP packet"); 
                             break;
 
                         }                        

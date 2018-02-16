@@ -160,7 +160,7 @@ class Controller(Iface):
         rpc_logger.info(' Received request : %s', name)
         rpc_logger.info('(%s) %s:%s -> %s:%s', proto , srcip, sport, dstip, dport)
         if funcode and length:
-            rpc_logger.info('funcode:%s, length:%',funcode, length)
+            rpc_logger.info('funcode:%s, length:%s',funcode, length)
         if nonce:
             rpc_logger.debug('nonce:%s', nonce)
 
