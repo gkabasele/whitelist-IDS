@@ -199,7 +199,7 @@ void handle_tcp_pkt(struct iphdr* ip_info,struct srtag_hdr *srtag_info,
     /*TODO check for oveflow ?*/
     int16_t srcport = (int16_t) ntohs(tcp_info->source);
     int16_t dstport = (int16_t) ntohs(tcp_info->dest);
-    req = form_request(srcip, dstip, srcport, dstport, proto);
+    
 
     /* Get TCP header options */
     if (is_modbus_pkt(tcp_info)) { 
@@ -208,32 +208,44 @@ void handle_tcp_pkt(struct iphdr* ip_info,struct srtag_hdr *srtag_info,
         /* TODO check if int is too big for short values*/
         int8_t funcode = (int8_t) modbus_info->funcode;
         int16_t modbus_length = (int16_t) ntohs(modbus_info->len);
+        int16_t trans_id = (int16_t) ntohs(modbus_info->transId);
         printf("Modbus Pkt: funcode: %d, length: %d\n", funcode, modbus_length);
-        req.__set_length(modbus_length);
-        req.__set_funcode(funcode); 
+        //req.__set_length(modbus_length);
+        //req.__set_funcode(funcode); 
+        if( srtag_info->reason == SRTAG_CLON && dstport == MODBUS_PORT) {
+            req = form_request(srcip, dstip, trans_id, dstport, proto);
+            switches.push_back((int16_t) ntohs(srtag_info->identifier));
+            client.mirror(req, switches);
+        } else if (srtag_info->reason == SRTAG_CLON) {
+            index += sizeof(struct modbus_hdr);
+
+        }
     }
+
+    /*
     switches.push_back((int16_t) srtag_info->identifier);
     client.allow(req, switches); 
     
-    /* Forge packet */
+     Forge packet 
     ip_info->daddr = srtag_info->dest;
     ip_info->protocol = srtag_info->protocol;
     ip_info->tot_len = ip_info->tot_len - sizeof(*srtag_info);
     ip_info->check = in_cksum((unsigned short*) ip_info, sizeof(ip_info));
 
-    /* Copy packet */
+    * Copy packet *
+    
     unsigned char* crafted_packet; 
     unsigned int length = ret - sizeof(*srtag_info);  
     crafted_packet = forge_packet(length, ip_info, srtag_info, tcp_info,
                                   modbus_info);
 
-    /* Send packet */                
+    * Send packet *                
     if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP)) < 0){
         perror("socket");
         exit(EXIT_FAILURE);
     }
 
-    /* IP_HDRINCL no default ip set by the kernel */
+    * IP_HDRINCL no default ip set by the kernel *
     if ((setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &optval, sizeof(int))) < 0){
         perror("setsockopt");
         exit(EXIT_FAILURE);
@@ -241,13 +253,13 @@ void handle_tcp_pkt(struct iphdr* ip_info,struct srtag_hdr *srtag_info,
     connection.sin_family = AF_INET;
     connection.sin_addr.s_addr = inet_addr(dstip.c_str());
 
-    /* Forwarding packet */
+    * Forwarding packet *
     if (sendto(sockfd, crafted_packet, length, 0, (struct sockaddr *)&connection, sizeof(struct sockaddr)) < 0){
         perror("sendto");
         exit(EXIT_FAILURE);
     } 
     close(sockfd);
-    free(crafted_packet);
+    free(crafted_packet);*/ 
 }
 
 
@@ -300,7 +312,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     switch(proto) {
                         case IPPROTO_TCP:
                         {
-                            //handle_tcp_pkt(ip_info, srtag_info, switches, data, ret);
+                            handle_tcp_pkt(ip_info, srtag_info, switches, data, ret);
                             ids_logger->info("Received Duplicate TCP packet"); 
                             break;
 

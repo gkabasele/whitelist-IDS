@@ -174,15 +174,24 @@ class Controller(Iface):
     # Forward packet but send clone to ids
     @checkreq
     def mirror(self, req, sw):
+        print "Passing Here 1"
+        print req
+        print sw
         resp = self.retrieve_value(req)         
+        print "Passing Here 2"
         if len(resp) != 7:
             err = IDSControllerException(2, "mirror: Could not retrieve value from request")
             raise err
+        if len(sw) != 1:
+            err = IDSControllerException(3, "mirror: Could not retrieve switch ID")
+            raise err
         (srcip, sport, proto, dstip, dport, funcode, length) = resp
-        self.logging_request("Mirror", srcip, sport, proto, dstip, dport, funcode, length, nonce)      
-
+        self.logging_request("Mirror", srcip, sport, proto, dstip, dport, funcode, length)      
         # Must change the transaction id on the switch 
-  
+        trans_id = sport
+        # Get the switch closer to the host
+        client = self.clients[str(sw[0])] 
+        self.table_add_entry(client, PHYS_VAR_RES, CLONE_I2E, [dstip, dport, trans_id],[]) 
 
     # change the nonce when the IDS reforward the original packet
     # block is a list of length 4 where each entry is a 2byte values used to create a 64-bit nonce
@@ -236,7 +245,7 @@ class Controller(Iface):
         (srcip, sport, proto, dstip, dport, funcode, length) = resp
         flow = (srcip, sport, proto, dstip, dport)
 
-        self.logging_request("Block", srcip, sport, proto, dstip, dport, funcode, length, nonce)
+        self.logging_request("Block", srcip, sport, proto, dstip, dport, funcode, length)
                 
         #self.flow_table.dump_table()
         if ((dstip in self.block_request_host and
@@ -283,7 +292,7 @@ class Controller(Iface):
             err = IDSControllerException(2, "remove: Could not retrieve value from request")
             raise err
         (srcip, sport, proto, dstip, dport, funcode, length) = resp
-        self.logging_request("Remove", srcip, sport, proto, dstip, dport, funcode, lenght)
+        self.logging_request("Remove", srcip, sport, proto, dstip, dport, funcode, length)
         if self.is_flow_installed((srcip, sport, proto, dstip, dport)):
             resp_sw = self.get_resp_switch(srcip, dstip)
             for sw in resp_sw:
