@@ -1,4 +1,6 @@
 import sys
+import re
+import collections
 
 from netfilterqueue import NetfilterQueue
 from scapy.all import *
@@ -12,6 +14,7 @@ from thrift.protocol import TBinaryProtocol
 
 from IDSControllerPy import Controller
 from IDSControllerPy.ttypes import *
+
 
 
 parser = argparse.ArgumentParser()
@@ -56,7 +59,7 @@ class PacketHandler():
         transport.open()
 
     def create_variables(self, varfile):
-        with open varfile as f:
+        with open(varfile,'r') as f:
             for line in f:
                 varname = re.search('.+\[', line).group(0).strip('[')
                 (ip, port, kind, addr, size) =  re.search('\[.+\]',line).group(0).strip('[]').split(':') 
@@ -86,7 +89,6 @@ class PacketHandler():
                     addr = pkt[Modbus].startAddr
                     kind = ProcessVariable.funcode_to_kind(funcode)
                     self.transId[transId] =  ProcessVariable( dstip, dport, kind, addr) 
-                    # retrieve kind
                     self.client.mirror(req, switch)
                 else: 
                     # Receive request 
