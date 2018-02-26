@@ -582,7 +582,7 @@ class Controller(Iface):
         '''
         with open(filename, 'r') as f:
             for line in f:
-                (ip, port, fun, addr)  = re.search('\[.+\]',line).group(0).strip('[]').split(':')
+                (ip, port, fun, addr, size)  = re.search('\[.+\]',line).group(0).strip('[]').split(':')
                 client = None
                 for switch in self.switches:
                     sw = self.switches[switch]
