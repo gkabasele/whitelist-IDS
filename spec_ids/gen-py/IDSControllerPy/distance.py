@@ -58,13 +58,13 @@ expr = operatorPrecedence( operand,
      (andop, 2, opAssoc.LEFT),]
     )
 
-def eval_expr(expr, dist, max_depth = 50):
+def eval_expr(expr, dist, variables, values, max_depth = 50):
     eq = ""
     acc = []
     if max_depth > 0:
         for lit in expr:
             if isinstance(lit, collections.Iterable) and type(lit) is not str:
-                res = eval_expr(lit, dist, max_depth-1)
+                res = eval_expr(lit, dist, variables, values, max_depth-1)
                 eq += str(res)
             elif lit in [">","=","<"]:
                 acc.append(int(eq))
@@ -73,16 +73,33 @@ def eval_expr(expr, dist, max_depth = 50):
                 eq = ""
             else:
                 eq += str(lit)
-        resp = Expression(eq)
+        resp = Expression(eq, variables)
         if len(acc) > 0:
-            d = abs(acc[0] - int(eq))
+            #d = abs(acc[0] - int(eq))
+            d = acc[0] - int(eq)
             dist.append(d)
             print "Dist: ",d
-        return resp()
+        return resp(*values)
     else:
         return
 
 
+test = "2*a + 4*b < 100"
+res = expr.parseString(test)
+variables = ["a", "b"]
+values = [1, 2]
+dist = []
+print "Req: %s value: %s"% (test, values)
+eval_expr(res, dist, variables, values, max_depth=50) 
+print sum(dist)
+
+values = [40, 12]
+dist = []
+print "Req: %s value: %s"% (test, values)
+eval_expr(res, dist, variables, values, max_depth=50) 
+print sum(dist)
+
+'''
 test1 = "2*5 + 4*3 < 100"
 res =  expr.parseString(test1)
 d1 = []
@@ -123,3 +140,4 @@ res = expr.parseString(test6)
 d6 = []
 eval_expr(res, d6)
 print sum(d6)
+'''

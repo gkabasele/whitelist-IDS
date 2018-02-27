@@ -1,5 +1,8 @@
+#!/usr/bin/env python
+
 import sys
 import re
+import yaml
 
 from pyparsing import *
 from Equation import Expression
@@ -47,10 +50,13 @@ class RequirementParser():
 
 class State(): 
 
-    def __init__(self, reqFile, varFile ): 
+    def __init__(self, descFile, parser=RequirementParser()): 
         # name to variable 
         self.var = {}
         self.req = []
+        self.parser = parser
+
+        self.setup(descFile)
 
     def get_var_values(self):
         values = []
@@ -58,29 +64,34 @@ class State():
             values.appends(v.value) 
         return values
 
-    def setup_var(self, varFile):
-        with open(varFile,'r') as f:
-            for line in f:
-                varname = re.search('.+\[', line).group(0).strip('[')
-                (ip, port, kind, addr, size) = re.search('\[.+\]', line).group(0).strip('[]').split(':')
-                self.var[varname] = ProcessVariable(host, port, kind, addr, size, varname)
-
-    def setup_req(self, reqFile):
-        with open(reqFile, 'r') as f:
-            for line in f:
-                self.req.append(req)   
-
+    def setup(self, descFile):
+        content = open(varFile).read()
+        desc = yaml.load(content) 
+        for var_desc in desc['variables']:
+            var = var_desc['variable']
+            pv = ProcessVariable(var['host'],
+                                 var['port'],
+                                 var['type'],
+                                 var['address'],
+                                 var['size'],
+                                 var['name']) 
+            self.var[pv.name] = pv 
+        
+        for req_desc in desc['requirements']:
+            self.req.append(req_desc['requirement']) 
+            
+        
     def add_variable(self, host, port, kind, addr, name): 
         self.var[name] = ProcessVariable(host, port, kind, addr, size, name)
 
-    def compute_distance(req, dist, max_depth=50):
+    def compute_distance(self, req, dist, max_depth=50):
         eq = ""
         acc = []
         if max_depth > 0:
             for lit in req:
                 # FIXME variable in requirements 
                 if isinstance(lit, collections.Iterable) and type(lit) is not str:
-                    res = compute_distance(lit, dist, max_depth-1)
+                    res = compute_distance(self, lit, dist, max_depth-1)
                     eq += str(res)
                 elif lit in [">", "=", "<"]:
                     acc.append(int(eq))
@@ -94,5 +105,23 @@ class State():
                 d = abs(acc[0] - int(eq))
                 dist.append(d)
             return resp(*self.get_var_values())
+
+    def requirement_distance(self):
+       
+        min_dist = None
+        for requirement in self.req: 
+            dist = [] 
+            self.compute_distance(requirement, dist)
+            min_dist = min(min_dist, sum(dist))
+
+        return min_dist
+
+
+    def update_var_from_packet(self, name, payload):
+        print name
+        print payload
+
+    def update_value(self, name, value):
+        self.var[name].value = value
         
 

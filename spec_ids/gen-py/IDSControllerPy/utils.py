@@ -77,29 +77,29 @@ bind_layers(TCP, ModbusRes, sport=MODBUS_PORT)
 
 class ReadCoilsRes(Packet):
     name = "ReadCoilsRes"
-    fields_desc = [ FieldLenField("count", None, length_of="status"),
-                    ByteField("status", None, length_from=lambda x:x.length)
+    fields_desc = [ BitFieldLenField("count", None, 8, count_of="status"),
+                    FieldListField("status", [0x00], ByteField("", 0x00), count_from=lambda x:x.count)
                   ]
 bind_layers(ModbusRes, ReadCoilsRes, funcode=1)
 
 class ReadDiscreteRes(Packet):
     name = "ReadDiscreteRes"
-    fields_desc = [ FieldLenField("count", None, length_of="status"),
-                   ByteField("status", None, length_from=lambda x:x.length)
+    fields_desc = [ BitFieldLenField("count", None, 8, count_of="status"),
+                   FieldListField("status", [0x00], ByteField("", 0x00), count_from=lambda x:x.count)
                   ]
 bind_layers(ModbusRes, ReadDiscreteRes, funcode=2)
 
 class ReadHoldRegRes(Packet):
     name = "ReadHoldRegRes"
-    fields_desc = [ FieldLenField("count", None, length_of="value"),
-                    ByteField("value", None , length_from=lambda x: 2*x.length)
+    fields_desc = [ BitFieldLenField("count", None, 8, count_of="value", adjust=lambda pkt, x: x*2),
+                    FieldListField("value", [0x0000], ShortField("", 0x0000), count_from=lambda x: x.count)
                   ]
 bind_layers(ModbusRes, ReadHoldRegRes, funcode=3)
 
 class ReadInputRes(Packet):
     name = "ReadInputRes"
-    fields_desc = [ FieldLenField("count", None , length_of="registers"),
-                    ByteField("registers", None, length_from=lambda x: 2*x.length)
+    fields_desc = [ BitFieldLenField("count", None, 8, count_of="registers", adjust=lambda pkt, x: x*2),
+                    FieldListField("registers", [0x0000], ShortField("", 0x0000), count_from=lambda x:x.count)
                   ]
 bind_layers(ModbusRes, ReadInputRes, funcode=4)
 
@@ -115,5 +115,5 @@ class WriteSingleRegRes(Packet):
     fields_desc = [ ShortField("addr", None),
                     ShortField("value", None)
                   ]
-bind_layers(ModbusRes, WriteSingleRegRess, funcode=6)
+bind_layers(ModbusRes, WriteSingleRegRes, funcode=6)
 

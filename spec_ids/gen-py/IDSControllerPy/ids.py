@@ -1,6 +1,9 @@
+#!/usr/bin/env python
+
 import sys
 import re
 import collections
+import argparse
 
 from netfilterqueue import NetfilterQueue
 from scapy.all import *
@@ -15,29 +18,31 @@ from thrift.protocol import TBinaryProtocol
 from IDSControllerPy import Controller
 from IDSControllerPy.ttypes import *
 
+from stateCompute import State
+
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--ip', action='store', dest='ip', default='172.0.10.2')
 parser.add_argument('--port', action='store', dest='port', type=int, default=2050)
-parser.add_argument('--varfile', action='store', dest='varfile', default='varphys.map')
+parser.add_argument('--varfile', action='store', dest='varfile', default='requirements.yml')
 
 args = parser.parse_args()
-host = args.host
+host = args.ip
 port = args.port
 varfile = args.varfile
 
 bind_layers(IP, SRTag, proto=200)
-bind_layers(SRtag, TCP, proto=6)
+bind_layers(SRTag, TCP, proto=6)
 bind_layers(TCP, ModbusRes, sport=MODBUS_PORT)
 bind_layers(TCP, ModbusReq, dport=MODBUS_PORT)
 
 
-socket = TSocket.TSocket(host, port)
-transport = TTransport.TBufferedTransport(socket)
-protocol = TBinaryProtocol.TBinaryProtocol(transport)
-client = Controller.Client(protocol)
-transport.open()
+#socket = TSocket.TSocket(host, port)
+#transport = TTransport.TBufferedTransport(socket)
+#protocol = TBinaryProtocol.TBinaryProtocol(transport)
+#client = Controller.Client(protocol)
+#transport.open()
 
 class PacketHandler():
 
@@ -47,23 +52,38 @@ class PacketHandler():
         # transId to var
         self.transId = {}
         self.client = None
+        self.transport = None
 
         self.setup_controlplane_connection(host, port)
         self.create_variables(varfile)
 
+        self.state_store = State(varfile)
+
     def setup_controlplane_connection(self, host, port): 
         socket = TSocket.TSocket(host, port)
-        transport = TTransport.TBufferedTransport(socket)
+        self.transport = TTransport.TBufferedTransport(socket)
         protocol = TBinaryProtocol.TBinaryProtocol(transport)
         self.client = Controller.Client(protocol)
-        transport.open()
+        self.transport.open()
 
     def create_variables(self, varfile):
-        with open(varfile,'r') as f:
-            for line in f:
-                varname = re.search('.+\[', line).group(0).strip('[')
-                (ip, port, kind, addr, size) =  re.search('\[.+\]',line).group(0).strip('[]').split(':') 
-                self.var[ProcessVariable(host, port, kind, addr, size, varname)] = varname
+        content = open(varfile).read()
+        desc = yaml.load(content)
+        for var_desc in desc['variables']:
+            var = var_desc['variable']
+            pv = ProcessVariable(var['host'],
+                                 var['port'],
+                                 var['type'],
+                                 var['address'],
+                                 var['size'],
+                                 var['name']) 
+            self.var[pv] = var['name']
+
+        #with open(varfile,'r') as f:
+        #    for line in f:
+        #        varname = re.search('.+\[', line).group(0).strip('[')
+        #        (ip, port, kind, addr, size) =  re.search('\[.+\]',line).group(0).strip('[]').split(':') 
+        #        self.var[ProcessVariable(host, port, kind, addr, size, varname)] = varname
 
     def print_and_accept(self, packet):
     
@@ -79,23 +99,28 @@ class PacketHandler():
         dport = pkt[TCP].dport
         identifier = pkt[SRTag].identifier
         if (dport == MODBUS_PORT or sport == MODBUS_PORT):
-            if reason = SRTAG_CLONE:
+            if reason == SRTAG_CLONE:
                 if dport == MODBUS_PORT:
                     # Send request to controller 
                     req = Flow(srcip, dstip, trans_id, dport, proto)
                     switch = [identifier]
-                    funcode = pkt[Modbus].funcode
-                    transId = pkt[Modbus].transId
-                    addr = pkt[Modbus].startAddr
+                    funcode = pkt[ModbusReq].funcode
+                    transId = pkt[ModbusReq].transId
+                    addr = pkt[ModbusReq].startAddr
                     kind = ProcessVariable.funcode_to_kind(funcode)
                     self.transId[transId] =  ProcessVariable( dstip, dport, kind, addr) 
                     self.client.mirror(req, switch)
                 else: 
                     # Receive request 
-                    # Update physical process variable
-                    pass
+                    transId = pkt[ModbusRes].transId
+                    self.state_store.update_var_from_packet(
+                                                self.var[self.transId[transId]],
+                                                pkt[ModbusRes].guess_payload_class())            
     
         packet.drop()
+
+    def close(self):
+        transport.close()
 
 
 def main():
@@ -108,7 +133,7 @@ def main():
         nfqueue.run()
     except KeyboardInterrupt:
         print "Done"
-    transport.close()
+    handler.close()
     nfqueue.unbind()
 
 if __name__=='main':
