@@ -201,3 +201,50 @@ header_type tmp_ether_t {
 }
 
 metadata tmp_ether_t tmp_ether;
+
+
+// Transaction ID monitoring
+
+header_type transId_index_metadata_t {
+    fields {
+        hash_val: 16;
+        transId_val: 16;
+    }
+}
+
+
+metadata transId_index_metadata_t transId_index_metadata;
+
+fields_list hash_fields_client {
+    ipv4.srcAddr;
+    ipv4.dstAddr;
+    ipv4.protocol;
+    tcp.srcPort;
+    tcp.dstPort;
+    modbus.transId;
+}
+
+fields_list hash_fields_server {
+    ipv4.dstAddr;
+    ipv4.srcAddr;
+    ipv4.protocol;
+    tcp.dstPort;
+    tcp.srcPort;
+    modbus.transId;
+}
+
+field_list_calculation transId_hash_client{
+    input{
+        hash_fields_client;
+    }
+    algorithm : csum16;
+    output_width : 16;
+}
+
+field_list_calculation transId_hash_server{
+    input{
+        hash_fields_server;
+    }
+    algorithm : csum16;
+    output_width : 16;
+}

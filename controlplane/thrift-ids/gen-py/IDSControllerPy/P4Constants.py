@@ -20,6 +20,7 @@ IDSTAG_ADD_TAB = 'add_tag_ids_tab'
 BLOCK_HOSTS = 'block_hosts'
 PHYS_VAR_REQ = 'phys_var_req'
 PHYS_VAR_RES = 'phys_var_res'
+TRANSID_CLONE = 'transId_clone'
 
 # Action name
 DROP = '_drop'
@@ -34,9 +35,11 @@ RESP = 'respond_arp'
 STORE_ARP = 'store_arp_in'
 FORWARD_ARP = 'forward_arp'
 CLONE_I2E = '_clone_i2e'
+CLONE_MODBUS_REQ = 'clone_modbus_req'
 REMOVE_IDSTAG = 'remove_ids_tag'
 ADD_IDSTAG = 'add_ids_tag'
 ADD_MIRROR_TAG = 'add_mirror_tag'
+CHECK_TRANSID = 'check_transId'
 
 
 # Value name

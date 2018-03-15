@@ -192,7 +192,6 @@ class Controller(Iface):
         trans_id = sport
         # Get the switch closer to the host
         client = self.clients[str(sw[0])] 
-        self.table_add_entry(client, PHYS_VAR_RES, CLONE_I2E, [dstip, dport, trans_id],[]) 
 
     # change the nonce when the IDS reforward the original packet
     # block is a list of length 4 where each entry is a 2byte values used to create a 64-bit nonce
@@ -600,17 +599,17 @@ class Controller(Iface):
             if client is not None :
                 if _type == 'co' :
                     for i in [1, 5, 15]: 
-                        self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, str(i), addr], []) 
+                        self.table_add_entry(client, PHYS_VAR_REQ, CLONE_MODBUS_REQ, [ip, port, str(i), addr], []) 
                           
                 elif _type == 'di' :
-                    self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, '2', addr],[])
+                    self.table_add_entry(client, PHYS_VAR_REQ, CLONE_MODBUS_REQ, [ip, port, '2', addr],[])
 
                 elif _type == 'hr' :
                     for i in [3, 6, 10, 22, 23]:
-                        self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, str(i), addr], [])
+                        self.table_add_entry(client, PHYS_VAR_REQ, CLONE_MODBUS_REQ, [ip, port, str(i), addr], [])
 
                 elif _type == 'ir' :
-                    self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, '4', addr], [])
+                    self.table_add_entry(client, PHYS_VAR_REQ, CLONE_MODBUS_REQ, [ip, port, '4', addr], [])
 
     def clear_table(self,table_name):
         table = self.get_res("table", table_name, TABLES)
@@ -678,6 +677,9 @@ class Controller(Iface):
                 self.table_add_entry(client, SRTAG, SET_EGRESS, [IP_PROTO_SRTAG, "1"], ["1"])
                 self.table_default_entry(client, IDSTAG, NO_OP, [])
                 self.table_default_entry(client, IDSTAG_ADD_TAB, NO_OP, [])
+                self.table_default_entry(client, PHYS_VAR_RES, NO_OP, [])
+                self.table_default_entry(client, TRANSID_CLONE, NO_OP, [])
+
                 self.table_add_entry(client, IDSTAG_ADD_TAB, ADD_IDSTAG, ["1"], ["9"])
                 self.ids_tag[sw.sw_id] = 0
             else:
@@ -685,6 +687,8 @@ class Controller(Iface):
                 self.table_default_entry(client, MODBUS, ADD_TAG, [sw.sw_id, sw.ids_addr, sw.ids_port])
                 self.table_default_entry(client, IDSTAG_ADD_TAB, NO_OP,[])
                 self.table_default_entry(client, IDSTAG, NO_OP, [])
+                self.table_default_entry(client, PHYS_VAR_RES, CHECK_TRANSID, [])
+                self.table_default_entry(client, TRANSID_CLONE, CLONE_I2E, [])
                 self.table_add_entry(client, IDSTAG, REMOVE_IDSTAG , [IP_PROTO_IDSTAG, "9", sw.ids_port], [])
                 self.ids_tag[sw.sw_id] = 0
                 # distinguish cloned packet

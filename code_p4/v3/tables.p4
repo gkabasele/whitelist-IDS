@@ -154,6 +154,28 @@ register arp_index {
     instance_count : 1;
 } 
 
+
+// FIXME register will be larger
+register transId_register {
+    width : 16;
+    instance_count : 256;
+}
+
+
+
+action check_transId(){
+    modify_field_width_hash_based_offset(trans_Id_metadata.hash_val, 0, transId_hash_server, 256);
+    register_read(trans_Id_metadata.trans_Id_val, transId_register, trans_Id_metadata.hash_val);
+    // Must clear the transaction so that next transaction ID are not resend ? What if losses?
+    register_write(transId_register, transId_index_metadata.hash_val, 0);
+}
+
+action _clone_modbus_req(){
+    modify_field_width_hash_based_offset(transId_index_metadata.hash_val, 0, transId_hash_client, 256);
+    register_write(transId_register, transId_index_metadata.hash_val, modbus.transId);
+    clone_ingress_pkt_to_egress(SESSION_ID, clone_FL);
+}
+
 action _clone_i2e(){
     // Distinguish between original and cloned packet
     clone_ingress_pkt_to_egress(SESSION_ID, clone_FL);
@@ -348,22 +370,30 @@ table phys_var_req {
     actions {
         _no_op;
         _drop;
-        _clone_i2e;
+        _clone_modbus_req;
     }
 }
 
 table phys_var_res {
     reads {
-        ipv4.srcAddr : exact;
         tcp.srcPort : exact;
-        modbus.transId : exact;
     }
     actions {
         _no_op;
         _drop;
-        _clone_i2e;
+        check_transId;
     }
     support_timeout: true;
+}
+
+table transId_clone {
+    reads {
+        tcp.srcPort : exact;
+    }
+    actions {
+        _clone_i2e;
+        _no_op;
+    }
 }
 
 
