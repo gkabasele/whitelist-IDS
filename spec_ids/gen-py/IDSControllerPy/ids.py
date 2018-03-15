@@ -96,6 +96,7 @@ class PacketHandler():
                     print "sending request"
                     self.transId[transId] =  ProcessVariable( dstip, dport, kind, addr) 
                     self.client.mirror(req, switch)
+                    print "received request"
                 else: 
                     # Receive request 
                     transId = pkt[ModbusRes].transId
