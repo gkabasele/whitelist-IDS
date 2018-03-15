@@ -4,6 +4,8 @@ import sys
 import re
 import collections
 import argparse
+import yaml
+import Controller
 
 from netfilterqueue import NetfilterQueue
 from scapy.all import *
@@ -14,13 +16,8 @@ from utils import *
 from thrift.transport import TTransport
 from thrift.transport import TSocket
 from thrift.protocol import TBinaryProtocol
-
-from IDSControllerPy import Controller
-from IDSControllerPy.ttypes import *
-
+from ttypes import *
 from stateCompute import State
-
-
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--ip', action='store', dest='ip', default='172.0.10.2')
@@ -33,16 +30,10 @@ port = args.port
 varfile = args.varfile
 
 bind_layers(IP, SRTag, proto=200)
-bind_layers(SRTag, TCP, proto=6)
+#bind_layers(SRTag, TCP, proto=6)
+bind_layers(SRTag, TCP)
 bind_layers(TCP, ModbusRes, sport=MODBUS_PORT)
 bind_layers(TCP, ModbusReq, dport=MODBUS_PORT)
-
-
-#socket = TSocket.TSocket(host, port)
-#transport = TTransport.TBufferedTransport(socket)
-#protocol = TBinaryProtocol.TBinaryProtocol(transport)
-#client = Controller.Client(protocol)
-#transport.open()
 
 class PacketHandler():
 
@@ -62,7 +53,7 @@ class PacketHandler():
     def setup_controlplane_connection(self, host, port): 
         socket = TSocket.TSocket(host, port)
         self.transport = TTransport.TBufferedTransport(socket)
-        protocol = TBinaryProtocol.TBinaryProtocol(transport)
+        protocol = TBinaryProtocol.TBinaryProtocol(self.transport)
         self.client = Controller.Client(protocol)
         self.transport.open()
 
@@ -78,13 +69,7 @@ class PacketHandler():
                                  var['size'],
                                  var['name']) 
             self.var[pv] = var['name']
-
-        #with open(varfile,'r') as f:
-        #    for line in f:
-        #        varname = re.search('.+\[', line).group(0).strip('[')
-        #        (ip, port, kind, addr, size) =  re.search('\[.+\]',line).group(0).strip('[]').split(':') 
-        #        self.var[ProcessVariable(host, port, kind, addr, size, varname)] = varname
-
+ 
     def print_and_accept(self, packet):
     
         print(packet)
@@ -102,12 +87,13 @@ class PacketHandler():
             if reason == SRTAG_CLONE:
                 if dport == MODBUS_PORT:
                     # Send request to controller 
-                    req = Flow(srcip, dstip, trans_id, dport, proto)
                     switch = [identifier]
                     funcode = pkt[ModbusReq].funcode
                     transId = pkt[ModbusReq].transId
                     addr = pkt[ModbusReq].startAddr
                     kind = ProcessVariable.funcode_to_kind(funcode)
+                    req = Flow(srcip, dstip, transId, dport, proto)
+                    print "sending request"
                     self.transId[transId] =  ProcessVariable( dstip, dport, kind, addr) 
                     self.client.mirror(req, switch)
                 else: 
@@ -116,11 +102,10 @@ class PacketHandler():
                     self.state_store.update_var_from_packet(
                                                 self.var[self.transId[transId]],
                                                 pkt[ModbusRes].guess_payload_class())            
-    
         packet.drop()
 
     def close(self):
-        transport.close()
+        self.transport.close()
 
 
 def main():
@@ -136,5 +121,5 @@ def main():
     handler.close()
     nfqueue.unbind()
 
-if __name__=='main':
+if __name__=='__main__':
     main()

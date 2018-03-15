@@ -7,6 +7,7 @@ import inspect
 import socket
 import ssl
 import re
+import yaml
 from netaddr import IPNetwork
 from netaddr import IPAddress
 from scapy.all import *
@@ -580,37 +581,43 @@ class Controller(Iface):
             Install physical variable representation on the switch (ip:port:type:addr)
             name[ip:port:fun:addr]
         '''
-        with open(filename, 'r') as f:
-            for line in f:
-                (ip, port, fun, addr, size)  = re.search('\[.+\]',line).group(0).strip('[]').split(':')
-                client = None
-                for switch in self.switches:
-                    sw = self.switches[switch]
-                    if filter(lambda x: x.keys()[0].encode('utf-8')[:-3] == ip, sw.routing_table):
-                        client = self.clients[sw.sw_id]
-                        break
-                if client is not None :
-                    if fun == 'co' :
-                        for i in [1, 5, 15]: 
-                            self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, str(i), addr], []) 
-                              
-                    elif fun == 'di' :
-                        self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, '2', addr],[])
 
-                    elif fun == 'hr' :
-                        for i in [3, 6, 10, 22, 23]:
-                            self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, str(i), addr], [])
+        content = open(filename).read()
+        desc = yaml.load(content)
+        for var_desc in desc['variables']:
+            var = var_desc['variable']
+            ip = var['host'] 
+            port = str(var['port'])
+            _type = var['type']
+            addr = str(var['address'])
 
-                    elif fun == 'ir' :
-                        self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, '4', addr], [])
+            client = None
+            for switch in self.switches:
+                sw = self.switches[switch]
+                if filter(lambda x: x.keys()[0].encode('utf-8')[:-3] == ip, sw.routing_table):
+                    client = self.clients[sw.sw_id]
+                    break
+            if client is not None :
+                if _type == 'co' :
+                    for i in [1, 5, 15]: 
+                        self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, str(i), addr], []) 
+                          
+                elif _type == 'di' :
+                    self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, '2', addr],[])
 
-                
-                
+                elif _type == 'hr' :
+                    for i in [3, 6, 10, 22, 23]:
+                        self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, str(i), addr], [])
+
+                elif _type == 'ir' :
+                    self.table_add_entry(client, PHYS_VAR_REQ, CLONE_I2E, [ip, port, '4', addr], [])
+
     def clear_table(self,table_name):
         table = self.get_res("table", table_name, TABLES)
         for client_id, client in self.clients.iteritems():
             client.bm_mt_clear_entries(0, table_name, False) 
         # TODO clear self.flow_table
+
     def hexstr(self, v):
         return "".join("{:02x}".format(ord(c)) for c in v)
 
@@ -745,6 +752,6 @@ if __name__ == '__main__':
     parser.add_argument('--ip', action='store', dest ='ip', default='172.0.10.2', help='ip address of the controller')
     parser.add_argument('--port', action='store', dest='port', type=int, default=2050, help='port used by controller')
     parser.add_argument('--ids', action='store', dest='ids_sw_id',default='3', help='datapath id of the switch connected to the IDS')
-    parser.add_argument('--desc', action='store', dest='phys_desc', default='varphys.map', help='filename of the mapping between the physical process variable and the PLC registers')
+    parser.add_argument('--desc', action='store', dest='phys_desc', default='requirements.yml', help='filename of the mapping between the physical process variable and the PLC registers')
     args = parser.parse_args()
     main(args.conf, args.capture, args.ip, args.port, args.ids_sw_id, args.phys_desc)

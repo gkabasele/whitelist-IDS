@@ -44,7 +44,7 @@ class ProcessVariable():
                 (other.host, other.port, other.kind, other.addr))
 
     def __hash__(self):
-        return hash(self.host, self.port, self.kind, self.addr)
+        return hash((self.host, self.port, self.kind, self.addr))
 
 class SRTag(Packet):
     name = "SRTag"

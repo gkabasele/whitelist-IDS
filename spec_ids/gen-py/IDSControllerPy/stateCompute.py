@@ -65,7 +65,7 @@ class State():
         return values
 
     def setup(self, descFile):
-        content = open(varFile).read()
+        content = open(descFile).read()
         desc = yaml.load(content) 
         for var_desc in desc['variables']:
             var = var_desc['variable']
