@@ -96,9 +96,9 @@ class PacketHandler():
                     print "sending request"
                     self.transId[transId] =  ProcessVariable( dstip, dport, kind, addr) 
                     self.client.mirror(req, switch)
-                    print "received request"
                 else: 
                     # Receive request 
+                    print "received modbus request"
                     transId = pkt[ModbusRes].transId
                     self.state_store.update_var_from_packet(
                                                 self.var[self.transId[transId]],

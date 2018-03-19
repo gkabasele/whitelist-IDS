@@ -41,7 +41,7 @@ control ingress {
                                                     apply(phys_var_req); 
                                                 } else {
                                                     apply(phys_var_res);
-                                                    if(modbus.transId == transId_index_metadata.transId_val){
+                                                    if(modbus.transId == transId_metadata.transId_val){
                                                         apply(transId_clone);
                                                     }
                                                 }
