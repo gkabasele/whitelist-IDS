@@ -73,6 +73,7 @@ class ModbusRes(Packet):
                     ByteField("unitID", 0),
                     ByteField("funcode", None)
                   ]
+
 bind_layers(TCP, ModbusRes, sport=MODBUS_PORT)
 
 class ReadCoilsRes(Packet):

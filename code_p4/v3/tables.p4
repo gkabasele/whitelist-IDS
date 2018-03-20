@@ -72,7 +72,7 @@ action add_miss_tag(id, ids_addr, egress_port) {
     modify_field(standard_metadata.egress_spec, egress_port);
 }
 
-action add_mirror_tag(id, ids_addr) {
+action add_mirror_tag_req(id, ids_addr) {
     add_header(srtag);
 
     // Set type of tag
@@ -94,6 +94,25 @@ action add_mirror_tag(id, ids_addr) {
 
     // Setting IDS ip
     modify_field(ipv4.dstAddr, ids_addr);
+}
+
+action add_mirror_tag_res(id, ids_addr) {
+    add_header(srtag);
+    // Set type of tag
+    modify_field(srtag.id, id);
+    modify_field(srtag.dstAddr, ipv4.dstAddr);
+    modify_field(srtag.proto, ipv4.protocol);
+    modify_field(srtag.reason, 0x0001);
+
+    //Change protocol to specify presence of tag
+    modify_field(ipv4.protocol, 0x00c8);
+    
+    // Incrementing the length by the size of the tag
+    add_to_field(ipv4.totalLen, 8);
+
+     // Setting IDS ip
+    modify_field(ipv4.dstAddr, ids_addr);
+
 }
 
 action add_ids_tag(val) {
@@ -161,8 +180,6 @@ register transId_register {
     instance_count : 256;
 }
 
-
-
 action check_transId(){
     modify_field_with_hash_based_offset(transId_metadata.hash_val, 0, transId_hash_server, 256);
     register_read(transId_metadata.transId_val, transId_register, transId_metadata.hash_val);
@@ -170,12 +187,14 @@ action check_transId(){
     register_write(transId_register, transId_metadata.hash_val, 0);
 }
 
+// Clone modbus request
 action clone_modbus_req(){
     modify_field_with_hash_based_offset(transId_metadata.hash_val, 0, transId_hash_client, 256);
     register_write(transId_register, transId_metadata.hash_val, modbus.transId);
     clone_ingress_pkt_to_egress(SESSION_ID, clone_FL);
 }
 
+// Clone modbus response
 action _clone_i2e(){
     // Distinguish between original and cloned packet
     clone_ingress_pkt_to_egress(SESSION_ID, clone_FL);
@@ -397,14 +416,25 @@ table transId_clone {
 }
 
 
-table pkt_cloned {
+table pkt_cloned_req {
     reads {
-        standard_metadata.instance_type: exact;
+        tcp.dstPort : exact;
     }
     actions {
         _drop;
         _no_op;
-        add_mirror_tag;
+        add_mirror_tag_req;
     }
 } 
+
+table pkt_cloned_res {
+    reads {
+        tcp.srcPort : exact;
+    }
+    actions {
+        _drop;
+        _no_op;
+        add_mirror_tag_res;
+    }
+}
 

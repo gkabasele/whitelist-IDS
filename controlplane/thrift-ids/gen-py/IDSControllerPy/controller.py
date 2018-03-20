@@ -667,7 +667,8 @@ class Controller(Iface):
             self.ids_sw_id = ids_sw_id
             self.table_default_entry(client, SEND_FRAME, DROP, [])
             self.table_default_entry(client, FORWARD, NO_OP, [])
-            self.table_default_entry(client, PKT_CLONED, NO_OP, [])
+            self.table_default_entry(client, PKT_CLONED_RES, NO_OP, [])
+            self.table_default_entry(client, PKT_CLONED_REQ, NO_OP, [])
 
             if self.ids_sw_id == sw.sw_id:
                 self.table_default_entry(client, FLOW_ID, NO_OP, [])
@@ -692,7 +693,8 @@ class Controller(Iface):
                 self.table_add_entry(client, IDSTAG, REMOVE_IDSTAG , [IP_PROTO_IDSTAG, "9", sw.ids_port], [])
                 self.ids_tag[sw.sw_id] = 0
                 # distinguish cloned packet
-                self.table_add_entry(client, PKT_CLONED, ADD_MIRROR_TAG, ["1"], [sw.sw_id, sw.ids_addr])
+                self.table_add_entry(client, PKT_CLONED_REQ, ADD_MIRROR_TAG_REQ, ["5020"], [sw.sw_id, sw.ids_addr])
+                self.table_add_entry(client, PKT_CLONED_RES, ADD_MIRROR_TAG_RES, ["5020"], [sw.sw_id, sw.ids_addr])
                 self.table_add_mirror_session(sw_client, "1", sw.ids_port)
 
             self.table_default_entry(client, ARP_FORW_REQ, STORE_ARP, [sw.gw_port])

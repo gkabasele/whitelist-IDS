@@ -102,7 +102,7 @@ class PacketHandler():
                     transId = pkt[ModbusRes].transId
                     self.state_store.update_var_from_packet(
                                                 self.var[self.transId[transId]],
-                                                pkt[ModbusRes].guess_payload_class())            
+                                                pkt[ModbusRes].payload)
         packet.drop()
 
     def close(self):

@@ -74,7 +74,8 @@ control ingress {
 //Called when the packet is dequeued
 control egress {
     if (standard_metadata.instance_type == 1){
-        apply(pkt_cloned);
+        apply(pkt_cloned_req);
+        apply(pkt_cloned_res);
     }
     apply(send_frame);
 }
