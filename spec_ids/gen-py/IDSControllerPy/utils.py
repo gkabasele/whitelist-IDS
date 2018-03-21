@@ -118,3 +118,13 @@ class WriteSingleRegRes(Packet):
                   ]
 bind_layers(ModbusRes, WriteSingleRegRes, funcode=6)
 
+
+# Translation between funcode and field name
+func_fields_dict = {
+                     1 : "status",
+                     2 : "status",
+                     3 : "value", 
+                     4 : "registers",
+                     5 : "value",
+                     6 : "value",
+                   }

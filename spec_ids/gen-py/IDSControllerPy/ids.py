@@ -57,6 +57,7 @@ class PacketHandler():
         self.client = Controller.Client(protocol)
         self.transport.open()
 
+
     def create_variables(self, varfile):
         content = open(varfile).read()
         desc = yaml.load(content)
@@ -95,14 +96,18 @@ class PacketHandler():
                     req = Flow(srcip, dstip, transId, dport, proto)
                     print "sending request"
                     self.transId[transId] =  ProcessVariable( dstip, dport, kind, addr) 
-                    self.client.mirror(req, switch)
+                    #self.client.mirror(req, switch)
                 else: 
                     # Receive request 
                     print "received modbus request"
                     transId = pkt[ModbusRes].transId
                     self.state_store.update_var_from_packet(
                                                 self.var[self.transId[transId]],
+                                                pkt[ModbusRes].funcode,
                                                 pkt[ModbusRes].payload)
+
+                    # FIXME remove
+                    print "Dist: ",self.state_store.get_req_distance()
         packet.drop()
 
     def close(self):

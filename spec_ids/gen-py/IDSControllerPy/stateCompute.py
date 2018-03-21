@@ -23,7 +23,7 @@ class RequirementParser():
     def create_parser(self):
 
         integer = Word(nums).setParseAction(lambda t:int(t[0]))
-        variable = Word(alphas,exact=1)
+        variable = Word(alphas)
         operand = integer | variable
         
         expop = Literal('^')
@@ -61,7 +61,7 @@ class State():
     def get_var_values(self):
         values = []
         for k,v in self.var.iteritems(): 
-            values.appends(v.value) 
+            values.append(v.value) 
         return values
 
     def setup(self, descFile):
@@ -78,7 +78,7 @@ class State():
             self.var[pv.name] = pv 
         
         for req_desc in desc['requirements']:
-            self.req.append(req_desc['requirement']) 
+            self.req.append(self.parser.parse_requirement(req_desc['requirement'])) 
             
         
     def add_variable(self, host, port, kind, addr, name): 
@@ -91,7 +91,7 @@ class State():
             for lit in req:
                 # FIXME variable in requirements 
                 if isinstance(lit, collections.Iterable) and type(lit) is not str:
-                    res = compute_distance(self, lit, dist, max_depth-1)
+                    res = self.compute_distance(lit, dist, max_depth-1)
                     eq += str(res)
                 elif lit in [">", "=", "<"]:
                     acc.append(int(eq))
@@ -106,20 +106,27 @@ class State():
                 dist.append(d)
             return resp(*self.get_var_values())
 
-    def requirement_distance(self):
+    def get_req_distance(self):
        
         min_dist = None
         for requirement in self.req: 
             dist = [] 
             self.compute_distance(requirement, dist)
-            min_dist = min(min_dist, sum(dist))
+            if min_dist is None:
+                min_dist = sum(dist)
+            else:
+                min_dist = min(min_dist, sum(dist))
 
         return min_dist
 
 
-    def update_var_from_packet(self, name, payload):
+    def update_var_from_packet(self, name, funcode, payload):
         print name
-        print payload
+        val = payload.getfieldval(func_fields_dict[funcode])
+        if type(val) is list:
+            val = val[0]
+        print val 
+        self.update_value(name, val)
 
     def update_value(self, name, value):
         self.var[name].value = value

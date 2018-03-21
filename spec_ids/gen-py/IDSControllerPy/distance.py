@@ -13,7 +13,7 @@ import collections
 import re
 
 integer = Word(nums).setParseAction(lambda t:int(t[0]))
-variable = Word(alphas,exact=1)
+variable = Word(alphas)
 operand = integer | variable
 
 expop = Literal('^')
@@ -72,11 +72,12 @@ def eval_expr(expr, dist, variables, values, max_depth = 50):
             elif lit == "&":
                 eq = ""
             else:
+                print lit
                 eq += str(lit)
         resp = Expression(eq, variables)
         if len(acc) > 0:
-            #d = abs(acc[0] - int(eq))
-            d = acc[0] - int(eq)
+            d = abs(acc[0] - int(eq))
+            #d = acc[0] - int(eq)
             dist.append(d)
             print "Dist: ",d
         return resp(*values)
@@ -84,9 +85,10 @@ def eval_expr(expr, dist, variables, values, max_depth = 50):
         return
 
 
-test = "2*a + 4*b < 100"
+test = "2*tempa + 4*tempb < 100"
 res = expr.parseString(test)
-variables = ["a", "b"]
+print res
+variables = ["tempa", "tempb"]
 values = [1, 2]
 dist = []
 print "Req: %s value: %s"% (test, values)

@@ -1,13 +1,13 @@
 variables:
     - variable:  
-        name: temp1
+        name: tempa
         host: 10.0.20.1
         port: 5020
         type: co
         address: 1
         size: 1 
     - variable:
-        name: temp2
+        name: tempb
         host: 10.0.30.1
         port: 5020
         type: co
@@ -15,5 +15,5 @@ variables:
         size: 1 
 
 requirements:
-    - requirement: 2*temp1 + 3*temp2 > 4
+    - requirement: 2*tempa + 3*tempb > 4
       
