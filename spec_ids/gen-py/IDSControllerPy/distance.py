@@ -22,6 +22,7 @@ multop = oneOf('* /')
 plusop = oneOf('+ -')
 factop = Literal('!')
 andop = Literal('&')
+
 compop = oneOf('< > = <= =>')
 
 # To use the operatorGrammar helper:
@@ -58,6 +59,10 @@ expr = operatorPrecedence( operand,
      (andop, 2, opAssoc.LEFT),]
     )
 
+def is_number(s):
+    """ Returns True if string s is a number """
+    return s.replace('.','',1).isdigit()
+
 def eval_expr(expr, dist, variables, values, max_depth = 50):
     eq = ""
     acc = []
@@ -67,24 +72,30 @@ def eval_expr(expr, dist, variables, values, max_depth = 50):
                 res = eval_expr(lit, dist, variables, values, max_depth-1)
                 eq += str(res)
             elif lit in [">","=","<"]:
-                acc.append(int(eq))
+                if is_number(eq) :
+                    acc.append(int(eq))
+                else:
+                    acc.append(eq)
                 eq = ""
             elif lit == "&":
                 eq = ""
             else:
-                print lit
                 eq += str(lit)
+        print "Eq: ",eq
         resp = Expression(eq, variables)
         if len(acc) > 0:
-            d = abs(acc[0] - int(eq))
-            #d = acc[0] - int(eq)
+            if type(acc[0]) is int:
+                d = abs(acc[0] - int(eq))
+            else:
+                dic = dict(zip(variables,values))            
+                d = abs(dic[acc[0]] - int(eq))
             dist.append(d)
             print "Dist: ",d
         return resp(*values)
     else:
         return
 
-
+"""
 test = "2*tempa + 4*tempb < 100"
 res = expr.parseString(test)
 print res
@@ -92,14 +103,34 @@ variables = ["tempa", "tempb"]
 values = [1, 2]
 dist = []
 print "Req: %s value: %s"% (test, values)
-eval_expr(res, dist, variables, values, max_depth=50) 
+eval_expr(res, dist, variables, values) 
 print sum(dist)
 
 values = [40, 12]
 dist = []
 print "Req: %s value: %s"% (test, values)
-eval_expr(res, dist, variables, values, max_depth=50) 
+eval_expr(res, dist, variables, values) 
 print sum(dist)
+"""
+
+test1 = "a + b > 50 & c > 1 & d > 20 & e > 0"
+test2 = "a + b > 25 & c > 0 & d > 10 & e > 1"
+variables = ["a","b","c","d","e"]
+
+res1 = expr.parseString(test1)
+res2 = expr.parseString(test2)
+
+
+val1 = [30,15,1,5,0]
+dist = []
+print res1
+print "Req: %s value: %s"% (test1,val1)
+eval_expr(res1, dist, variables, val1)
+print float(sum(dist))/len(variables)
+dist = []
+print "Req: %s value: %s"% (test2, val1)
+eval_expr(res2, dist, variables, val1)
+print float(sum(dist))/len(variables)
 
 '''
 test1 = "2*5 + 4*3 < 100"
