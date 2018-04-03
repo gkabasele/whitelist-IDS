@@ -85,7 +85,7 @@ def eval_expr(expr, dist, varmap, num_vars, max_depth = 50, num_weight=1, bool_w
         resp = Expression(eq, varmap.keys())
         if len(acc) > 0:
             if type(acc[0]) is int:
-                d = abs(acc[0] - int(eq))
+                d = num_weight(abs(acc[0] - int(eq)))
             else:
                 var = acc[0]
                 d = abs(varmap[acc[0]] - int(eq))
@@ -96,7 +96,18 @@ def eval_expr(expr, dist, varmap, num_vars, max_depth = 50, num_weight=1, bool_w
     else:
         return
 
-"""
+test = "tempa > 1 & tempb > 1"
+res = expr.parseString(test)
+print res
+variables = ["tempa","tempb"]
+values = [0,0]
+varmap = dict(zip(variables, values))
+num_vars = []
+dist = []
+eval_expr(res, dist, varmap, num_vars)
+print float(sum(dist))/(1*len(num_vars) + 5* (len(variables) - len(num_vars)))
+
+'''
 test = "2*tempa + 4*tempb < 100"
 res = expr.parseString(test)
 print res
@@ -112,7 +123,7 @@ dist = []
 print "Req: %s value: %s"% (test, values)
 eval_expr(res, dist, variables, values) 
 print sum(dist)
-"""
+
 test1 = "a + b > 50 & c > 1 & d > 20 & e > 0"
 test2 = "a + b > 25 & c > 0 & d > 10 & e > 1"
 variables = ["a","b","c","d","e"]
@@ -132,7 +143,6 @@ print "Req: %s value: %s"% (test2, val1)
 eval_expr(res2, dist, varmap, num_vars)
 print float(sum(dist))/(1*len(num_vars) + 5* (len(variables) - len(num_vars)))
 
-
 test = "2*a + 4*b < 100"
 var = ["a","b"]
 num_vars = ["a","b"]
@@ -144,7 +154,6 @@ dist = []
 eval_expr(res, dist, varmap, num_vars)
 print float(sum(dist))/(1*len(num_vars) + 5* (len(var) - len(num_vars)))
 
-'''
 test1 = "2*5 + 4*3 < 100"
 res =  expr.parseString(test1)
 d1 = []

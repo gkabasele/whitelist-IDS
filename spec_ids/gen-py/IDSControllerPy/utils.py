@@ -45,6 +45,9 @@ class ProcessVariable():
 
     def __hash__(self):
         return hash((self.host, self.port, self.kind, self.addr))
+    
+    def is_bool_var(self):
+        return self.kind in [DIS_COIL, DIS_INP]
 
 class SRTag(Packet):
     name = "SRTag"

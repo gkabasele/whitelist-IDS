@@ -15,5 +15,5 @@ variables:
         size: 1 
 
 requirements:
-    - requirement: 2*tempa + 3*tempb > 4
+    - requirement: tempa > 1 & tempb > 1
       

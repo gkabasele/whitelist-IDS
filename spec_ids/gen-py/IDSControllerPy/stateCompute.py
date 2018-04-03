@@ -66,8 +66,8 @@ class State():
             values.append(v.value) 
         return values
 
-    def count_numeric_var(self):
-        return len(filter(lambda x: x.kind in [HOL_REG, INP_REG] ,self.var.values()))
+    def count_bool_var(self):
+        return len(filter(lambda x: x.is_bool_var ,self.var.values()))
 
     def setup(self, descFile):
         content = open(descFile).read()
@@ -102,7 +102,8 @@ class State():
                     if is_number(eq):
                         acc.append(int(eq))
                     else:
-                        eq = ""
+                        acc.append(eq)
+                    eq = ""
                 elif lit == "&":
                     eq = ""
                 else:
@@ -110,19 +111,20 @@ class State():
             resp = Expression(eq,self.var.keys())
             if len(acc) > 0:
                 if type(acc[0]) is int:
-                    d = abs(acc[0] - int(eq))
+                    d = NUM_WEIGHT*(abs(acc[0] - int(eq)))
                 else:
                     var = self.var[acc[0]]
                     d = abs(var.value - int(eq))
-                    d = NUM_WEIGHT*d if var.kind is in [DIS_COIL, DIS_INP] else BOOL_WEIGHT*d
+                    d = BOOL_WEIGHT*d if var.is_bool_var() else NUM_WEIGHT*d
                 dist.append(d)
             return resp(*self.get_var_values())
 
     def get_req_distance(self):
        
         min_dist = None
-        num_var = self.count_numeric_vars()
-        bool_var = len(self.var) - num_numeric_var
+        bool_var = self.count_bool_var()
+        num_var = len(self.var) - bool_var
+
         for requirement in self.req: 
             dist = [] 
             self.compute_distance(requirement, dist)
@@ -136,14 +138,12 @@ class State():
 
 
     def update_var_from_packet(self, name, funcode, payload):
-        print name
         val = payload.getfieldval(func_fields_dict[funcode])
         if type(val) is list:
             val = val[0]
-        print val 
-        self.update_value(name, val)
+        if self.var[name].is_bool_var():
+            val = 1 if val > 0 else 0
 
-    def update_value(self, name, value):
-        self.var[name].value = value
-        
+        print "Updating var %s to %s" % (name, val) 
+        self.var[name].value = val
 

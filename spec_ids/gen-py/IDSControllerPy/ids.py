@@ -40,8 +40,12 @@ class PacketHandler():
     def __init__(self, varfile, host, port):
         # var to name
         self.var = {}
-        # transId to var
+        # (transId,ip) to var
         self.transId = {}
+
+        # check if var has been updated
+        self.var_update = {}
+
         self.client = None
         self.transport = None
 
@@ -70,13 +74,12 @@ class PacketHandler():
                                  var['size'],
                                  var['name']) 
             self.var[pv] = var['name']
+            self.var_update[var['name']] = False
  
     def print_and_accept(self, packet):
     
-        print(packet)
         payload = packet.get_payload()
         pkt = IP(payload)
-        print "Pkt Rcv: ", pkt.summary()
         srcip = pkt[IP].src
         dstip = pkt[SRTag].dst
         reason = pkt[SRTag].reason
@@ -94,20 +97,23 @@ class PacketHandler():
                     addr = pkt[ModbusReq].startAddr
                     kind = ProcessVariable.funcode_to_kind(funcode)
                     req = Flow(srcip, dstip, transId, dport, proto)
-                    print "sending request"
-                    self.transId[transId] =  ProcessVariable( dstip, dport, kind, addr) 
+                    print "sending request %s to %s" % (transId, dstip)
+                    self.transId[(transId, dstip)] =  ProcessVariable(dstip, dport, kind, addr) 
                     #self.client.mirror(req, switch)
                 else: 
                     # Receive request 
-                    print "received modbus request"
                     transId = pkt[ModbusRes].transId
+                    print "received modbus request %s from %s" % (transId, srcip)
+                    name = self.var[self.transId[(transId, srcip)]]
                     self.state_store.update_var_from_packet(
-                                                self.var[self.transId[transId]],
+                                                name,
                                                 pkt[ModbusRes].funcode,
                                                 pkt[ModbusRes].payload)
-
-                    # FIXME remove
-                    print "Dist: ",self.state_store.get_req_distance()
+                    self.var_update[name] = True
+                    if all(x for x in self.var_update.values()):
+                        print "Dist: ",self.state_store.get_req_distance()
+                        for k in self.var_update:
+                            self.var_update[k] = False
         packet.drop()
 
     def close(self):
