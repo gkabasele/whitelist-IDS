@@ -12,6 +12,8 @@ from utils import *
 
 
 
+NUM_WEIGHT = 1
+BOOL_WEIGHT = 5
 
 
 class RequirementParser():
@@ -64,6 +66,9 @@ class State():
             values.append(v.value) 
         return values
 
+    def count_numeric_var(self):
+        return len(filter(lambda x: x.kind in [HOL_REG, INP_REG] ,self.var.values()))
+
     def setup(self, descFile):
         content = open(descFile).read()
         desc = yaml.load(content) 
@@ -94,28 +99,38 @@ class State():
                     res = self.compute_distance(lit, dist, max_depth-1)
                     eq += str(res)
                 elif lit in [">", "=", "<"]:
-                    acc.append(int(eq))
-                    eq = ""
+                    if is_number(eq):
+                        acc.append(int(eq))
+                    else:
+                        eq = ""
                 elif lit == "&":
                     eq = ""
                 else:
                     eq += str(lit)
             resp = Expression(eq,self.var.keys())
             if len(acc) > 0:
-                d = abs(acc[0] - int(eq))
+                if type(acc[0]) is int:
+                    d = abs(acc[0] - int(eq))
+                else:
+                    var = self.var[acc[0]]
+                    d = abs(var.value - int(eq))
+                    d = NUM_WEIGHT*d if var.kind is in [DIS_COIL, DIS_INP] else BOOL_WEIGHT*d
                 dist.append(d)
             return resp(*self.get_var_values())
 
     def get_req_distance(self):
        
         min_dist = None
+        num_var = self.count_numeric_vars()
+        bool_var = len(self.var) - num_numeric_var
         for requirement in self.req: 
             dist = [] 
             self.compute_distance(requirement, dist)
             if min_dist is None:
-                min_dist = sum(dist)
+                min_dist = float(sum(dist))/(NUM_WEIGHT*num_var + BOOL_WEIGHT*bool_var)
             else:
-                min_dist = min(min_dist, sum(dist))
+                d = float(sum(dist))/(NUM_WEIGHT*num_var + BOOL_WEIGHT*bool_var)
+                min_dist = min(min_dist, d)
 
         return min_dist
 

@@ -63,13 +63,13 @@ def is_number(s):
     """ Returns True if string s is a number """
     return s.replace('.','',1).isdigit()
 
-def eval_expr(expr, dist, variables, values, max_depth = 50):
+def eval_expr(expr, dist, varmap, num_vars, max_depth = 50, num_weight=1, bool_weight=5):
     eq = ""
     acc = []
     if max_depth > 0:
         for lit in expr:
             if isinstance(lit, collections.Iterable) and type(lit) is not str:
-                res = eval_expr(lit, dist, variables, values, max_depth-1)
+                res = eval_expr(lit, dist, varmap, num_vars, max_depth-1)
                 eq += str(res)
             elif lit in [">","=","<"]:
                 if is_number(eq) :
@@ -81,17 +81,18 @@ def eval_expr(expr, dist, variables, values, max_depth = 50):
                 eq = ""
             else:
                 eq += str(lit)
-        print "Eq: ",eq
-        resp = Expression(eq, variables)
+        #print "Eq: ",eq
+        resp = Expression(eq, varmap.keys())
         if len(acc) > 0:
             if type(acc[0]) is int:
                 d = abs(acc[0] - int(eq))
             else:
-                dic = dict(zip(variables,values))            
-                d = abs(dic[acc[0]] - int(eq))
+                var = acc[0]
+                d = abs(varmap[acc[0]] - int(eq))
+                d = num_weight*d if var in num_vars else bool_weight*d
+            #print "Dist: ",d
             dist.append(d)
-            print "Dist: ",d
-        return resp(*values)
+        return resp(*varmap.values())
     else:
         return
 
@@ -112,25 +113,36 @@ print "Req: %s value: %s"% (test, values)
 eval_expr(res, dist, variables, values) 
 print sum(dist)
 """
-
 test1 = "a + b > 50 & c > 1 & d > 20 & e > 0"
 test2 = "a + b > 25 & c > 0 & d > 10 & e > 1"
 variables = ["a","b","c","d","e"]
+num_vars = ["a","b","d"]
 
 res1 = expr.parseString(test1)
 res2 = expr.parseString(test2)
 
-
 val1 = [30,15,1,5,0]
+varmap = dict(zip(variables, val1))
 dist = []
-print res1
 print "Req: %s value: %s"% (test1,val1)
-eval_expr(res1, dist, variables, val1)
-print float(sum(dist))/len(variables)
+eval_expr(res1, dist, varmap, num_vars)
+print float(sum(dist))/(1*len(num_vars) + 5* (len(variables) - len(num_vars)))
 dist = []
 print "Req: %s value: %s"% (test2, val1)
-eval_expr(res2, dist, variables, val1)
-print float(sum(dist))/len(variables)
+eval_expr(res2, dist, varmap, num_vars)
+print float(sum(dist))/(1*len(num_vars) + 5* (len(variables) - len(num_vars)))
+
+
+test = "2*a + 4*b < 100"
+var = ["a","b"]
+num_vars = ["a","b"]
+
+res = expr.parseString(test)
+val = [5,3]
+varmap = dict(zip(var, val))
+dist = []
+eval_expr(res, dist, varmap, num_vars)
+print float(sum(dist))/(1*len(num_vars) + 5* (len(var) - len(num_vars)))
 
 '''
 test1 = "2*5 + 4*3 < 100"

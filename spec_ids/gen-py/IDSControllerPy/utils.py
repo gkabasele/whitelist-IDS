@@ -128,3 +128,7 @@ func_fields_dict = {
                      5 : "value",
                      6 : "value",
                    }
+
+def is_number(s):
+    """ Returns Truse if string s is a number """
+    return s.replace('.','',1).isdigit()
