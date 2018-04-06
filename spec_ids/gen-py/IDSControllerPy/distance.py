@@ -107,6 +107,12 @@ dist = []
 eval_expr(res, dist, varmap, num_vars)
 print float(sum(dist))/(1*len(num_vars) + 5* (len(variables) - len(num_vars)))
 
+values = [1,0]
+varmap = dict(zip(variables, values))
+num_vars = []
+dist = []
+eval_expr(res, dist, varmap, num_vars)
+print float(sum(dist))/(1*len(num_vars) + 5* (len(variables) - len(num_vars)))
 '''
 test = "2*tempa + 4*tempb < 100"
 res = expr.parseString(test)

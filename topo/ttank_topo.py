@@ -28,7 +28,11 @@ from config_switch import SwitchCollection
 
 import argparse
 import os
+import sys
+import shutil
+import threading
 from time import sleep
+
 
 parser = argparse.ArgumentParser(description='Mininet demo')
 parser.add_argument('--behavioral-exe', help='Path to behavioral executable',
@@ -46,7 +50,18 @@ parser.add_argument('--pcap-dump', help='Dump packets on interfaces to pcap file
                     type=str, action="store", required=False, default=False)
 
 parser.add_argument('--auto', help='Automatically run command', type=bool, default=False)
+
+parser.add_argument('--phys_name', help='Physical process name', type=str, default='simpy-ics')
 args = parser.parse_args()
+
+cur_dir = os.getcwd()
+phys_name = cur_dir + '/physical_process/' + args.phys_name
+sys.path.append(phys_name)
+from constants import *
+import ttank_process
+
+store = phys_name + '/' + STORE
+export_dir = phys_name + '/' + EXPORT_VAR
 
 # TODO TopologyDB to generate json file   
 class MultiSwitchTopo(IPTopo):
@@ -255,18 +270,27 @@ def main():
                 "Warning: Could not find host s%d-h%d"% (sub_id, n +1)
     
     modbus_servers = []
-    cur_dir = os.getcwd()
+    
+    if os.path.exists(store):
+        shutil.rmtree(store)
+    
+    if os.path.exists(export_dir):
+        shutil.rmtree(export_dir)
+    os.mkdir(export_dir)
+
+    variable_process = ['tank1.py', 'tank2.py', 'tank3.py', 'pump1.py', 'pump2.py', 'valve.py']
+
     for i in xrange(num_subnet):
         sub_id = i+1
         for n in xrange(num_hosts):
-            if sub_id != 3:
+            if sub_id == 1:
                 name = 's%d-h%d' % (sub_id, n +1)
                 h = net.get(name)
                 h.describe()
                 ip = "10.0.%d0.%d" % ((sub_id + 1), (n + 1))
                 modbus_servers.append(ip)
                 if auto:
-                    mod = 'python '+ cur_dir + '/modbus/modbus_server.py --ip 10.0.%d0.%d --port 5020&' % ((sub_id + 1), (n+1))
+                    mod = 'python '+ phys_name + '/script_plc_' + variable_process[n] + '--ip 10.0.%d0.%d --port 5020& --store %s --duration %s --create' % ((sub_id + 1), (n+1), store, DURATION )
                     capt = 'tcpdump -i eth0 -w ' + cur_dir + '/capture/' + name + '.pcap&' 
                     h.cmd(mod)
                     h.cmd(capt)
@@ -314,9 +338,10 @@ def main():
     sleep(1)
     
     # Run the controller
+    t = None
     if auto:
         print "Starting Controller"
-        comd = "python " + cur_dir + "/controlplane/thrift-ids/gen-py/IDSControllerPy/controller.py --conf " + cur_dir +"/sw_conf_large_v2.json --capture " + cur_dir + "/controlplane/capture_wl/modbus_capture_tcp.pcap&"
+        comd = "python " + cur_dir + "/controlplane/thrift-ids/gen-py/IDSControllerPy/controller.py --conf " + cur_dir +"/sw_conf_large_v2.json" 
         ctrl.cmd(comd) 
         sleep(1)
         # Run Bro
@@ -332,18 +357,18 @@ def main():
         sleep(5)
         # Run Modbus Client
         print "Starting Master Terminal Unit"
-        comd = "python " + cur_dir + "/modbus/modbus_client.py --ip-master 10.0.10.1 --port-master 3000"
-        for s in modbus_servers:
-            comd += " --ip-slaves %s --port-slaves 5020" % s
-        comd +="&"
+        comd = "python " + phys_name + "/script_mtu.py --ip-master 10.0.10.1 --port-master 3000 --duration %s --import %s&" % (DURATION, export_dir)
         mtu.cmd(comd)
         mtu.cmd("tcpdump -i eth0 -w " + cur_dir + "/capture/mtu.pcap tcp&") 
-    #topodb = TopologyDB(net=net)
-    #topodb.save("topo.json")
+        t = threading.Thread(name='process', target= ttank_process.start)
+        t.start()
+
     print "Ready !"
 
     IPCLI( net )
     net.stop()
+    if t is not None:
+        t.join()
 
 if __name__ == '__main__':
     setLogLevel( 'info' )

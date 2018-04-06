@@ -74,6 +74,7 @@ class PacketHandler():
                                  var['size'],
                                  var['name']) 
             self.var[pv] = var['name']
+            # use to detect when a variable has been updated
             self.var_update[var['name']] = False
  
     def print_and_accept(self, packet):
