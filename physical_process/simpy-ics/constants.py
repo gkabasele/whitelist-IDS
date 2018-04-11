@@ -8,10 +8,10 @@ PUMP2 = "pump2"
 VALVE = "valve"
 
 # Store
-STORE = './variables'
+STORE = 'variables'
 EXPORT_VAR = 'lplc_var'
 PERIOD = 1
-DURATION = 60
+DURATION = 90
 
 LOG = "ics.log"
 

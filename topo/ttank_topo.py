@@ -252,6 +252,7 @@ def main():
 
         sw_addr = ["10.0.%d0.%d5" % (sub_id + 1, sub_id + 1) for n in xrange(num_hosts)]
 
+        sw.cmd("tcpdump -i s%d-eth1 -w " % (sub_id)  + cur_dir + "/capture/s%s.pcap&" % (sub_id) )
         for n in xrange(num_hosts):
             try:
                 h = net.get('s%d-h%d' % (sub_id, n + 1))
@@ -273,13 +274,19 @@ def main():
     
     if os.path.exists(store):
         shutil.rmtree(store)
+    os.mkdir(store)
     
     if os.path.exists(export_dir):
         shutil.rmtree(export_dir)
     os.mkdir(export_dir)
 
-    variable_process = ['tank1.py', 'tank2.py', 'tank3.py', 'pump1.py', 'pump2.py', 'valve.py']
+    t = None
+    if auto:
+        t = threading.Thread(name='process', target= ttank_process.start, args=(store,))
+        print "Starting physical process"
+        t.start()
 
+    variable_process = ['tank1.py', 'tank2.py', 'tank3.py', 'pump1.py', 'pump2.py', 'valve.py']
     for i in xrange(num_subnet):
         sub_id = i+1
         for n in xrange(num_hosts):
@@ -290,9 +297,9 @@ def main():
                 ip = "10.0.%d0.%d" % ((sub_id + 1), (n + 1))
                 modbus_servers.append(ip)
                 if auto:
-                    mod = 'python '+ phys_name + '/script_plc_' + variable_process[n] + '--ip 10.0.%d0.%d --port 5020& --store %s --duration %s --create' % ((sub_id + 1), (n+1), store, DURATION )
+                    mod = 'python '+ phys_name + '/script_plc_' + variable_process[n] + ' --ip 10.0.%d0.%d --port 5020 --store %s --duration %s --export %s --create&' % ((sub_id + 1), (n+1), store, DURATION, export_dir )
                     capt = 'tcpdump -i eth0 -w ' + cur_dir + '/capture/' + name + '.pcap&' 
-                    h.cmd(mod)
+                    output = h.cmd(mod)
                     h.cmd(capt)
     ids = net.get('s3-h1')
     ids.describe()
@@ -330,6 +337,7 @@ def main():
                 print "%s\t%s"% (ip,mac) 
                 r.setARP(ip,mac)
 
+        r.cmd("tcpdump -i %s-eth0 -w " % (i)  + cur_dir + "/capture/%s.pcap&" % (i) )
         r.cmd("sysctl -w net.ipv4.conf.all.rp_filter=0")
         r.cmd("sysctl -w net.ipv4.conf.default.rp_filter=0")
     r = net.get('r3')
@@ -338,13 +346,13 @@ def main():
     sleep(1)
     
     # Run the controller
-    t = None
     if auto:
         print "Starting Controller"
-        comd = "python " + cur_dir + "/controlplane/thrift-ids/gen-py/IDSControllerPy/controller.py --conf " + cur_dir +"/sw_conf_large_v2.json" 
-        ctrl.cmd(comd) 
+        comd = "python " + cur_dir + "/controlplane/thrift-ids/gen-py/IDSControllerPy/controller.py --conf " + cur_dir +"/sw_conf_large_v2.json&" 
+        output = ctrl.cmd(comd) 
         sleep(1)
         # Run Bro
+        print "Starting Bro"
         comd = "cd " + cur_dir + "/bro_setup && bro -b -C -i eth0 " + cur_dir + "/bro_setup/server_broker.bro&"
         ids.cmd(comd)
         sleep(1)
@@ -354,15 +362,13 @@ def main():
         ids.cmd(comd)
         comd = "python " + cur_dir +"/spec_ids/gen-py/IDSControllerPy/ids.py&"
         ids.cmd(comd)
-        sleep(5)
+        sleep(1)
         # Run Modbus Client
         print "Starting Master Terminal Unit"
-        comd = "python " + phys_name + "/script_mtu.py --ip-master 10.0.10.1 --port-master 3000 --duration %s --import %s&" % (DURATION, export_dir)
+        comd = "python " + phys_name + "/script_mtu.py --ip 10.0.10.1 --port 3000 --duration %s --import %s&" % (DURATION, export_dir)
         mtu.cmd(comd)
         mtu.cmd("tcpdump -i eth0 -w " + cur_dir + "/capture/mtu.pcap tcp&") 
-        t = threading.Thread(name='process', target= ttank_process.start)
-        t.start()
-
+        
     print "Ready !"
 
     IPCLI( net )

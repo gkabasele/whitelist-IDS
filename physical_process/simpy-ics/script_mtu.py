@@ -8,7 +8,7 @@ from tanksystem import MTUTankSystem
 
 
 def main(args):
-    time.sleep(1)
+    time.sleep(6)
     mtu =  MTUTankSystem(args.ip, args.port)
     mtu.get_dir(args.filename)
     mtu.create_task('mtu', args.period, args.duration)

@@ -37,7 +37,7 @@ class TTankSystem(ComponentProcess):
 
         decrease_duration = 3
         
-        for i in range(10):
+        for i in range(15):
             print "(%d) Starting three tank system" % (self.env.now)
             self.pump1 = self.get(PUMP1, "b")
             if self.pump1:
@@ -78,7 +78,7 @@ class TTankSystem(ComponentProcess):
             self.set(TANK2, self.tank2)
 
 
-def start():
+def start(store):
     env = simpy.rt.RealtimeEnvironment(factor=1)
-    phys_proc = (TTankSystem(env, STORE, "Three Tank System"))
+    phys_proc = (TTankSystem(env, store, "Three Tank System"))
     env.run()
