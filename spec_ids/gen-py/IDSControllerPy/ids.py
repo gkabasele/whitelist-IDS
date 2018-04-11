@@ -13,6 +13,9 @@ from struct import *
 from netaddr import IPAddress
 from utils import *
 
+from logging import FileHandler
+from logging import Formatter
+
 from thrift.transport import TTransport
 from thrift.transport import TSocket
 from thrift.protocol import TBinaryProtocol
@@ -34,6 +37,17 @@ bind_layers(IP, SRTag, proto=200)
 bind_layers(SRTag, TCP)
 bind_layers(TCP, ModbusRes, sport=MODBUS_PORT)
 bind_layers(TCP, ModbusReq, dport=MODBUS_PORT)
+
+# Initialization of the log
+LOG_FORMAT = ("[%(asctime)s] [%(levelname)s]:%(message)s")
+LOG_LEVEL = logging.INFO
+IDS_SPEC_FILE = "logs/ids_spec.log"
+logger = logging.getLogger('ids_spec')
+logger.setLevel(LOG_LEVEL)
+handler = FileHandler(IDS_SPEC_FILE)
+handler.setLevel(LOG_LEVEL)
+handler.setFormatter(Formatter(LOG_FORMAT))
+logger.addHandler(handler)
 
 class PacketHandler():
 
@@ -98,13 +112,12 @@ class PacketHandler():
                     addr = pkt[ModbusReq].startAddr
                     kind = ProcessVariable.funcode_to_kind(funcode)
                     req = Flow(srcip, dstip, transId, dport, proto)
-                    print "sending request %s to %s" % (transId, dstip)
+                    logger.info("sending request %s to %s" % (transId, dstip))
                     self.transId[(transId, dstip)] =  ProcessVariable(dstip, dport, kind, addr) 
-                    #self.client.mirror(req, switch)
                 else: 
                     # Receive request 
                     transId = pkt[ModbusRes].transId
-                    print "received modbus request %s from %s" % (transId, srcip)
+                    logger.info("received modbus request %s from %s" % (transId, srcip))
                     name = self.var[self.transId[(transId, srcip)]]
                     self.state_store.update_var_from_packet(
                                                 name,
@@ -112,7 +125,7 @@ class PacketHandler():
                                                 pkt[ModbusRes].payload)
                     self.var_update[name] = True
                     if all(x for x in self.var_update.values()):
-                        print "Dist: ",self.state_store.get_req_distance()
+                        logger.info("Dist: ",self.state_store.get_req_distance())
                         for k in self.var_update:
                             self.var_update[k] = False
         packet.drop()

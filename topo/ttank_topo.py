@@ -348,7 +348,7 @@ def main():
     # Run the controller
     if auto:
         print "Starting Controller"
-        comd = "python " + cur_dir + "/controlplane/thrift-ids/gen-py/IDSControllerPy/controller.py --conf " + cur_dir +"/sw_conf_large_v2.json&" 
+        comd = "python " + cur_dir + "/controlplane/thrift-ids/gen-py/IDSControllerPy/controller.py --conf " + cur_dir +"/sw_conf_large_v2.json --desc " + phys_name + "/requirements.yml&"  
         output = ctrl.cmd(comd) 
         sleep(1)
         # Run Bro
