@@ -35,7 +35,7 @@ class ProcessVariable():
             return DIS_INP
         elif funcode in [3,6,10,22,23]:
             return HOL_REG
-        elif funcoe == 4:
+        elif funcode == 4:
             return INP_REG
         
 
@@ -45,7 +45,14 @@ class ProcessVariable():
 
     def __hash__(self):
         return hash((self.host, self.port, self.kind, self.addr))
-    
+
+    def __str__(self):
+        return "%s : (ip: %s, port: %s, type: %s, addr: %s)" % (
+                                self.name, self.host, self.port, self.kind, self.addr) 
+    def __repr__(self):
+        return "%s : (ip: %s, port: %s, type: %s, addr: %s)" % (
+                                self.name, self.host,self.port, self.kind, self.addr) 
+
     def is_bool_var(self):
         return self.kind in [DIS_COIL, DIS_INP]
 

@@ -67,7 +67,7 @@ class State():
         return values
 
     def count_bool_var(self):
-        return len(filter(lambda x: x.is_bool_var ,self.var.values()))
+        return len(filter(lambda x: x.is_bool_var() ,self.var.values()))
 
     def setup(self, descFile):
         content = open(descFile).read()
@@ -81,7 +81,6 @@ class State():
                                  var['size'],
                                  var['name']) 
             self.var[pv.name] = pv 
-        
         for req_desc in desc['requirements']:
             self.req.append(self.parser.parse_requirement(req_desc['requirement'])) 
             
@@ -124,6 +123,7 @@ class State():
         min_dist = None
         bool_var = self.count_bool_var()
         num_var = len(self.var) - bool_var
+
 
         for requirement in self.req: 
             dist = [] 
