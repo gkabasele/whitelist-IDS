@@ -3,6 +3,7 @@
 import sys
 import re
 import yaml
+import logging
 
 from pyparsing import *
 from Equation import Expression
@@ -10,11 +11,10 @@ from scapy.all import *
 from struct import *
 from utils import *
 
-
-
 NUM_WEIGHT = 1
 BOOL_WEIGHT = 5
 
+logger = logging.getLogger('__name__')
 
 class RequirementParser():
 
@@ -120,7 +120,7 @@ class State():
             return resp(*self.get_var_values())
 
     def get_req_distance(self):
-       
+      
         min_dist = None
         bool_var = self.count_bool_var()
         num_var = len(self.var) - bool_var
@@ -144,6 +144,6 @@ class State():
         if self.var[name].is_bool_var():
             val = 1 if val > 0 else 0
 
-        print "Updating var %s to %s" % (name, val) 
+        logger.info("Updating var %s to %s" % (name, val))
         self.var[name].value = val
 

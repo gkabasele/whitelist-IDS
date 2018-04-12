@@ -1,0 +1,11 @@
+variables:
+    - variable:
+        name: tlevel
+        host: 10.0.20.3
+        port: 5020
+        type: hr
+        address: 0
+        size: 1
+
+requirements:
+    - requirement: tlevel < 40

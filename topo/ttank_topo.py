@@ -360,7 +360,7 @@ def main():
         print "Starting Intrusion Detection System"
         comd = cur_dir +"/controlplane/thrift-ids/gen-cpp/controller_client -c " + cur_dir + "/ids.cfg&"
         ids.cmd(comd)
-        comd = "python " + cur_dir +"/spec_ids/gen-py/IDSControllerPy/ids.py&"
+        comd = "python " + cur_dir +"/spec_ids/gen-py/IDSControllerPy/ids.py --varfile " + phys_name + "/requirements.yml&"
         ids.cmd(comd)
         sleep(1)
         # Run Modbus Client

@@ -42,7 +42,7 @@ bind_layers(TCP, ModbusReq, dport=MODBUS_PORT)
 LOG_FORMAT = ("[%(asctime)s] [%(levelname)s]:%(message)s")
 LOG_LEVEL = logging.INFO
 IDS_SPEC_FILE = "logs/ids_spec.log"
-logger = logging.getLogger('ids_spec')
+logger = logging.getLogger('__name__')
 logger.setLevel(LOG_LEVEL)
 handler = FileHandler(IDS_SPEC_FILE)
 handler.setLevel(LOG_LEVEL)
@@ -63,7 +63,7 @@ class PacketHandler():
         self.client = None
         self.transport = None
 
-        self.setup_controlplane_connection(host, port)
+        #self.setup_controlplane_connection(host, port)
         self.create_variables(varfile)
 
         self.state_store = State(varfile)
@@ -92,7 +92,6 @@ class PacketHandler():
             self.var_update[var['name']] = False
  
     def print_and_accept(self, packet):
-    
         payload = packet.get_payload()
         pkt = IP(payload)
         srcip = pkt[IP].src
@@ -112,12 +111,12 @@ class PacketHandler():
                     addr = pkt[ModbusReq].startAddr
                     kind = ProcessVariable.funcode_to_kind(funcode)
                     req = Flow(srcip, dstip, transId, dport, proto)
-                    logger.info("sending request %s to %s" % (transId, dstip))
+                    logger.info("Request %s has been send to %s" % (transId, dstip))
                     self.transId[(transId, dstip)] =  ProcessVariable(dstip, dport, kind, addr) 
                 else: 
                     # Receive request 
                     transId = pkt[ModbusRes].transId
-                    logger.info("received modbus request %s from %s" % (transId, srcip))
+                    logger.info("Response from %s for request %s" % (srcip, transId))
                     name = self.var[self.transId[(transId, srcip)]]
                     self.state_store.update_var_from_packet(
                                                 name,
@@ -125,7 +124,7 @@ class PacketHandler():
                                                 pkt[ModbusRes].payload)
                     self.var_update[name] = True
                     if all(x for x in self.var_update.values()):
-                        logger.info("Dist: ",self.state_store.get_req_distance())
+                        logger.info("Dist: %s " %(self.state_store.get_req_distance()))
                         for k in self.var_update:
                             self.var_update[k] = False
         packet.drop()
@@ -139,7 +138,6 @@ def main():
     nfqueue = NetfilterQueue()
     handler = PacketHandler(varfile, host, port)
     nfqueue.bind(2, handler.print_and_accept)
-
     try: 
         nfqueue.run()
     except KeyboardInterrupt:
