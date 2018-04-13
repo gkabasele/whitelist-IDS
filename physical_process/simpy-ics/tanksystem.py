@@ -6,8 +6,8 @@ class MTUTankSystem(MTU):
 
     def __init__(self, ip, port, client=ModbusTcpClient):
 
-        self.tank1 = 50
-        self.tank2 = 50
+        self.tank1 = 0
+        self.tank2 = 0
         self.tank3 = 0
         self.pump1 = False
         self.pump2 = False
@@ -27,12 +27,24 @@ class MTUTankSystem(MTU):
         if self.tank3 is not None:
             if self.tank3 >= 0 and self.tank3 < 20:
                 self.pump1 = True
+                self.pump2 = False
+                self.valve = False
                 self.write_variable(PUMP1, self.pump1)
-            elif self.tank3 >= 20 and self.tank3 < 40:
-                self.pump2 = True
                 self.write_variable(PUMP2, self.pump2)
+                self.write_variable(VALVE, self.valve)
+            elif self.tank3 >= 20 and self.tank3 < 40:
+                self.pump1 = False
+                self.pump2 = True
+                self.valve = False
+                self.write_variable(PUMP1, self.pump1)
+                self.write_variable(PUMP2, self.pump2)
+                self.write_variable(VALVE, self.valve)
             elif self.tank3 >= 40:
+                self.pump1 = False
+                self.pump2 = False
                 self.valve = True
+                self.write_variable(PUMP1, self.pump1)
+                self.write_variable(PUMP2, self.pump2)
                 self.write_variable(VALVE, self.valve)
 
 

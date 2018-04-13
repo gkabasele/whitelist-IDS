@@ -13,3 +13,4 @@ capture/
 controlplane/thrift-ids/gen-cpp/controller_client
 *.state
 *.map
+physical_process/simpy-ics/variables/
