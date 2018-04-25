@@ -1,7 +1,7 @@
 variables:
     - variable:
         name: tlevel
-        host: 10.0.20.3
+        host: 10.0.20.7
         port: 5020
         type: hr
         address: 0
