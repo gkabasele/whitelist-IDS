@@ -52,14 +52,16 @@ parser.add_argument('--pcap-dump', help='Dump packets on interfaces to pcap file
 parser.add_argument('--auto', help='Automatically run command', type=bool, default=False)
 
 parser.add_argument('--phys_name', help='Physical process name', type=str, default='medium-process')
-parser.add_argument('--nb_iter', help='Number of iteration for the process execution', type=int, default=10, action='store')
+parser.add_argument('--nb_iter', help='Number of iteration for the process execution', type=int, default=60, action='store')
 args = parser.parse_args()
 
 cur_dir = os.getcwd()
 phys_name = cur_dir + '/physical_process/' + args.phys_name
 sys.path.append(phys_name)
-from constants import *
 import medium_process
+import store_watcher
+from constants import *
+
 
 store = phys_name + '/' + STORE
 export_dir = phys_name + '/' + EXPORT_VAR
@@ -283,7 +285,7 @@ def main():
 
     t = None
     if auto:
-        t = threading.Thread(name='process', target= medium_process.start, args=(store, args.nb_iter))
+        t = threading.Thread(name='process', target= store_watcher.start, args=(store, args.nb_iter))
         print "Starting physical process"
         t.start()
 
@@ -299,7 +301,7 @@ def main():
                 ip = "10.0.%d0.%d" % ((sub_id + 1), (n + 1))
                 modbus_servers.append(ip)
                 if auto:
-                    mod = 'python '+ phys_name +"/plcs/" + variable_process[n] + ' --ip 10.0.%d0.%d --port 5020 --store %s --duration %s --export %s --create&' % ((sub_id + 1), (n+1), store, DURATION, export_dir )
+                    mod = 'python '+ phys_name +"/plcs/" + variable_process[n] + ' --ip 10.0.%d0.%d --port 5020 --store %s --duration %s --export %s --create --period %s&' % ((sub_id + 1), (n+1), store, DURATION, export_dir, PERIOD )
                     capt = 'tcpdump -i eth0 -w ' + cur_dir + '/capture/' + name + '.pcap&' 
                     output = h.cmd(mod)
                     h.cmd(capt)
