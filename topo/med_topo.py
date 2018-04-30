@@ -65,6 +65,7 @@ from constants import *
 
 store = phys_name + '/' + STORE
 export_dir = phys_name + '/' + EXPORT_VAR
+plc_log_dir = phys_name + '/' + PLCS_LOG
 
 # TODO TopologyDB to generate json file   
 class MultiSwitchTopo(IPTopo):
@@ -283,6 +284,10 @@ def main():
         shutil.rmtree(export_dir)
     os.mkdir(export_dir)
 
+    if os.path.exists(plc_log_dir):
+        shutil.rmtree(plc_log_dir)
+    os.mkdir(plc_log_dir)
+
     t = None
     if auto:
         t = threading.Thread(name='process', target= store_watcher.start, args=(store, args.nb_iter))
@@ -301,7 +306,9 @@ def main():
                 ip = "10.0.%d0.%d" % ((sub_id + 1), (n + 1))
                 modbus_servers.append(ip)
                 if auto:
-                    mod = 'python '+ phys_name +"/plcs/" + variable_process[n] + ' --ip 10.0.%d0.%d --port 5020 --store %s --duration %s --export %s --create --period %s&' % ((sub_id + 1), (n+1), store, DURATION, export_dir, PERIOD )
+                    print "Starting PLC %s" % (variable_process[n])
+                    mod = 'python '+ phys_name +"/plcs/" + variable_process[n] + ' --ip 10.0.%d0.%d --port 5020 --store %s --duration %s --export %s --create --period %s&' % ((sub_id + 1), (n+1), store, DURATION, export_dir, PLC_PERIOD )
+                    print mod
                     capt = 'tcpdump -i eth0 -w ' + cur_dir + '/capture/' + name + '.pcap&' 
                     output = h.cmd(mod)
                     h.cmd(capt)
