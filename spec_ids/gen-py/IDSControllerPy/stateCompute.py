@@ -50,6 +50,16 @@ class RequirementParser():
     def parse_requirement(self, requirement):
         return self.expr.parseString(requirement)
 
+class Requirement():
+
+    identifier = 0 
+
+    def __init__(self, content):
+
+        self.identifier = Requirement.identifier
+        Requirement.identifier +=1
+        self.content = content
+
 class State(): 
 
     def __init__(self, descFile, parser=RequirementParser()): 
@@ -82,7 +92,9 @@ class State():
                                  var['name']) 
             self.var[pv.name] = pv 
         for req_desc in desc['requirements']:
-            self.req.append(self.parser.parse_requirement(req_desc['requirement'])) 
+            req = Requirement(self.parser.parse_requirement(req_desc['requirement']))
+            self.req.append(req)
+            #self.req.append(self.parser.parse_requirement(req_desc['requirement'])) 
             
         
     def add_variable(self, host, port, kind, addr, name): 
@@ -121,20 +133,24 @@ class State():
     def get_req_distance(self):
       
         min_dist = None
+        identifier = None
         bool_var = self.count_bool_var()
         num_var = len(self.var) - bool_var
 
 
         for requirement in self.req: 
             dist = [] 
-            self.compute_distance(requirement, dist)
+            tmp = min_dist
+            self.compute_distance(requirement.content, dist)
             if min_dist is None:
                 min_dist = float(sum(dist))/(NUM_WEIGHT*num_var + BOOL_WEIGHT*bool_var)
+                identifier = requirement.identifier
             else:
                 d = float(sum(dist))/(NUM_WEIGHT*num_var + BOOL_WEIGHT*bool_var)
                 min_dist = min(min_dist, d)
+                identifier = requirement.identifier if tmp != min_dist else identifier
 
-        return min_dist
+        return identifier, min_dist
 
 
     def update_var_from_packet(self, name, funcode, payload):
