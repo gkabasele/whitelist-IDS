@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sys
+import os
 import re
 import yaml
 import logging
@@ -10,6 +11,14 @@ from Equation import Expression
 from scapy.all import *
 from struct import *
 from utils import *
+
+from req_interpreter.lexer import Lexer
+from req_interpreter.parser import Parser
+from req_interpreter.interpreter import Interpreter
+
+#path = os.getcwd() + '/req_interpreter/'
+#sys.path.append(path)
+
 
 NUM_WEIGHT = 1
 BOOL_WEIGHT = 5
@@ -62,11 +71,10 @@ class Requirement():
 
 class State(): 
 
-    def __init__(self, descFile, parser=RequirementParser()): 
+    def __init__(self, descFile): 
         # name to variable 
         self.var = {}
         self.req = []
-        self.parser = parser
 
         self.setup(descFile)
 
@@ -91,14 +99,40 @@ class State():
                                  var['size'],
                                  var['name']) 
             self.var[pv.name] = pv 
+
         for req_desc in desc['requirements']:
-            req = Requirement(self.parser.parse_requirement(req_desc['requirement']))
+            req = Requirement(req_desc['requirement'])
             self.req.append(req)
             
-        
     def add_variable(self, host, port, kind, addr, name): 
         self.var[name] = ProcessVariable(host, port, kind, addr, size, name)
 
+    def get_req_distance(self):
+
+        min_dist = None
+        identifier = None
+        bool_var = self.count_bool_var()
+        num_var = len(self.var) - bool_var
+
+        for requirement in self.req:
+            tmp = min_dist
+            lexer = Lexer(requirement.content)
+            parser = Parser(lexer)
+            i = Interpreter(parser, self.var, NUM_WEIGHT, BOOL_WEIGHT)
+            violation = i.interpret()
+            if violation: 
+                logger.warn("The requirement %d is violated!!" % requirement.identifier)
+            if min_dist is None:
+                min_dist = i.compute_distance(num_var, bool_var)
+                identifier = requirement.identifier
+            else:
+                d = i.compute_distance(num_var, bool_var) 
+                min_dist = min(min_dist, d)
+                identifier = requirement.identifier if tmp != min_dist else identifier
+
+        return identifier, min_dist
+                
+    '''
     def compute_distance(self, req, dist, max_depth=50):
         eq = ""
         acc = []
@@ -136,7 +170,6 @@ class State():
         bool_var = self.count_bool_var()
         num_var = len(self.var) - bool_var
 
-
         for requirement in self.req: 
             dist = [] 
             tmp = min_dist
@@ -150,7 +183,7 @@ class State():
                 identifier = requirement.identifier if tmp != min_dist else identifier
 
         return identifier, min_dist
-
+    '''
 
     def update_var_from_packet(self, name, funcode, payload):
         val = payload.getfieldval(func_fields_dict[funcode])
