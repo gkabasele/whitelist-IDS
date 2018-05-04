@@ -123,9 +123,8 @@ class PacketHandler():
                                                 pkt[ModbusRes].funcode,
                                                 pkt[ModbusRes].payload)
                     self.var_update[name] = True
-                    logger.info("Variable Process: %s" % (self.var_update))
+                    logger.info("Process variable: %s"% (self.var_update))
                     if all(x for x in self.var_update.values()):
-                        logger.info("Start distance computing")
                         i, dist = self.state_store.get_req_distance()
                         logger.info("ID: %s Dist: %s " %(i, dist))
                         for k in self.var_update:

@@ -94,7 +94,6 @@ class State():
         for req_desc in desc['requirements']:
             req = Requirement(self.parser.parse_requirement(req_desc['requirement']))
             self.req.append(req)
-            #self.req.append(self.parser.parse_requirement(req_desc['requirement'])) 
             
         
     def add_variable(self, host, port, kind, addr, name): 

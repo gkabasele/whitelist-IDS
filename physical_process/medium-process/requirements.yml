@@ -67,6 +67,6 @@ requirements:
     - requirement: tanka < 41
     - requirement: wagoncar < 21
     - requirement: tankfinal < 61
-    - requirement: wagonstart > 1 & valvecharcoal > 1 
+    - requirement: wagonend > 1 & valvecharcoal > 1 
     - requirement: motora > 1 & tanka < 21
     - requirement: motorb > 1 & silob < 41
