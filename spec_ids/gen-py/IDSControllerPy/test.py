@@ -1,5 +1,16 @@
+import logging
+import os
 from utils import *
 from stateCompute import *
+
+log = 'test.log'
+if os.path.exists(log):
+    os.remove(log)
+
+logging.basicConfig(level=logging.DEBUG,
+                    format = '%(levelname)s %(message)s',
+                    filename= log,
+                    filemode= 'w')
 
 path = 'requirements_test.yml'
 
@@ -31,4 +42,11 @@ s.var[T1].value = 40
 i, d = s.get_req_distance()
 print "id: %d, d: %s" % (i,d)
 
+s.var[WE].value = 1
+s.var[VT].value = 1
+i, d = s.get_req_distance()
+print "id: %d, d: %s" % (i,d)
 
+s.var[WE].value = 1
+s.var[VT].value = 0
+s.var[T1].value = 0

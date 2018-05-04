@@ -101,7 +101,7 @@ class State():
             self.var[pv.name] = pv 
 
         for req_desc in desc['requirements']:
-            req = Requirement(req_desc['requirement'])
+            req = Requirement(Parser(Lexer(req_desc['requirement'])).parse())
             self.req.append(req)
             
     def add_variable(self, host, port, kind, addr, name): 
@@ -116,12 +116,10 @@ class State():
 
         for requirement in self.req:
             tmp = min_dist
-            lexer = Lexer(requirement.content)
-            parser = Parser(lexer)
-            i = Interpreter(parser, self.var, NUM_WEIGHT, BOOL_WEIGHT)
-            violation = i.interpret()
+            i = Interpreter(None, self.var, NUM_WEIGHT, BOOL_WEIGHT)
+            violation = i.visit(requirement.content)
             if violation: 
-                logger.warn("The requirement %d is violated!!" % requirement.identifier)
+                logger.warn("The critical property %d is satisfied!!" % requirement.identifier)
             if min_dist is None:
                 min_dist = i.compute_distance(num_var, bool_var)
                 identifier = requirement.identifier
@@ -132,59 +130,7 @@ class State():
 
         return identifier, min_dist
                 
-    '''
-    def compute_distance(self, req, dist, max_depth=50):
-        eq = ""
-        acc = []
-        if max_depth > 0:
-            for lit in req:
-                # FIXME variable in requirements 
-                if isinstance(lit, collections.Iterable) and type(lit) is not str:
-                    res = self.compute_distance(lit, dist, max_depth-1)
-                    eq += str(res)
-                elif lit in [">", "=", "<"]:
-                    if is_number(eq):
-                        acc.append(int(eq))
-                    else:
-                        acc.append(eq)
-                    eq = ""
-                elif lit == "&":
-                    eq = ""
-                else:
-                    eq += str(lit)
-            resp = Expression(eq,self.var.keys())
-            if len(acc) > 0:
-                if type(acc[0]) is int:
-                    d = NUM_WEIGHT*(abs(acc[0] - int(eq)))
-                else:
-                    var = self.var[acc[0]]
-                    d = abs(var.value - int(eq))
-                    d = BOOL_WEIGHT*d if var.is_bool_var() else NUM_WEIGHT*d
-                dist.append(d)
-            return resp(*self.get_var_values())
-
-    def get_req_distance(self):
-      
-        min_dist = None
-        identifier = None
-        bool_var = self.count_bool_var()
-        num_var = len(self.var) - bool_var
-
-        for requirement in self.req: 
-            dist = [] 
-            tmp = min_dist
-            self.compute_distance(requirement.content, dist)
-            if min_dist is None:
-                min_dist = float(sum(dist))/(NUM_WEIGHT*num_var + BOOL_WEIGHT*bool_var)
-                identifier = requirement.identifier
-            else:
-                d = float(sum(dist))/(NUM_WEIGHT*num_var + BOOL_WEIGHT*bool_var)
-                min_dist = min(min_dist, d)
-                identifier = requirement.identifier if tmp != min_dist else identifier
-
-        return identifier, min_dist
-    '''
-
+    
     def update_var_from_packet(self, name, funcode, payload):
         val = payload.getfieldval(func_fields_dict[funcode])
         if type(val) is list:
