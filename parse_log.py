@@ -7,8 +7,9 @@ from tabulate import tabulate
 # Regex used to match relevant loglines
 line_regex = re.compile("\{.+\}")
 
-lines = []
+states = []
 index = len('[2018-05-08 15:21:11,742][INFO][/home/mininet/p4-tutorials/whitelist/mininet/physical_process/medium-process/mtu_med.py-60] ')
+i = len('[2018-05-08 15:21:11,310] [INFO]:')
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--format", dest="format", default="csv", action="store")
@@ -22,23 +23,38 @@ with open("state.txt","a") as out:
         for line in f:
             if (line_regex.search(line)):
                 if 'None' not in line:
-                    varmap = ast.literal_eval(line[index:])
-                    lines.append(varmap)
+                    s = ast.literal_eval(line[index:])
+                    states.append(s)
 
+    with open("logs/ids_spec.log", "r") as f:
+        ids = [] 
+        dist = []
+        for line in f:
+            if 'ID:' in line:
+                val = line[i:].split(" ")
+                ids.append(val[1])       
+                dist.append(val[3])
+
+        print len(states)
+        print len(ids)
+        print len(dist)
+                
     if args.format =='table':
-        headers = lines[0].keys()
+        headers = states[0].keys() + [("ID"), ("Dist")]
         rows = []
-        for line in lines:
-            rows.append(line.values())
+        for i,line in enumerate(states):
+            if i < len(ids):
+                rows.append(line.values() + [ids[i],dist[i]])
         out.write(tabulate(rows, headers=headers))
 
     if args.format == 'csv':
         # csv format
-        for k in lines[0].keys():
+        for k in states[0].keys() + [("ID"), ("Dist")]:
             out.write("%s," % k)
 
-        for line in lines:
+        for i,line in enumerate(states):
             out.write("\n")
             for v in line.values():
                 out.write("%s," % v)
-
+            out.write("%s, " % ids[i])
+            out.write("%s" % dist[i])
