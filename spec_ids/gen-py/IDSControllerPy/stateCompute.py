@@ -16,10 +16,6 @@ from req_interpreter.lexer import Lexer
 from req_interpreter.parser import Parser
 from req_interpreter.interpreter import Interpreter
 
-#path = os.getcwd() + '/req_interpreter/'
-#sys.path.append(path)
-
-
 NUM_WEIGHT = 1
 BOOL_WEIGHT = 5
 

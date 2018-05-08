@@ -37,11 +37,12 @@ class MTUMedSystem(MTU):
 
         self.running_m1 = False
         self.running_m2 = False
+        self.filename = export_file
 
         super(MTUMedSystem, self).__init__(ip, port, client)
 
-    def main_loop(self, *args, **kargs):
-
+    
+    def main_loop(self, *args, **kwargs):
 
         for k,v in self.varmap.iteritems():
             self.varmap[k] = self.get_variable(k)
@@ -50,7 +51,7 @@ class MTUMedSystem(MTU):
 
         if any( x is None for x in self.varmap.itervalues()):
            return 
-        
+
         self.tank1_management()
         self.wagon_management()
 

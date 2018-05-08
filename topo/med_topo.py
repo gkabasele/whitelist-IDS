@@ -51,6 +51,8 @@ parser.add_argument('--pcap-dump', help='Dump packets on interfaces to pcap file
 
 parser.add_argument('--auto', help='Automatically run command', type=bool, default=False)
 
+parser.add_argument('--attack', help='start attack', type=bool, default=False)
+
 parser.add_argument('--phys_name', help='Physical process name', type=str, default='medium-process')
 parser.add_argument('--nb_iter', help='Number of iteration for the process execution', type=int, default=60, action='store')
 args = parser.parse_args()
@@ -312,6 +314,7 @@ def main():
                     capt = 'tcpdump -i eth0 -w ' + cur_dir + '/capture/' + name + '.pcap&' 
                     output = h.cmd(mod)
                     h.cmd(capt)
+
     ids = net.get('s3-h1')
     ids.describe()
     ctrl = net.get('s3-h2')
@@ -364,7 +367,7 @@ def main():
         sleep(1)
         # Run Bro
         print "Starting Bro"
-        comd = "cd " + cur_dir + "/bro_setup && bro -b -C -i eth0 " + cur_dir + "/bro_setup/server_broker.bro&"
+        comd = "cd " + cur_dir + "/bro_setup && bro -b -C -i eth0 server_broker.bro&"
         ids.cmd(comd)
         sleep(1)
         # Run IDS
@@ -374,12 +377,23 @@ def main():
         comd = "python " + cur_dir +"/spec_ids/gen-py/IDSControllerPy/ids.py --varfile " + phys_name + "/requirements.yml&"
         ids.cmd(comd)
         sleep(1)
+
+
         # Run Modbus Client
         print "Starting Master Terminal Unit"
-        comd = "python " + phys_name + "/script_mtu.py --ip 10.0.10.1 --port 3000 --duration %s --import %s&" % (DURATION, export_dir)
+        comd = "python " + phys_name + "/script_mtu.py --ip 10.0.10.1 --port 3000 --duration %s --import %s --export normal_var.txt&" % (DURATION, export_dir)
         mtu.cmd(comd)
         mtu.cmd("tcpdump -i eth0 -w " + cur_dir + "/capture/mtu.pcap tcp&") 
         
+        if args.attack:
+
+            # Attacker machine
+            print "Starting Attack Machine"
+            attack_machine = net.get("s2-h1")
+            comd = "python " + phys_name + "/script_attack.py --ip 10.0.30.1 --port 4000 --duration %s --import %s --period 0.5 &" % (DURATION, export_dir)
+            attack_machine.cmd(comd)
+            attack_machine.cmd("tcpdump -i eth0 -w " + cur_dir + "/capture/attack.pcap tcp&")
+
     print "Ready !"
 
     IPCLI( net )
