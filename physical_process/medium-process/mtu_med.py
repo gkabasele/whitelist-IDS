@@ -11,45 +11,42 @@ class MTUMedSystem(MTU):
     def __init__(self, ip, port, client=ModbusTcpClient):
 
         self.varmap = {
-        
-                            A1  : 0,             
-                            A2  : 0, 
-                            V1  : False, 
-                            V2  : False, 
-                            T1  : 0, 
-                            M1  : False, 
+                            A1  : 0,
+                            A2  : 0,
+                            V1  : False,
+                            V2  : False,
+                            T1  : 0,
+                            M1  : False,
                             VT1 : False,
-                            S1  : 0, 
+                            S1  : 0,
                             VS1 : False,
                             S2  : 0,
                             VS2 : False,
-                            M2  : False,         
+                            M2  : False,
                             TC  : 0,
                             VTC : False,
-                            WE  : False, 
-                            WC  : 0, 
+                            WE  : False,
+                            WC  : 0,
                             WM  : False,
                             WO  : False,
-                            WS  : False, 
+                            WS  : False,
                             TF  : 0,
                             VTF : False
         }
 
         self.running_m1 = False
         self.running_m2 = False
-        self.filename = export_file
 
         super(MTUMedSystem, self).__init__(ip, port, client)
 
-    
     def main_loop(self, *args, **kwargs):
 
-        for k,v in self.varmap.iteritems():
+        for k, v in self.varmap.iteritems():
             self.varmap[k] = self.get_variable(k)
-            
+
         logger.info("%s" % self.varmap) 
 
-        if any( x is None for x in self.varmap.itervalues()):
+        if any(x is None for x in self.varmap.itervalues()):
            return 
 
         self.tank1_management()
@@ -58,6 +55,8 @@ class MTUMedSystem(MTU):
         if self.varmap[S2] < 20:
             if self.varmap[VS2]:
                 self.change_coil(VS2, False)
+            if self.varmap[M2]:
+                self.change_coil(M2, False)
 
         elif self.varmap[S2] == 20 :
             if self.varmap[S1] > 0 :
@@ -77,6 +76,7 @@ class MTUMedSystem(MTU):
         if self.varmap[TF] < 60:
             if self.varmap[VTF]:
                 self.change_coil(VTF,False)
+
         elif self.varmap[TF] == 60:
             self.change_coil(VTF, True)
 
@@ -91,7 +91,7 @@ class MTUMedSystem(MTU):
                 if self.varmap[V2]:
                     self.change_coil(V2, False)
 
-            if self.varmap[T1] >= 20 :
+            if self.varmap[T1] >= 20:
                 self.change_coil(V2, True)
                 if self.varmap[V1]:
                     self.change_coil(V1, False)

@@ -42,7 +42,7 @@ parser.add_argument('--thrift-port', help='Thrift server port for table updates'
 parser.add_argument('--num-hosts', help='Number of hosts by subnet',
                     type=int, action="store", default=1)
 parser.add_argument('--num-subnet', help='Number of field site',
-                    type=int, action="store",default=3)
+                    type=int, action="store", default=3)
 parser.add_argument('--mode', choices=['l2', 'l3'], type=str, default='l3')
 parser.add_argument('--json', help='Path to JSON config file',
                     type=str, action="store", required=True)
@@ -60,6 +60,7 @@ args = parser.parse_args()
 cur_dir = os.getcwd()
 phys_name = cur_dir + '/physical_process/' + args.phys_name
 sys.path.append(phys_name)
+
 import medium_process
 import store_watcher
 from constants import *
@@ -378,10 +379,9 @@ def main():
         ids.cmd(comd)
         sleep(1)
 
-
         # Run Modbus Client
         print "Starting Master Terminal Unit"
-        comd = "python " + phys_name + "/script_mtu.py --ip 10.0.10.1 --port 3000 --duration %s --import %s --export normal_var.txt&" % (DURATION, export_dir)
+        comd = "python " + phys_name + "/script_mtu.py --ip 10.0.10.1 --port 3000 --duration %s --import %s&" % (DURATION, export_dir)
         mtu.cmd(comd)
         mtu.cmd("tcpdump -i eth0 -w " + cur_dir + "/capture/mtu.pcap tcp&") 
         

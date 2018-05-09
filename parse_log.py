@@ -32,19 +32,15 @@ with open("state.txt","a") as out:
         for line in f:
             if 'ID:' in line:
                 val = line[i:].split(" ")
-                ids.append(val[1])       
+                ids.append(val[1])
                 dist.append(val[3])
 
-        print len(states)
-        print len(ids)
-        print len(dist)
-                
     if args.format =='table':
         headers = states[0].keys() + [("ID"), ("Dist")]
         rows = []
-        for i,line in enumerate(states):
+        for i, line in enumerate(states):
             if i < len(ids):
-                rows.append(line.values() + [ids[i],dist[i]])
+                rows.append(line.values() + [ids[i], dist[i]])
         out.write(tabulate(rows, headers=headers))
 
     if args.format == 'csv':
@@ -52,9 +48,10 @@ with open("state.txt","a") as out:
         for k in states[0].keys() + [("ID"), ("Dist")]:
             out.write("%s," % k)
 
-        for i,line in enumerate(states):
+        for i, line in enumerate(states):
             out.write("\n")
-            for v in line.values():
-                out.write("%s," % v)
-            out.write("%s, " % ids[i])
-            out.write("%s" % dist[i])
+            if i < len(ids):
+                for v in line.values():
+                    out.write("%s," % v)
+                out.write("%s, " % ids[i])
+                out.write("%s" % dist[i])
