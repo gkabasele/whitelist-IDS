@@ -32,18 +32,17 @@ class MTUAttack(MTU):
                         M2 : False
                       }
 
-        super(MTUMedSystem, self).__init__(ip, port, client)
+        super(MTUAttack, self).__init__(ip, port, client)
 
     def target_vars(self, dirname):
         for filename in os.listdir(dirname):
-            varname = filename.replace('script_plc_','').replace('.py','')
-            if varname in self.varmap:
-                self.import_variables(dirname+"/"+filename) 
+            varname = filename.replace('plc-', '').replace('.ex', '')
+            if varname in self.varmap.keys():
+                self.import_variables(dirname + "/" + filename)
 
     def change_coil(self, name, val):
         self.varmap[name] = val
         self.write_variable(name, val)
-        
 
     def main_loop(self, *args, **kwargs):
         self.change_coil(WM, True)
@@ -53,8 +52,9 @@ class MTUAttack(MTU):
 
 def main(args):
     time.sleep(5)
-    mtu = MTUAttack(args.ip, args.port) 
+    mtu = MTUAttack(args.ip, args.port)
     mtu.target_vars(args.filename)
+    
     mtu.create_task('mtu', args.period, args.duration)
     mtu.start()
     mtu.wait_end()

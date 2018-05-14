@@ -13,12 +13,13 @@ i = len('[2018-05-08 15:21:11,310] [INFO]:')
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--format", dest="format", default="csv", action="store")
+parser.add_argument("--output", dest="output", default="state.txt", action="store")
 args = parser.parse_args()
 
-with open("state.txt", "w") as out:
+with open(args.output, "w") as out:
    out.write("") 
 
-with open("state.txt","a") as out:
+with open(args.output,"a") as out:
     with open("ics.log", "r") as f:
         for line in f:
             if (line_regex.search(line)):

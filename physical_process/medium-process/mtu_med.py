@@ -71,14 +71,17 @@ class MTUMedSystem(MTU):
                     self.change_coil(M2, False)
                     self.change_coil(VS2, True)
             else:
-                self.change_coil(M2, True)
-        
+                if not self.running_m2:
+                    self.change_coil(M2, True)
+                    self.running_m2 = True
+
         if self.varmap[TF] < 60:
             if self.varmap[VTF]:
                 self.change_coil(VTF,False)
 
         elif self.varmap[TF] == 60:
             self.change_coil(VTF, True)
+            self.running_m2 = False
 
 
     def tank1_management(self):
@@ -107,7 +110,12 @@ class MTUMedSystem(MTU):
                     self.change_coil(M1, False)
                     self.change_coil(VT1, True)
             else:
-                self.change_coil(M1, True)
+                if not self.running_m1:
+                    self.change_coil(M1, True)
+                    self.running_m1 = True
+
+        if self.varmap[S1] == 40:
+            self.running_m1 = False
 
     def wagon_management(self):
         if self.varmap[WS]:

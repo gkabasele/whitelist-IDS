@@ -748,8 +748,8 @@ def main(sw_config, capture, ip, port, ids_sw_id, phys_desc):
     transport = TSocket.TServerSocket(port=port)
     tfactory = TTransport.TBufferedTransportFactory()
     pfactory = TBinaryProtocol.TBinaryProtocolFactory()
-    #server = TServer.TSimpleServer(processor, transport, tfactory, pfactory)
-    server = TServer.TThreadedServer(processor, transport, tfactory, pfactory)
+    server = TServer.TSimpleServer(processor, transport, tfactory, pfactory)
+    #server = TServer.TThreadedServer(processor, transport, tfactory, pfactory)
     server.serve()
 
 if __name__ == '__main__':

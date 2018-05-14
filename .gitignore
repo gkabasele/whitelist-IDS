@@ -16,3 +16,4 @@ controlplane/thrift-ids/gen-cpp/controller_client
 physical_process/*/variables/
 .git-old
 whitelist_v4.json
+state.txt

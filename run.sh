@@ -12,8 +12,8 @@ then
         sudo python $1 --num-host $2 --behavioral-exe $TARGET --json whitelist_v4.json 
     elif [ "$#" -le 4 ] 
     then
-        sudo  python $1 --num-host $2 --auto $3 --behavioral-exe $TARGET --json whitelist_v4.json
+        sudo  python $1 --num-host $2 --auto --behavioral-exe $TARGET --json whitelist_v4.json
     else 
-        sudo python $1 --num-host $2 --auto $3 --attack --behavioral-exe $TARGET --json whitelist_v4.json
+        sudo python $1 --num-host $2 --auto --attack  --behavioral-exe $TARGET --json whitelist_v4.json
     fi
 fi

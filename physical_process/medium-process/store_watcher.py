@@ -9,7 +9,7 @@ from constants import *
 
 class VarProcessHandler(FileSystemEventHandler):
 
-    def __init__(self,process ):
+    def __init__(self, process):
         self.process = process
 
         super(VarProcessHandler, self).__init__()
@@ -35,8 +35,8 @@ class VarProcessHandler(FileSystemEventHandler):
 
                 elif varname == VS1:
                     self.process.pass_fluid(self.process.silo1, S1, S2)
-                    
-                elif varname == VTC: 
+
+                elif varname == VTC:
                     if self.process.wagonStart:
                         self.process.pass_fluid(amount_fluid_passing, TC, WC)
                     elif self.process.wagonEnd:
@@ -70,13 +70,16 @@ def start(store, nb_round):
     observer.schedule(handler, path=store, recursive=True)
     print "Starting observer"
     observer.start()
+    time.sleep(DURATION + (DURATION/4))
+    print "Stopping observer"
+    observer.stop()
 
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print "Stopping observer"
-        observer.stop()
+    #try:
+    #    while True:
+    #        time.sleep(1)
+    #except KeyboardInterrupt:
+    #    print "Stopping observer"
+    #    observer.stop()
 
-    observer.join()
-    t.join()
+    #observer.join()
+    #t.join()

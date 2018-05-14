@@ -49,9 +49,9 @@ parser.add_argument('--json', help='Path to JSON config file',
 parser.add_argument('--pcap-dump', help='Dump packets on interfaces to pcap files',
                     type=str, action="store", required=False, default=False)
 
-parser.add_argument('--auto', help='Automatically run command', type=bool, default=False)
+parser.add_argument('--auto', help='Automatically run command', default=False, action='store_true')
 
-parser.add_argument('--attack', help='start attack', type=bool, default=False)
+parser.add_argument('--attack', help='start attack', default=False, action='store_true')
 
 parser.add_argument('--phys_name', help='Physical process name', type=str, default='medium-process')
 parser.add_argument('--nb_iter', help='Number of iteration for the process execution', type=int, default=60, action='store')
@@ -111,13 +111,13 @@ class MultiSwitchTopo(IPTopo):
 
         router_cc = self.addRouter('rcc')
 
-        self.addLink(router_cc , sw_control, intf=TCIntf, igp_passive=True, params1={"ip":("10.0.10.30/24"),"delay":"5ms", "bw":10}, params2={"delay":"5ms", "bw":10})
+        self.addLink(router_cc , sw_control, intf=TCIntf, igp_passive=True, params1={"ip":("10.0.10.30/24"), "delay":"5ms", "bw":10}, params2={"delay":"5ms", "bw":10})
         intf = str(sw_conf.current_intf)
         sw_conf.add_interface({intf : "00:AA:BB:CC:00:01"})
         sw_conf.ids_port = intf
         sw_conf.gw_port = intf
 
-        encoder.add_switch_conf("0", sw_conf) 
+        encoder.add_switch_conf("0", sw_conf)
 
         #Field Site and Core network (wan) creation
         for i in xrange(n_sub):
@@ -278,18 +278,19 @@ def main():
                 "Warning: Could not find host s%d-h%d"% (sub_id, n +1)
     
     modbus_servers = []
-    
-    if os.path.exists(store):
-        shutil.rmtree(store)
-    os.mkdir(store)
-    
-    if os.path.exists(export_dir):
-        shutil.rmtree(export_dir)
-    os.mkdir(export_dir)
 
-    if os.path.exists(plc_log_dir):
-        shutil.rmtree(plc_log_dir)
-    os.mkdir(plc_log_dir)
+    if args.auto:
+        if os.path.exists(store):
+            shutil.rmtree(store)
+        os.mkdir(store)
+        
+        if os.path.exists(export_dir):
+            shutil.rmtree(export_dir)
+        os.mkdir(export_dir)
+
+        if os.path.exists(plc_log_dir):
+            shutil.rmtree(plc_log_dir)
+        os.mkdir(plc_log_dir)
 
     t = None
     if auto:
