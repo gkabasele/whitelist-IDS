@@ -40,8 +40,10 @@ with open(args.output,"a") as out:
         headers = states[0].keys() + [("ID"), ("Dist")]
         rows = []
         for i, line in enumerate(states):
-            if i < len(ids):
-                rows.append(line.values() + [ids[i], dist[i]])
+            # Must ignore the first state because the ids was not enable yet
+            if i > 0:
+                if i < len(ids):
+                    rows.append(line.values() + [ids[i-1], dist[i-1]])
         out.write(tabulate(rows, headers=headers))
 
     if args.format == 'csv':
@@ -50,9 +52,11 @@ with open(args.output,"a") as out:
             out.write("%s," % k)
 
         for i, line in enumerate(states):
-            out.write("\n")
-            if i < len(ids):
-                for v in line.values():
-                    out.write("%s," % v)
-                out.write("%s, " % ids[i])
-                out.write("%s" % dist[i])
+            # Same reason as stated before
+            if i > 0:
+                out.write("\n")
+                if i < len(ids):
+                    for v in line.values():
+                        out.write("%s," % v)
+                    out.write("%s, " % ids[i-1])
+                    out.write("%s" % dist[i-1])

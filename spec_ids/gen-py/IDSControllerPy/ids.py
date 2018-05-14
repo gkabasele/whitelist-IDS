@@ -132,7 +132,7 @@ class PacketHandler():
         packet.drop()
 
     def close(self):
-        self.transport.close()
+        pass
 
 
 def main():
@@ -140,7 +140,7 @@ def main():
     nfqueue = NetfilterQueue()
     handler = PacketHandler(varfile, host, port)
     nfqueue.bind(2, handler.print_and_accept)
-    try: 
+    try:
         nfqueue.run()
     except KeyboardInterrupt:
         print "Done"

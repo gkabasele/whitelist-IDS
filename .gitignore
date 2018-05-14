@@ -17,3 +17,4 @@ physical_process/*/variables/
 .git-old
 whitelist_v4.json
 state.txt
+attack.txt

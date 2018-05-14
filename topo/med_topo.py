@@ -315,7 +315,7 @@ def main():
                     print mod
                     capt = 'tcpdump -i eth0 -w ' + cur_dir + '/capture/' + name + '.pcap&' 
                     output = h.cmd(mod)
-                    h.cmd(capt)
+                    #h.cmd(capt)
 
     ids = net.get('s3-h1')
     ids.describe()
@@ -353,7 +353,7 @@ def main():
                 print "%s\t%s"% (ip,mac) 
                 r.setARP(ip,mac)
 
-        r.cmd("tcpdump -i %s-eth0 -w " % (i)  + cur_dir + "/capture/%s.pcap&" % (i) )
+        #r.cmd("tcpdump -i %s-eth0 -w " % (i)  + cur_dir + "/capture/%s.pcap&" % (i) )
         r.cmd("sysctl -w net.ipv4.conf.all.rp_filter=0")
         r.cmd("sysctl -w net.ipv4.conf.default.rp_filter=0")
     r = net.get('r3')
@@ -364,14 +364,16 @@ def main():
     # Run the controller
     if auto:
         print "Starting Controller"
-        comd = "python " + cur_dir + "/controlplane/thrift-ids/gen-py/IDSControllerPy/controller.py --conf " + cur_dir +"/sw_conf_large_v2.json --desc " + phys_name + "/requirements.yml&"  
-        output = ctrl.cmd(comd) 
+        comd = "python " + cur_dir + "/controlplane/thrift-ids/gen-py/IDSControllerPy/controller.py --conf " + cur_dir +"/sw_conf_large_v2.json --desc " + phys_name + "/requirements.yml&"
+        output = ctrl.cmd(comd)
+        comd = "tcpdump -i s3-h2-eth0 -w " + cur_dir + "/capture/controlplane.pcap&"
+        ctrl.cmd(comd)
         sleep(1)
         # Run Bro
         print "Starting Bro"
         comd = "cd " + cur_dir + "/bro_setup && bro -b -C -i eth0 server_broker.bro&"
         ids.cmd(comd)
-        sleep(1)
+        sleep(2)
         # Run IDS
         print "Starting Intrusion Detection System"
         comd = cur_dir +"/controlplane/thrift-ids/gen-cpp/controller_client -c " + cur_dir + "/ids.cfg&"
