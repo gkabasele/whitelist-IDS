@@ -48,6 +48,7 @@ with open(args.output,"a") as out:
 
     if args.format == 'csv':
         # csv format
+        out.write("#")
         for k in states[0].keys() + [("ID"), ("Dist")]:
             out.write("%s," % k)
 
@@ -55,8 +56,9 @@ with open(args.output,"a") as out:
             # Same reason as stated before
             if i > 0:
                 out.write("\n")
+                out.write("%d" % i-1)
                 if i < len(ids):
                     for v in line.values():
                         out.write("%s," % v)
-                    out.write("%s, " % ids[i-1])
+                    out.write("%s," % ids[i-1])
                     out.write("%s" % dist[i-1])

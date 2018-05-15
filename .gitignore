@@ -18,3 +18,4 @@ physical_process/*/variables/
 whitelist_v4.json
 state.txt
 attack.txt
+*.csv
