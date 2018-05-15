@@ -10,6 +10,8 @@ set style line 3 lc rgb '#f48942' lt 1 lw 2 pt 6 ps 1.5
 set style line 4 lc rgb '#7142f4' lt 1 lw 2 pt 8 ps 1.5
 set style line 5 lc rgb '#42adf4' lt 1 lw 2 pt 9 ps 1.5
 set style line 6 lc rgb '#2f9954' lt 1 lw 2 pt 4 ps 1.5
+set style line 7 lc rgb '#470f60' lt 1 lw 2 pt 3 ps 1.5
+set style line 8 lc rgb '#c9bd10' lt 1 lw 2 pt 2 ps 1.5
 
 set multiplot layout 3, 1 title "Variable evolution\n" font ",12"
 
