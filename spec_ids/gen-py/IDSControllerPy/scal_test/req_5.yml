@@ -65,13 +65,13 @@ variables:
 
 requirements:
     
-    - requirement: tankfinal >= 26 
-    
-    - requirement: wagoncar > 27 
-    
-    - requirement: wagoncar < 22 
-    
-    - requirement: silo2 < 45 
-    
     - requirement: motor2 = 1 & valvecharcoal = 1 
+    
+    - requirement: tankfinal >= 19 
+    
+    - requirement: valvecharcoal = 1 & wagonend = 1 
+    
+    - requirement: motor1 = 1 & motor2 = 1 
+    
+    - requirement: silo2 > 37 
     

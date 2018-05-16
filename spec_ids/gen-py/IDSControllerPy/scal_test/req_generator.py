@@ -40,7 +40,7 @@ def create_content(size):
 
 def create_requirement_files():
     
-    for i in [5, 50, 100, 200]:
+    for i in [5, 50, 100, 150, 200]:
         content = create_content(i)
         context = {"requirements":content}
         name = "req_%s.yml" % i
