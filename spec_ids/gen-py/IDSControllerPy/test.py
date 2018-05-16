@@ -1,7 +1,6 @@
 import logging
 import os
-from utils import *
-from stateCompute import *
+from stateCompute import State
 
 log = 'test.log'
 if os.path.exists(log):
