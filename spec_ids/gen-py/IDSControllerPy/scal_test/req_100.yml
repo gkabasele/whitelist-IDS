@@ -1,0 +1,267 @@
+variables:
+    - variable:
+        name: tank1
+        host: 10.0.20.7
+        port: 5020
+        type: hr
+        address: 0
+        size: 1
+
+    - variable:
+        name: valvecharcoal
+        host: 10.0.20.15
+        port: 5020
+        type: co
+        address: 0
+        size: 1
+    
+    - variable:
+        name: wagoncar
+        host: 10.0.20.13
+        port: 5020
+        type: hr
+        address: 0
+        size: 1
+
+    - variable:
+        name: wagonend
+        host: 10.0.20.14
+        port: 5020
+        type: co
+        address: 0
+        size: 1
+
+    - variable:
+        name: tankfinal
+        host: 10.0.20.21
+        port: 5020
+        type: hr
+        address: 0
+        size: 1
+
+    - variable:
+        name: motor1
+        host: 10.0.20.4
+        port: 5020
+        type: co
+        address: 0
+        size: 1
+
+    - variable:
+        name: motor2
+        host: 10.0.20.9
+        port: 5020
+        type: co
+        address: 0
+        size: 1
+
+    - variable:
+        name: silo2
+        host: 10.0.20.19
+        port: 5020
+        type: hr
+        address: 0
+        size: 1
+
+requirements:
+    
+    - requirement: tank1 <= 81 
+    
+    - requirement: valvecharcoal = 1 & wagonend = 1 
+    
+    - requirement: valvecharcoal = 1 & wagonend = 1 
+    
+    - requirement: tankfinal > 74 
+    
+    - requirement: tank1 < 49 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: motor2 = 1 & valvecharcoal = 1 
+    
+    - requirement: silo2 <= 34 
+    
+    - requirement: tank1 >= 80 
+    
+    - requirement: wagoncar >= 3 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: tankfinal >= 98 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: valvecharcoal = 1 & wagonend = 1 
+    
+    - requirement: silo2 <= 62 
+    
+    - requirement: wagoncar < 41 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: silo2 < 81 
+    
+    - requirement: valvecharcoal = 1 & wagonend = 1 
+    
+    - requirement: motor1 = 1 & motor2 = 1 
+    
+    - requirement: tankfinal > 19 
+    
+    - requirement: motor2 = 1 & valvecharcoal = 1 
+    
+    - requirement: wagoncar > 72 
+    
+    - requirement: tankfinal >= 33 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: motor2 = 1 & valvecharcoal = 1 
+    
+    - requirement: tank1 >= 72 
+    
+    - requirement: silo2 <= 35 
+    
+    - requirement: motor1 = 1 & motor2 = 1 
+    
+    - requirement: motor1 = 1 & motor2 = 1 
+    
+    - requirement: wagoncar > 66 
+    
+    - requirement: wagoncar >= 21 
+    
+    - requirement: motor1 = 1 & motor2 = 1 
+    
+    - requirement: tankfinal >= 80 
+    
+    - requirement: valvecharcoal = 1 & wagonend = 1 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: motor2 = 1 & valvecharcoal = 1 
+    
+    - requirement: motor1 = 1 & motor2 = 1 
+    
+    - requirement: silo2 <= 49 
+    
+    - requirement: wagoncar < 17 
+    
+    - requirement: valvecharcoal = 1 & wagonend = 1 
+    
+    - requirement: motor1 = 1 & motor2 = 1 
+    
+    - requirement: valvecharcoal = 1 & wagonend = 1 
+    
+    - requirement: motor2 = 1 & valvecharcoal = 1 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: motor2 = 1 & valvecharcoal = 1 
+    
+    - requirement: tankfinal < 44 
+    
+    - requirement: valvecharcoal = 1 & wagonend = 1 
+    
+    - requirement: tank1 < 8 
+    
+    - requirement: silo2 > 32 
+    
+    - requirement: wagoncar <= 63 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: tankfinal >= 78 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: tankfinal >= 48 
+    
+    - requirement: valvecharcoal = 1 & wagonend = 1 
+    
+    - requirement: tankfinal >= 0 
+    
+    - requirement: wagoncar >= 54 
+    
+    - requirement: tank1 < 69 
+    
+    - requirement: wagoncar < 16 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: motor1 = 1 & motor2 = 1 
+    
+    - requirement: motor2 = 1 & valvecharcoal = 1 
+    
+    - requirement: motor2 = 1 & valvecharcoal = 1 
+    
+    - requirement: wagoncar < 93 
+    
+    - requirement: valvecharcoal = 1 & wagonend = 1 
+    
+    - requirement: tankfinal < 63 
+    
+    - requirement: wagoncar > 49 
+    
+    - requirement: wagoncar < 51 
+    
+    - requirement: valvecharcoal = 1 & wagonend = 1 
+    
+    - requirement: tankfinal > 28 
+    
+    - requirement: silo2 > 93 
+    
+    - requirement: valvecharcoal = 1 & wagonend = 1 
+    
+    - requirement: tank1 >= 75 
+    
+    - requirement: tank1 >= 50 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: motor2 = 1 & valvecharcoal = 1 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: motor1 = 1 & motor2 = 1 
+    
+    - requirement: motor2 = 1 & valvecharcoal = 1 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: silo2 < 20 
+    
+    - requirement: wagonend = 1 & motor1 = 1 
+    
+    - requirement: motor1 = 1 & motor2 = 1 
+    
+    - requirement: tank1 <= 53 
+    
+    - requirement: tankfinal >= 38 
+    
+    - requirement: tank1 >= 56 
+    
+    - requirement: valvecharcoal = 1 & wagonend = 1 
+    
+    - requirement: valvecharcoal = 1 & wagonend = 1 
+    
+    - requirement: motor2 = 1 & valvecharcoal = 1 
+    
+    - requirement: tank1 > 90 
+    
+    - requirement: wagoncar > 86 
+    
+    - requirement: wagoncar <= 26 
+    
+    - requirement: tankfinal > 52 
+    
+    - requirement: wagoncar < 42 
+    
+    - requirement: wagoncar >= 20 
+    
+    - requirement: wagoncar > 68 
+    
