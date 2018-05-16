@@ -24,7 +24,7 @@ M1 = "motor1"
 M2 = "motor2"
 S2 = "silo2"
 
-s.var[T1].value = 20
+s.var[T1].value = 0
 s.var[VT].value = 0
 s.var[WC].value = 0
 s.var[WE].value = 0
@@ -33,18 +33,32 @@ s.var[M1].value = 0
 s.var[M2].value = 0
 s.var[S2].value = 0
 
-i,d = s.get_req_distance()
-print "id: %d, d: %s" % (i, d)
-
-s.var[T1].value = 40
 i, d = s.get_req_distance()
 print "id: %d, d: %s" % (i, d)
 
-s.var[WE].value = 1
 s.var[VT].value = 1
+s.var[T1].value = 20
+
 i, d = s.get_req_distance()
 print "id: %d, d: %s" % (i, d)
 
-s.var[WE].value = 1
 s.var[VT].value = 0
-s.var[T1].value = 0
+s.var[WC].value = 20
+s.var[T1].value = 40
+
+i, d = s.get_req_distance()
+print "id: %d, d: %s" % (i, d)
+
+s.var[M1].value = 1
+s.var[WE].value = 1
+
+i, d = s.get_req_distance()
+print "id: %d, d: %s" % (i, d)
+
+s.var[M1].value = 0
+s.var[WE].value = 0
+s.var[S2].value = 20
+s.var[WC].value = 0
+
+i, d = s.get_req_distance()
+print "id: %d, d: %s" % (i, d)
