@@ -6,6 +6,7 @@ import collections
 import argparse
 import yaml
 import Controller
+import time
 
 from netfilterqueue import NetfilterQueue
 from scapy.all import *
@@ -25,6 +26,7 @@ from stateCompute import State
 parser = argparse.ArgumentParser()
 parser.add_argument('--ip', action='store', dest='ip', default='172.0.10.2')
 parser.add_argument('--port', action='store', dest='port', type=int, default=2050)
+parser.add_argument('--strategy', action='store', dest='strategy', choices=['critical', 'normal'], default='critical')
 parser.add_argument('--varfile', action='store', dest='varfile', default='requirements.yml')
 
 args = parser.parse_args()
@@ -37,6 +39,9 @@ bind_layers(IP, SRTag, proto=200)
 bind_layers(SRTag, TCP)
 bind_layers(TCP, ModbusRes, sport=MODBUS_PORT)
 bind_layers(TCP, ModbusReq, dport=MODBUS_PORT)
+
+CRIT = 'critical'
+NORMAL = 'normal'
 
 # Initialization of the log
 LOG_FORMAT = ("[%(asctime)s] [%(levelname)s]:%(message)s")
@@ -51,7 +56,7 @@ logger.addHandler(handler)
 
 class PacketHandler():
 
-    def __init__(self, varfile, host, port):
+    def __init__(self, varfile, strategy, update_duration=120):
         # var to name
         self.var = {}
         # (transId,ip) to var
@@ -62,18 +67,20 @@ class PacketHandler():
 
         self.client = None
         self.transport = None
-
+        self.strategy = strategy
         #self.setup_controlplane_connection(host, port)
         self.create_variables(varfile)
+        self.update_duration = update_duration
+        self.last_update = None
 
         self.state_store = State(varfile)
 
-    def setup_controlplane_connection(self, host, port): 
-        socket = TSocket.TSocket(host, port)
-        self.transport = TTransport.TBufferedTransport(socket)
-        protocol = TBinaryProtocol.TBinaryProtocol(self.transport)
-        self.client = Controller.Client(protocol)
-        self.transport.open()
+    #def setup_controlplane_connection(self, host, port): 
+    #    socket = TSocket.TSocket(host, port)
+    #    self.transport = TTransport.TBufferedTransport(socket)
+    #    protocol = TBinaryProtocol.TBinaryProtocol(self.transport)
+    #    self.client = Controller.Client(protocol)
+    #    self.transport.open()
 
 
     def create_variables(self, varfile):
@@ -86,7 +93,7 @@ class PacketHandler():
                                  var['type'],
                                  var['address'],
                                  var['size'],
-                                 var['name']) 
+                                 var['name'])
             self.var[pv] = var['name']
             # use to detect when a variable has been updated
             self.var_update[var['name']] = False
@@ -111,22 +118,29 @@ class PacketHandler():
                     addr = pkt[ModbusReq].startAddr
                     kind = ProcessVariable.funcode_to_kind(funcode)
                     req = Flow(srcip, dstip, transId, dport, proto)
-                    logger.info("Request %s has been send to %s" % (transId, dstip))
-                    self.transId[(transId, dstip)] =  ProcessVariable(dstip, dport, kind, addr) 
-                else: 
-                    # Receive request 
+                    logger.info("Request %s has been send to {}".format(transId, dstip))
+                    self.transId[(transId, dstip)] =  ProcessVariable(dstip, dport, kind, addr)
+                else:
+                    # Receive request
                     transId = pkt[ModbusRes].transId
-                    logger.info("Response from %s for request %s" % (srcip, transId))
+                    logger.info("Response from {} for request {}".format(srcip, transId))
                     name = self.var[self.transId[(transId, srcip)]]
                     self.state_store.update_var_from_packet(
                                                 name,
                                                 pkt[ModbusRes].funcode,
                                                 pkt[ModbusRes].payload)
                     self.var_update[name] = True
-                    logger.info("Process variable: %s"% (self.var_update))
-                    if all(x for x in self.var_update.values()):
-                        i, dist = self.state_store.get_req_distance()
-                        logger.info("ID: %s Dist: %s " %(i, dist))
+                    logger.info("Process variable: {}".format(self.var_update))
+                    # Use timer
+                    if (all(x for x in self.var_update.values()) or
+                       (self.last_update is not None and
+                        time.time() - self.last_update > self.update_duration)):
+                        if self.strategy == CRIT:
+                            i, dist = self.state_store.get_min_distance()
+                        elif self.strategy == NORMAL:
+                            i, dist = self.state_store.get_max_distance()
+                        self.last_update = time.time()
+                        logger.info("ID: {} Dist: {}".format(i, dist))
                         for k in self.var_update:
                             self.var_update[k] = False
         packet.drop()

@@ -46,15 +46,23 @@ parser.add_argument('--num-subnet', help='Number of field site',
 parser.add_argument('--mode', choices=['l2', 'l3'], type=str, default='l3')
 parser.add_argument('--json', help='Path to JSON config file',
                     type=str, action="store", required=True)
-parser.add_argument('--pcap-dump', help='Dump packets on interfaces to pcap files',
+parser.add_argument('--pcap-dump', help='Dump packets on ifaces to pcap files',
                     type=str, action="store", required=False, default=False)
 
-parser.add_argument('--auto', help='Automatically run command', default=False, action='store_true')
+### Read config file ?
 
-parser.add_argument('--attack', help='start attack', default=False, action='store_true')
-
-parser.add_argument('--phys_name', help='Physical process name', type=str, default='medium-process')
-parser.add_argument('--nb_iter', help='Number of iteration for the process execution', type=int, default=60, action='store')
+parser.add_argument('--auto', help='Automatically run command', default=False,
+                    action='store_true')
+parser.add_argument('--attack', help='start attack', default=False,
+                    action='store_true')
+parser.add_argument('--phys_name', help='Physical process name', type=str,
+                    default='medium-process')
+parser.add_argument('--nb_iter', help='Number of iteration for the process',
+                    type=str, default=60, action='store')
+parser.add_argument('--strategy', help='Strategy used by the IDS',
+                    choice=['critical', 'normal'], default='critical')
+parser.add_argument('--varfile', help='Physical process description',
+                    type=str, default='requirements.yml')
 args = parser.parse_args()
 
 cur_dir = os.getcwd()
@@ -218,6 +226,8 @@ def main():
     num_subnet = args.num_subnet
     mode = args.mode
     auto = args.auto
+    strategy = args.strategy
+    varfile = args.varfile
 
     kwargs =  {"sw_path" : args.behavioral_exe,
                "json_path" : args.json,
@@ -225,35 +235,35 @@ def main():
                "n_host": args.num_hosts,
                "n_sub": args.num_subnet}
 
-    net = IPNet(topo = MultiSwitchTopo(**kwargs),
-                host = P4Host,
-                switch = P4Switch,
+    net = IPNet(topo=MultiSwitchTopo(**kwargs),
+                host=P4Host,
+                switch=P4Switch,
                 ipBase='10.0.0.0/16',
-                use_v6 = False,
-                allocate_IPs = False,
-                controller = None,
-                link = IPLink,
-                intf = TCIntf)
+                use_v6 =False,
+                allocate_IPs=False,
+                controller=None,
+                link=IPLink,
+                intf=TCIntf)
     net.start()
-    
+
     #MTU connection    
-    mtu =  net.get('mtu')
-    sw_mac = "00:aa:bb:cc:dd:ee" 
-    sw_addr ="10.0.10.15" 
+    mtu = net.get('mtu')
+    sw_mac = "00:aa:bb:cc:dd:ee"
+    sw_addr ="10.0.10.15"
 
     if mode == "l2":
         mtu.setDefaultRoute("dev eth0")
     else:
-        print "Setting ARP entries for mtu"  
+        print "Setting ARP entries for mtu"
         print "%s\t%s"% (sw_addr, sw_mac)
         mtu.setARP(sw_mac, sw_addr)
-        mtu.cmd("ip route add default dev eth0" )
+        mtu.cmd("ip route add default dev eth0")
 
     mtu.describe()
 
     # Ingress and host connection
     for i in xrange(num_subnet):
-        sub_id  = i+1
+        sub_id = i+1
         sw = net.get('s%d'%sub_id)
         sw_mac = ["00:aa:bb:00:%02x:%02x" % (sub_id, sub_id) for n in xrange(num_hosts)]
 
@@ -364,7 +374,7 @@ def main():
     # Run the controller
     if auto:
         print "Starting Controller"
-        comd = "python " + cur_dir + "/controlplane/thrift-ids/gen-py/IDSControllerPy/controller.py --conf " + cur_dir +"/sw_conf_large_v2.json --desc " + phys_name + "/requirements.yml&"
+        comd = "python " + cur_dir + "/controlplane/thrift-ids/gen-py/IDSControllerPy/controller.py --conf " + cur_dir +"/sw_conf_large_v2.json --desc " + phys_name + "/" + varfile
         output = ctrl.cmd(comd)
         comd = "tcpdump -i s3-h2-eth0 -w " + cur_dir + "/capture/controlplane.pcap&"
         ctrl.cmd(comd)
@@ -378,7 +388,7 @@ def main():
         print "Starting Intrusion Detection System"
         comd = cur_dir +"/controlplane/thrift-ids/gen-cpp/controller_client -c " + cur_dir + "/ids.cfg&"
         ids.cmd(comd)
-        comd = "python " + cur_dir +"/spec_ids/gen-py/IDSControllerPy/ids.py --varfile " + phys_name + "/requirements.yml&"
+        comd = "python " + cur_dir +"/spec_ids/gen-py/IDSControllerPy/ids.py --varfile " + phys_name + "/" + varfile + " --strategy " + strategy
         ids.cmd(comd)
         sleep(1)
 

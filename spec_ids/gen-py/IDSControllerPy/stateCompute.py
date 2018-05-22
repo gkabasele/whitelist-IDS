@@ -21,54 +21,21 @@ BOOL_WEIGHT = 5
 
 logger = logging.getLogger('__name__')
 
-class RequirementParser():
-
-    def __init__(self):
-        self.expr = self.create_parser()
-
-
-    def create_parser(self):
-
-        integer = Word(nums).setParseAction(lambda t:int(t[0]))
-        variable = Word(alphas)
-        operand = integer | variable
-        
-        expop = Literal('^')
-        signop = oneOf('+ -')
-        multop = oneOf('* /')
-        plusop = oneOf('+ -')
-        factop = Literal('!')
-        andop = Literal('&')
-        compop = oneOf('< > = <= =>')
-
-        expr = operatorPrecedence( operand,
-                                   [("!", 1, opAssoc.LEFT),
-                                    ("^", 2, opAssoc.RIGHT),
-                                    (signop, 1, opAssoc.RIGHT),
-                                    (multop, 2, opAssoc.LEFT),
-                                    (plusop, 2, opAssoc.LEFT),
-                                    (compop, 2, opAssoc.LEFT),
-                                    (andop, 2, opAssoc.LEFT),]
-                                 )
-        return expr
-
-    def parse_requirement(self, requirement):
-        return self.expr.parseString(requirement)
 
 class Requirement():
 
-    identifier = 0 
+    identifier = 0
 
     def __init__(self, content):
 
         self.identifier = Requirement.identifier
-        Requirement.identifier +=1
+        Requirement.identifier += 1
         self.content = content
 
 class State(): 
 
     def __init__(self, descFile): 
-        # name to variable 
+        # name to variable
         self.var = {}
         self.req = []
 
@@ -76,16 +43,16 @@ class State():
 
     def get_var_values(self):
         values = []
-        for k,v in self.var.iteritems(): 
-            values.append(v.value) 
+        for k, v in self.var.iteritems(): 
+            values.append(v.value)
         return values
 
     def count_bool_var(self):
-        return len(filter(lambda x: x.is_bool_var() ,self.var.values()))
+        return len(filter(lambda x: x.is_bool_var(), self.var.values()))
 
     def setup(self, descFile):
         content = open(descFile).read()
-        desc = yaml.load(content) 
+        desc = yaml.load(content)
         for var_desc in desc['variables']:
             var = var_desc['variable']
             pv = ProcessVariable(var['host'],
@@ -93,17 +60,17 @@ class State():
                                  var['type'],
                                  var['address'],
                                  var['size'],
-                                 var['name']) 
-            self.var[pv.name] = pv 
+                                 var['name'])
+            self.var[pv.name] = pv
 
         for req_desc in desc['requirements']:
             req = Requirement(Parser(Lexer(req_desc['requirement'])).parse())
             self.req.append(req)
-            
-    def add_variable(self, host, port, kind, addr, name): 
+
+    def add_variable(self, host, port, kind, addr, size, name): 
         self.var[name] = ProcessVariable(host, port, kind, addr, size, name)
 
-    def get_req_distance(self):
+    def get_min_distance(self):
 
         min_dist = None
         identifier = None
@@ -114,8 +81,8 @@ class State():
             tmp = min_dist
             i = Interpreter(None, self.var, NUM_WEIGHT, BOOL_WEIGHT)
             violation = i.visit(requirement.content)
-            if violation: 
-                logger.warn("The critical property %d is satisfied!!" % requirement.identifier)
+            if violation:
+                logger.warn("The critical property {} is satisfied!!".format(requirement.identifier))
             if min_dist is None:
                 min_dist = i.compute_distance(num_var, bool_var)
                 identifier = requirement.identifier
@@ -125,8 +92,35 @@ class State():
                 identifier = requirement.identifier if tmp != min_dist else identifier
 
         return identifier, min_dist
-                
-    
+
+    def get_max_distance(self):
+
+        max_dist = None
+        at_least_one = False
+        identifier = None
+        bool_var = self.count_bool_var()
+        num_var = len(self.var) - bool_var
+
+        for requirement in self.req:
+            tmp = max_dist
+            i = Interpreter(None, self.var, NUM_WEIGHT, BOOL_WEIGHT)
+            req = i.visit(requirement.content)
+            at_least_one = (at_least_one or req)
+
+            if max_dist is None:
+                max_dist = i.compute_distance(num_var, bool_var)
+                identifier = requirement.identifier
+            else:
+                d = i.compute_distance(num_var, bool_var)
+                max_dist = max(max_dist, d)
+                identifier = requirement.identifier if tmp != max_dist else identifier
+
+        if not at_least_one:
+            logger.warn("No requirement were satisfy!")
+
+        return identifier, max_dist
+
+
     def update_var_from_packet(self, name, funcode, payload):
         val = payload.getfieldval(func_fields_dict[funcode])
         if type(val) is list:

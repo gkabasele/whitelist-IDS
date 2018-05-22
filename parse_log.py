@@ -12,7 +12,7 @@ index = len('[2018-05-08 15:21:11,742][INFO][/home/mininet/p4-tutorials/whitelis
 i = len('[2018-05-08 15:21:11,310] [INFO]:')
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--format", dest="format", default="csv", action="store")
+parser.add_argument("--format", dest="format", choice=['csv', 'table'], default="csv", action="store")
 parser.add_argument("--output", dest="output", default="state.txt", action="store")
 args = parser.parse_args()
 
