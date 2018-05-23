@@ -12,7 +12,7 @@ index = len('[2018-05-08 15:21:11,742][INFO][/home/mininet/p4-tutorials/whitelis
 i = len('[2018-05-08 15:21:11,310] [INFO]:')
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--format", dest="format", choice=['csv', 'table'], default="csv", action="store")
+parser.add_argument("--format", dest="format", choices=['csv', 'table'], default="csv", action="store")
 parser.add_argument("--output", dest="output", default="state.txt", action="store")
 args = parser.parse_args()
 
@@ -50,15 +50,15 @@ with open(args.output,"a") as out:
         # csv format
         out.write("#")
         for k in states[0].keys() + [("ID"), ("Dist")]:
-            out.write("%s," % k)
+            out.write("{},".format(k))
 
         for i, line in enumerate(states):
             # Same reason as stated before
             if i > 0:
                 out.write("\n")
-                out.write("%d" % i-1)
+                out.write("{}".format(i-1))
                 if i < len(ids):
                     for v in line.values():
-                        out.write("%s," % v)
-                    out.write("%s," % ids[i-1])
-                    out.write("%s" % dist[i-1])
+                        out.write("{},".format(v))
+                    out.write("{},".format(ids[i-1]))
+                    out.write("{},".format(dist[i-1]))

@@ -128,6 +128,6 @@ class State():
         if self.var[name].is_bool_var():
             val = 1 if val > 0 else 0
 
-        logger.info("Updating var %s to %s" % (name, val))
+        logger.info("Updating var {} to {}".format(name, val))
         self.var[name].value = val
 

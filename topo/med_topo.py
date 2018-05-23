@@ -31,6 +31,7 @@ import os
 import sys
 import shutil
 import threading
+import subprocess
 from time import sleep
 
 
@@ -226,6 +227,7 @@ def main():
     num_subnet = args.num_subnet
     mode = args.mode
     auto = args.auto
+    malicious = args.malicious
     strategy = args.strategy
     varfile = args.varfile
 
@@ -331,7 +333,7 @@ def main():
     ids.describe()
     ctrl = net.get('s3-h2')
     ctrl.describe()
-    ctrl.cmd('ip link set s3-h2-eth0 up')  
+    ctrl.cmd('ip link set s3-h2-eth0 up')
     if auto:
         ids.cmd('tcpdump -i eth0 -w' + cur_dir + '/capture/' + 'ids.pcap&')
     ids.cmd('sudo iptables -I INPUT -i eth0 -j NFQUEUE --queue-num 2')
@@ -342,7 +344,7 @@ def main():
     #h = net.get('s2-h1')
     #h.cmd('sudo iptables -I INPUT -i eth0 -j NFQUEUE --queue-num 1')
     # Disabling reverse path filter
-    for i in ['rcc','r1','r2','r3']:
+    for i in ['rcc', 'r1', 'r2', 'r3']:
         r = net.get(i)
         for name in r.nameToIntf:
             print name
@@ -357,11 +359,11 @@ def main():
             r.cmd(command)
         if i != 'rcc':
             for h in xrange(num_hosts):
-                print "Setting ARP entries for %s" % i 
-                mac = "00:04:00:00:%02x:%02x" %(int(i[-1]),h)
+                print "Setting ARP entries for %s" % i
+                mac = "00:04:00:00:%02x:%02x" %(int(i[-1]), h)
                 ip = "10.0.%d0.%d"%(int(i[-1]) + 1 , h+1)
-                print "%s\t%s"% (ip,mac) 
-                r.setARP(ip,mac)
+                print "%s\t%s"% (ip,mac)
+                r.setARP(ip, mac)
 
         r.cmd("tcpdump -i %s-eth0 -w " % (i)  + cur_dir + "/capture/%s.pcap&" % (i) )
         r.cmd("sysctl -w net.ipv4.conf.all.rp_filter=0")
@@ -370,7 +372,7 @@ def main():
     # Log packet whose destination ar not suppose to arrive
     r.cmd('echo 1 >/proc/sys/net/ipv4/conf/r3-eth0/log_martians')
     sleep(1)
-    
+
     # Run the controller
     if auto:
         print "Starting Controller"
@@ -396,9 +398,9 @@ def main():
         print "Starting Master Terminal Unit"
         comd = "python " + phys_name + "/script_mtu.py --ip 10.0.10.1 --port 3000 --duration %s --import %s&" % (DURATION, export_dir)
         mtu.cmd(comd)
-        mtu.cmd("tcpdump -i eth0 -w " + cur_dir + "/capture/mtu.pcap tcp&") 
-        
-        if args.malicious:
+        mtu.cmd("tcpdump -i eth0 -w " + cur_dir + "/capture/mtu.pcap tcp&")
+
+        if malicious:
 
             # Attacker machine
             print "Starting Attack Machine"
@@ -409,11 +411,15 @@ def main():
 
     print "Ready !"
 
-    IPCLI( net )
+    IPCLI(net)
     net.stop()
     if t is not None:
         t.join()
-
+    if auto:
+        # Subprocess logging
+        out = "attack_" if malicious else "state_"
+        sta = "critical.txt" if strategy == "critical" else "normal.txt"
+        subprocess.Popen(["python", "parse_log.py", "--format", "csv", "--output", out+sta])
 if __name__ == '__main__':
-    setLogLevel( 'info' )
+    setLogLevel('info')
     main()

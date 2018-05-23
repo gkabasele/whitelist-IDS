@@ -45,7 +45,7 @@ NORMAL = 'normal'
 
 # Initialization of the log
 LOG_FORMAT = ("[%(asctime)s] [%(levelname)s]:%(message)s")
-LOG_LEVEL = logging.INFO
+LOG_LEVEL = logging.DEBUG
 IDS_SPEC_FILE = "logs/ids_spec.log"
 logger = logging.getLogger('__name__')
 logger.setLevel(LOG_LEVEL)
@@ -118,7 +118,7 @@ class PacketHandler():
                     addr = pkt[ModbusReq].startAddr
                     kind = ProcessVariable.funcode_to_kind(funcode)
                     req = Flow(srcip, dstip, transId, dport, proto)
-                    logger.info("Request %s has been send to {}".format(transId, dstip))
+                    logger.info("Request {} has been send to {}".format(transId, dstip))
                     self.transId[(transId, dstip)] =  ProcessVariable(dstip, dport, kind, addr)
                 else:
                     # Receive request
@@ -132,6 +132,7 @@ class PacketHandler():
                     self.var_update[name] = True
                     logger.info("Process variable: {}".format(self.var_update))
                     # Use timer
+                    #if all(x for x in self.var_update.values()):
                     if (all(x for x in self.var_update.values()) or
                        (self.last_update is not None and
                         time.time() - self.last_update > self.update_duration)):
@@ -152,7 +153,7 @@ class PacketHandler():
 def main():
 
     nfqueue = NetfilterQueue()
-    handler = PacketHandler(varfile, host, port)
+    handler = PacketHandler(varfile, args.strategy)
     nfqueue.bind(2, handler.print_and_accept)
     try:
         nfqueue.run()
