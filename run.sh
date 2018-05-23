@@ -15,33 +15,31 @@ key="$1"
 
 case $key in
     -t|--topo=*)
-    TOPO="$2 "
+    TOPO="$2"
     shift # past argument=value
     shift
     ;;
     -n|--num=*)
-    NUM="--num-host $2 "
+    NUM="--num-host $2"
     shift # past argument=value
     shift
     ;;
     -v|--var=*)
-    VAR="--varfile $2 "
+    VAR="--varfile $2"
     shift
     shift
     ;;
     -s|--strat=*)
-    STRAT="--strategy $2 "
+    STRAT="--strategy $2"
     shift
     shift
     ;;
-    -a|--attack=*)
-    ATTACK="--attack "
-    shift
+    -a|--auto=*)
+    AUTO="--auto"
     shift
     ;;
-    -o|--auto=*)
-    AUTO="--auto "
-    shift
+    -m|--malicious=*)
+    MALICIOUS="--malicious"
     shift
     ;;
     --default)
@@ -56,16 +54,8 @@ esac
 done
 set -- "${POSITIONAL[@]}" # restore positional parameters
 
-
-
-echo "Topology = ${TOPO}"
-echo "Num = ${NUM}"
-echo "Var = ${VAR}"
-echo "Strategy = ${STRAT}"
-echo "Auto = ${AUTO}"
-echo "Attack = ${ATTACK}"
-
-#sudo python ${TOPO} ${NUM} --behavioral-exe $TARGET --json $SWFILE ${STRAT} ${VAR} ${ATTACK} ${AUTO}
+#echo "sudo python ${TOPO} ${NUM} --behavioral-exe $TARGET --json $SWFILE ${STRAT} ${VAR} ${AUTO} ${MALICIOUS}"
+sudo python ${TOPO} ${NUM} --behavioral-exe $TARGET --json $SWFILE ${STRAT} ${VAR} ${AUTO} ${MALICIOUS} 
 #if [ $? -eq 0 ] 
 #then
 #    if [ "$#" -le 3 ] 

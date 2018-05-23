@@ -53,14 +53,14 @@ parser.add_argument('--pcap-dump', help='Dump packets on ifaces to pcap files',
 
 parser.add_argument('--auto', help='Automatically run command', default=False,
                     action='store_true')
-parser.add_argument('--attack', help='start attack', default=False,
+parser.add_argument('--malicious', help='start attack', default=False,
                     action='store_true')
 parser.add_argument('--phys_name', help='Physical process name', type=str,
                     default='medium-process')
 parser.add_argument('--nb_iter', help='Number of iteration for the process',
                     type=str, default=60, action='store')
 parser.add_argument('--strategy', help='Strategy used by the IDS',
-                    choice=['critical', 'normal'], default='critical')
+                    choices=['critical', 'normal'], default='critical')
 parser.add_argument('--varfile', help='Physical process description',
                     type=str, default='requirements.yml')
 args = parser.parse_args()
@@ -363,7 +363,7 @@ def main():
                 print "%s\t%s"% (ip,mac) 
                 r.setARP(ip,mac)
 
-        #r.cmd("tcpdump -i %s-eth0 -w " % (i)  + cur_dir + "/capture/%s.pcap&" % (i) )
+        r.cmd("tcpdump -i %s-eth0 -w " % (i)  + cur_dir + "/capture/%s.pcap&" % (i) )
         r.cmd("sysctl -w net.ipv4.conf.all.rp_filter=0")
         r.cmd("sysctl -w net.ipv4.conf.default.rp_filter=0")
     r = net.get('r3')
@@ -374,7 +374,7 @@ def main():
     # Run the controller
     if auto:
         print "Starting Controller"
-        comd = "python " + cur_dir + "/controlplane/thrift-ids/gen-py/IDSControllerPy/controller.py --conf " + cur_dir +"/sw_conf_large_v2.json --desc " + phys_name + "/" + varfile
+        comd = "python " + cur_dir + "/controlplane/thrift-ids/gen-py/IDSControllerPy/controller.py --conf " + cur_dir +"/sw_conf_large_v2.json --desc " + phys_name + "/" + varfile + "&"
         output = ctrl.cmd(comd)
         comd = "tcpdump -i s3-h2-eth0 -w " + cur_dir + "/capture/controlplane.pcap&"
         ctrl.cmd(comd)
@@ -388,7 +388,7 @@ def main():
         print "Starting Intrusion Detection System"
         comd = cur_dir +"/controlplane/thrift-ids/gen-cpp/controller_client -c " + cur_dir + "/ids.cfg&"
         ids.cmd(comd)
-        comd = "python " + cur_dir +"/spec_ids/gen-py/IDSControllerPy/ids.py --varfile " + phys_name + "/" + varfile + " --strategy " + strategy
+        comd = "python " + cur_dir +"/spec_ids/gen-py/IDSControllerPy/ids.py --varfile " + phys_name + "/" + varfile + " --strategy " + strategy +"&"
         ids.cmd(comd)
         sleep(1)
 
@@ -398,7 +398,7 @@ def main():
         mtu.cmd(comd)
         mtu.cmd("tcpdump -i eth0 -w " + cur_dir + "/capture/mtu.pcap tcp&") 
         
-        if args.attack:
+        if args.malicious:
 
             # Attacker machine
             print "Starting Attack Machine"

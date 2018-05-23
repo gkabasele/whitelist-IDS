@@ -6,7 +6,7 @@
 *.o
 *.obj
 *.log
-sw_conf.json
+sw_conf_large_v2.json
 logs/
 results/
 capture/
