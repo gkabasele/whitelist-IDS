@@ -105,10 +105,11 @@ class State():
             tmp = max_dist
             i = Interpreter(None, self.var, NUM_WEIGHT, BOOL_WEIGHT)
             req = i.visit(requirement.content)
+            print i.distances
             at_least_one = (at_least_one or req)
 
             if max_dist is None:
-                max_dist = i.compute_distance(num_var, bool_var)
+                max_dist = i.compute_distance(num_var, bool_var, False)
                 identifier = requirement.identifier
             else:
                 d = i.compute_distance(num_var, bool_var)
