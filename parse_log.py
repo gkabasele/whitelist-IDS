@@ -51,7 +51,7 @@ with open(args.output,"a") as out:
         out.write("#")
         for k in states[0].keys() + [("ID"), ("Dist")]:
             out.write("{},".format(k))
-
+        out.write('\n')
         for i, line in enumerate(states):
             # Same reason as stated before
             if i > 0:

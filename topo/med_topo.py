@@ -418,8 +418,8 @@ def main():
     if auto:
         # Subprocess logging
         out = "attack_" if malicious else "state_"
-        sta = "critical.txt" if strategy == "critical" else "normal.txt"
-        subprocess.Popen(["python", "parse_log.py", "--format", "csv", "--output", out+sta])
+        sta = "critical.csv" if strategy == "critical" else "normal.csv"
+        subprocess.Popen(["python", "parse_log.py", "--format", "csv", "--output", "measurements/"+out+sta])
 if __name__ == '__main__':
     setLogLevel('info')
     main()
