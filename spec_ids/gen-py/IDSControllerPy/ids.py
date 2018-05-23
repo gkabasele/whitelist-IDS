@@ -132,7 +132,6 @@ class PacketHandler():
                     self.var_update[name] = True
                     logger.info("Process variable: {}".format(self.var_update))
                     # Use timer
-                    #if all(x for x in self.var_update.values()):
                     if (all(x for x in self.var_update.values()) or
                        (self.last_update is not None and
                         time.time() - self.last_update > self.update_duration)):
@@ -162,5 +161,5 @@ def main():
     handler.close()
     nfqueue.unbind()
 
-if __name__=='__main__':
+if __name__ == '__main__':
     main()

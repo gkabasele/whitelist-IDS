@@ -55,10 +55,9 @@ with open(args.output,"a") as out:
         for i, line in enumerate(states):
             # Same reason as stated before
             if i > 0:
-                out.write("\n")
-                out.write("{}".format(i-1))
+                out.write("{},".format(i-1))
                 if i < len(ids):
                     for v in line.values():
                         out.write("{},".format(v))
                     out.write("{},".format(ids[i-1]))
-                    out.write("{},".format(dist[i-1]))
+                    out.write("{}".format(dist[i-1]))
