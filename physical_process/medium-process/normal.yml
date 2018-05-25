@@ -63,10 +63,30 @@ variables:
         address: 0
         size: 1
 
+# SHORTEN!!!!
+level: &tank
+    range: >
+            ( tanka >= 0 & tanka <= 60 ) &
+            ( wagoncar >= 0 & wagoncar <= 40 ) &
+            ( silob >= 0 & silob <= 80 ) &
+            ( tankfinal >= 0 & tankfinal <= 80 )
+running: &motor
+    range: >
+            ( (motora = 0 & tanka <= 40 ) | (motora = 1 & tanka = 40 ) ) &
+            ( ( motorb = 0 & silob <= 60 ) | ( motorb = 1 & silob = 60 )  
+            
+state: &valve
+    range: >
+            ( wagonend = 0 & valvecharcoal = 0 ) | 
+            ( wagonend = 0 & valvecharcoal = 1 ) | 
+            ( wagonend = 0 & valvecharcoal = 1 )
 requirements:
-    - requirement: ( tanka >= 0 & tanka <= 60 ) & ( wagoncar >= 0 & wagoncar <= 40 ) & ( silob >= 0 & silob <= 80 ) & ( tankfinal >= 0 & tankfinal <= 80 )
-    - requirement: motora = 1 & tanka = 40
-    - requirement: motorb = 1 & silob = 60
-    - requirement: wagonend = 1 & valvecharcoal = 0
-    - requirement: wagonend = 0 & valvecharcoal = 1
-    - requirement: wagonend = 0 & valvecharcoal = 0
+    - requirement: >
+                    *tank & *motor & *valve
+#requirements:
+#    - requirement: ( tanka >= 0 & tanka <= 60 ) & ( wagoncar >= 0 & wagoncar <= 40 ) & ( silob >= 0 & silob <= 80 ) & ( tankfinal >= 0 & tankfinal <= 80 )
+#    - requirement: motora = 1 & tanka = 40
+#    - requirement: motorb = 1 & silob = 60
+#    - requirement: wagonend = 1 & valvecharcoal = 0
+#    - requirement: wagonend = 0 & valvecharcoal = 1
+#    - requirement: wagonend = 0 & valvecharcoal = 0
