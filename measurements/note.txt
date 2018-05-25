@@ -1,0 +1,2 @@
+{attack, state}_{normal, critical}.csv = Strict requirement 
+{attack2, state2}_{normal, critical}.csv = Loose requirement

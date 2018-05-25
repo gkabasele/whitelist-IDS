@@ -417,7 +417,7 @@ def main():
         t.join()
     if auto:
         # Subprocess logging
-        out = "attack_" if malicious else "state_"
+        out = "attack2_" if malicious else "state2_"
         sta = "critical.csv" if strategy == "critical" else "normal.csv"
         subprocess.Popen(["python", "parse_log.py", "--format", "csv", "--output", "measurements/"+out+sta])
 if __name__ == '__main__':
