@@ -35,11 +35,10 @@ def display_distance():
     global phase
     print "*********Phase {}**********".format(phase)
     print [(n,x.value) for n,x in state_normal.var.iteritems()]
-    identifier_normal, dist_normal = state_normal.get_max_distance()
-    identifier_minimal, dist_minimal = state_normal.get_min_distance()
-    print "Normal id: {}, d: {}".format(identifier_normal, dist_normal)
-    print "Minimal id: {}, d: {}".format(identifier_minimal, dist_minimal)
-    print "Diff : {}".format(abs(dist_normal - dist_minimal))
+    dist = state_normal.get_max_distance()
+    print "Max id: {}, d: {}".format(dist.max_identifier, dist.max_dist)
+    print "Min id: {}, d: {}".format(dist.min_identifier, dist.min_dist)
+    print "Diff : {}".format(abs(dist.max_identifier - dist.min_identifier))
     print "--------------------------"
     logger.warn("Phase: {}".format(phase))
     phase += 1
@@ -49,7 +48,7 @@ display_distance()
 change_value(V1, 1)
 display_distance()
 
-for i in range(0, 25, 5):
+for i in range(0, 20, 5):
     change_value(T3, i)
     display_distance()
 
@@ -57,7 +56,7 @@ change_value(V1, 0)
 change_value(V2, 1)
 display_distance()
 
-for  i in range(20, 70, 10):
+for  i in range(20, 60, 10):
     change_value(T3, i)
     display_distance()
 

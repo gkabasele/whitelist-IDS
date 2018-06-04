@@ -136,11 +136,11 @@ class PacketHandler():
                        (self.last_update is not None and
                         time.time() - self.last_update > self.update_duration)):
                         if self.strategy == CRIT:
-                            i, dist = self.state_store.get_min_distance()
+                            dist = self.state_store.get_min_distance()
                         elif self.strategy == NORMAL:
-                            i, dist = self.state_store.get_max_distance()
+                            dist = self.state_store.get_max_distance()
                         self.last_update = time.time()
-                        logger.info("ID: {} Dist: {}".format(i, dist))
+                        logger.info("ID: {} Dist: {}".format(dist.identifier, dist.min_dist))
                         for k in self.var_update:
                             self.var_update[k] = False
         packet.drop()

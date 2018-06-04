@@ -5,6 +5,7 @@ import os
 import re
 import yaml
 import logging
+import collections
 
 from pyparsing import *
 from Equation import Expression
@@ -100,20 +101,22 @@ class State():
                 min_dist = min(min_dist, d)
                 identifier = requirement.identifier if tmp != min_dist else identifier
 
-        return identifier, min_dist
+        Distance = collections.namedtuple('Distance', ['max_dist','max_identifier', 'min_dist', 'min_identifier'])
+        d = Distance(min_dist, identifier, min_dist, identifier)
+        return d
 
     def get_max_distance(self):
 
         max_dist = None
         min_dist = None
         at_least_one = False
-        identifier = None
+        max_identifier = None
         min_identifier = None
         bool_var = self.count_bool_var()
         num_var = len(self.var) - bool_var
 
         for requirement in self.req:
-            tmp = max_dist
+            max_tmp = max_dist
             min_tmp = min_dist
             i = Interpreter(None, self.var, self.num_weight, self.bool_weight)
             req = i.visit(requirement.content)
@@ -122,20 +125,22 @@ class State():
             if max_dist is None:
                 max_dist = i.compute_distance(num_var, bool_var, False)
                 min_dist = max_dist
-                identifier = requirement.identifier
-                min_identifier = identifier
+                max_identifier = requirement.identifier
+                min_identifier = max_identifier
             else:
                 d = i.compute_distance(num_var, bool_var, False)
                 max_dist = max(max_dist, d)
                 min_dist = min(min_dist, d)
-                identifier = requirement.identifier if tmp != max_dist else identifier
-                min_identifier = requirement.identifer if min_tmp != min_dist else min_identifier
+                max_identifier = requirement.identifier if max_tmp != max_dist else max_identifier
+                min_identifier = requirement.identifier if min_tmp != min_dist else min_identifier
 
         if not at_least_one:
             logger.warn("No requirement were satisfy!")
 
-        return identifier, max_dist
+        Distance = collections.namedtuple('Distance', ['max_dist', 'max_identifier', 'min_dist', 'min_identifier'])
+        d = Distance(max_dist, max_identifier, min_dist, min_identifier)
 
+        return d
 
     def update_var_from_packet(self, name, funcode, payload):
         val = payload.getfieldval(func_fields_dict[funcode])
