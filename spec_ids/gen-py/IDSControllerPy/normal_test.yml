@@ -66,9 +66,9 @@ variables:
 # SHORTEN!!!!
 level: &tank >
               ( tank1 >= 0 & tank1 <= 60 ) &
-              ( wagoncar >= 0 & wagoncar <= 40 ) &
-              ( silo2 >= 0 & silo2 <= 80 ) &
-              ( tankfinal >= 0 & tankfinal <= 80 )
+              ( wagoncar >= 0 & wagoncar <= 20 ) &
+              ( silo2 >= 0 & silo2 <= 60 ) &
+              ( tankfinal >= 0 & tankfinal <= 60 )
 running: &motor >
                  (( motor1 = 0 & tank1 <= 40 ) | (motor1 = 1 & tank1 = 40 ) ) &
                  (( motor2 = 0 & silo2 <= 60 ) | ( motor2 = 1 & silo2 = 60 ))

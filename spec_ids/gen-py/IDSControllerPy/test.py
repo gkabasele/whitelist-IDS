@@ -58,28 +58,29 @@ def display_distance():
     print "Normal id: {}, d: {}".format(identifier_normal, dist_normal)
     print "--------------------------"
     phase += 1
+#Phase 1
 display_distance()
 
-#Phase 1
+#Phase 2
 change_value(VT, 1)
 change_value(T1, 20)
 
 display_distance()
 
-#Phase 2
+#Phase 3
 change_value(VT, 0)
 change_value(WC, 20)
 change_value(T1, 40)
 
 display_distance()
 
-#Phase 3
+#Phase 4
 change_value(M1, 1)
 change_value(WE, 1)
 
 display_distance()
 
-#Phase 4
+#Phase 5
 change_value(M1, 0)
 change_value(T1, 0)
 change_value(S2, 20)
@@ -87,16 +88,29 @@ change_value(WC, 0)
 
 display_distance()
 
-#Phase 5
+#Phase 6
 change_value(S2, 60)
 change_value(WE, 0)
 change_value(T1, 20)
 
 display_distance()
 
-#Phase 6
+#Phase 7
 change_value(M2, 1)
 change_value(VT, 1)
 change_value(T1, 40)
+display_distance()
 
+#Phase 8
+change_value(M2, 0)
+change_value(WC, 20)
+
+display_distance()
+
+#Phase 9
+change_value(TF, 55)
+display_distance()
+
+#Phase 10
+change_value(S2, 55)
 display_distance()

@@ -40,10 +40,13 @@ class Requirement():
 
 class State(): 
 
-    def __init__(self, descFile): 
+    def __init__(self, descFile, bool_weight=5, num_weight=1): 
         # name to variable
         self.var = {}
         self.req = []
+
+        self.bool_weight = bool_weight
+        self.num_weight = num_weight
 
         self.setup(descFile)
 
@@ -85,7 +88,7 @@ class State():
 
         for requirement in self.req:
             tmp = min_dist
-            i = Interpreter(None, self.var, NUM_WEIGHT, BOOL_WEIGHT)
+            i = Interpreter(None, self.var, self.num_weight, self.bool_weight)
             violation = i.visit(requirement.content)
             if violation:
                 logger.warn("The critical property {} is satisfied!!".format(requirement.identifier))
@@ -102,25 +105,31 @@ class State():
     def get_max_distance(self):
 
         max_dist = None
+        min_dist = None
         at_least_one = False
         identifier = None
+        min_identifier = None
         bool_var = self.count_bool_var()
         num_var = len(self.var) - bool_var
 
         for requirement in self.req:
             tmp = max_dist
-            i = Interpreter(None, self.var, NUM_WEIGHT, BOOL_WEIGHT)
+            min_tmp = min_dist
+            i = Interpreter(None, self.var, self.num_weight, self.bool_weight)
             req = i.visit(requirement.content)
-            print i.distances
             at_least_one = (at_least_one or req)
 
             if max_dist is None:
                 max_dist = i.compute_distance(num_var, bool_var, False)
+                min_dist = max_dist
                 identifier = requirement.identifier
+                min_identifier = identifier
             else:
-                d = i.compute_distance(num_var, bool_var)
+                d = i.compute_distance(num_var, bool_var, False)
                 max_dist = max(max_dist, d)
+                min_dist = min(min_dist, d)
                 identifier = requirement.identifier if tmp != max_dist else identifier
+                min_identifier = requirement.identifer if min_tmp != min_dist else min_identifier
 
         if not at_least_one:
             logger.warn("No requirement were satisfy!")
