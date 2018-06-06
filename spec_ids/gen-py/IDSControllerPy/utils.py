@@ -18,13 +18,14 @@ INP_REG = "ir"
 
 class ProcessVariable():
 
-    def __init__(self, host, port, kind, addr, size=None, name=None):
+    def __init__(self, host, port, kind, addr, gap=1, size=None, name=None):
         self.host = host
         self.port = port
         self.kind = kind
         self.addr = addr
         self.name = name
         self.size = size
+        self.gap = gap
         self.value = None
 
     @classmethod

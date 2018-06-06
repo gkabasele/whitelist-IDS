@@ -14,7 +14,7 @@ logger = logging.getLogger('__name__')
 
 normal = 'three_tank.yml'
 
-state_normal = State(normal)
+state_normal = State(normal, 6, 5)
 
 T3 = "t3"
 V1 = "v1"
@@ -38,7 +38,6 @@ def display_distance():
     dist = state_normal.get_max_distance()
     print "Max id: {}, d: {}".format(dist.max_identifier, dist.max_dist)
     print "Min id: {}, d: {}".format(dist.min_identifier, dist.min_dist)
-    print "Diff : {}".format(abs(dist.max_identifier - dist.min_identifier))
     print "--------------------------"
     logger.warn("Phase: {}".format(phase))
     phase += 1
@@ -48,7 +47,7 @@ display_distance()
 change_value(V1, 1)
 display_distance()
 
-for i in range(0, 20, 5):
+for i in range(0, 25, 5):
     change_value(T3, i)
     display_distance()
 
@@ -56,7 +55,7 @@ change_value(V1, 0)
 change_value(V2, 1)
 display_distance()
 
-for  i in range(20, 60, 10):
+for  i in range(20, 70, 10):
     change_value(T3, i)
     display_distance()
 

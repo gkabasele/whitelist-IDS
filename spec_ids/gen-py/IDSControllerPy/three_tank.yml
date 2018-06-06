@@ -6,6 +6,7 @@ variables:
         type: hr
         address: 0
         size: 1
+        gap: 60
 
     - variable:
         name: v1
@@ -34,7 +35,7 @@ variables:
 
 # SHORTEN!!!!
 tank3: &t3 >
-            ( t3 <= 60 )
+            ( t3 <= 80 )
 valve1: &v1 >
              (( v1 = 0 & ( t3 >= 20 | t3 = 0 )) |  ( v1 = 1 &  t3 <= 20 ))
 valve2: &v2 >

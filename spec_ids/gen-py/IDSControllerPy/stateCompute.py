@@ -69,6 +69,7 @@ class State():
                                  var['port'],
                                  var['type'],
                                  var['address'],
+                                 var.get('gap',1),
                                  var['size'],
                                  var['name'])
             self.var[pv.name] = pv
