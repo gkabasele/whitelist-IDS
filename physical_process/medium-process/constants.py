@@ -64,7 +64,7 @@ flow_dur = 3
 carcoal_dur = 4
 carcoal_push_dur = 2 
 wagon_moving_dur = 2
-amount_fluid_passing = 20
+amount_fluid_passing = 5
 
 # Store
 STORE = './variables'

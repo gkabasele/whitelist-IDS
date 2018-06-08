@@ -63,15 +63,16 @@ def display_distance():
 display_distance()
 
 change_value(VC, 1)
-for i in range(0, 45, 5):
-    change_value(T1, i)
-    if i <= 20:
-        change_value(WC, i)
+for i in range(0, 25, 5):
+    change_value(WC, i)
     display_distance()
 
 change_value(VC, 0)
-
 display_distance()
+
+for i in range(0, 45, 5):
+    change_value(T1, i)
+    display_distance()
 
 change_value(M1, 1)
 change_value(WE, 1)

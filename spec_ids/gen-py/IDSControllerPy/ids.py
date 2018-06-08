@@ -140,7 +140,7 @@ class PacketHandler():
                         elif self.strategy == NORMAL:
                             dist = self.state_store.get_max_distance()
                         self.last_update = time.time()
-                        logger.info("ID: {} Dist: {}".format(dist.identifier, dist.min_dist))
+                        logger.info("ID: {} Dist: {}".format(dist.min_identifier, dist.min_dist))
                         for k in self.var_update:
                             self.var_update[k] = False
         packet.drop()
