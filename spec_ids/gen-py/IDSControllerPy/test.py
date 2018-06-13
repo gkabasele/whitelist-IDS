@@ -110,3 +110,6 @@ for i in range(0, 65, 5):
     change_value(S2, 60 - i)
     change_value(TF, i)
     display_distance()
+
+change_value(TF, 90)
+display_distance()

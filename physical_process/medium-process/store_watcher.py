@@ -31,10 +31,10 @@ class VarProcessHandler(FileSystemEventHandler):
                     self.process.running_motor(M1)
 
                 elif varname == VT1:
-                    self.process.pass_fluid(self.process.tank1, T1, S1)
+                    self.process.pass_fluid(self.process.tank1.value, T1, S1)
 
                 elif varname == VS1:
-                    self.process.pass_fluid(self.process.silo1, S1, S2)
+                    self.process.pass_fluid(self.process.silo1.value, S1, S2)
 
                 elif varname == VTC:
                     if self.process.wagonStart:
@@ -55,7 +55,7 @@ class VarProcessHandler(FileSystemEventHandler):
                     self.process.running_motor(M2)
 
                 elif varname == VS2:
-                    self.process.pass_fluid(self.process.silo2, S2, TF)
+                    self.process.pass_fluid(self.process.silo2.value, S2, TF)
                     
                 elif varname == VTF:
                     self.process.release_tank()
@@ -70,7 +70,7 @@ def start(store, nb_round):
     observer.schedule(handler, path=store, recursive=True)
     print "Starting observer"
     observer.start()
-    time.sleep(DURATION + (DURATION/4))
+    time.sleep(int(nb_round) + (int(nb_round)/4))
     print "Stopping observer"
     observer.stop()
 

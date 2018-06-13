@@ -64,7 +64,7 @@ flow_dur = 3
 carcoal_dur = 4
 carcoal_push_dur = 2 
 wagon_moving_dur = 2
-amount_fluid_passing = 5
+amount_fluid_passing = 20
 
 # Store
 STORE = './variables'
@@ -73,7 +73,7 @@ PLCS_DIR = './plcs'
 TEMPLATES_DIR = 'templates'
 PLC_PERIOD = 0.01
 MTU_PERIOD = 1
-DURATION = 60
+DURATION = 120
 
 LOG = "ics.log"
 PLCS_LOG = "plcs_log"

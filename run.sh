@@ -7,6 +7,12 @@ sudo rm logs/*
 sudo rm capture/*
 sudo p4c-bmv2 --json whitelist_v4.json code_p4/v3/ingress_switch.p4
 
+sudo mn -c > /dev/null
+
+if sudo pgrep -x "bro" > /dev/null
+then
+   sudo pkill "bro"
+fi 
 
 POSITIONAL=()
 while [[ $# -gt 0 ]] 
@@ -26,6 +32,11 @@ case $key in
     ;;
     -v|--var=*)
     VAR="--varfile $2"
+    shift
+    shift
+    ;;
+    -i|--iter=*)
+    ITER="--nb_iter $2"
     shift
     shift
     ;;
@@ -54,8 +65,8 @@ esac
 done
 set -- "${POSITIONAL[@]}" # restore positional parameters
 
-#echo "sudo python ${TOPO} ${NUM} --behavioral-exe $TARGET --json $SWFILE ${STRAT} ${VAR} ${AUTO} ${MALICIOUS}"
-sudo python ${TOPO} ${NUM} --behavioral-exe $TARGET --json $SWFILE ${STRAT} ${VAR} ${AUTO} ${MALICIOUS} 
+#echo "sudo python ${TOPO} ${NUM} --behavioral-exe $TARGET --json $SWFILE ${STRAT} ${VAR} ${AUTO} ${MALICIOUS} ${ITER}"
+sudo python ${TOPO} ${NUM} --behavioral-exe $TARGET --json $SWFILE ${STRAT} ${VAR} ${AUTO} ${MALICIOUS} ${ITER}
 #if [ $? -eq 0 ] 
 #then
 #    if [ "$#" -le 3 ] 

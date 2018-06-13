@@ -61,7 +61,7 @@ parser.add_argument('--phys_name', help='Physical process name', type=str,
 parser.add_argument('--nb_iter', help='Number of iteration for the process',
                     type=str, default=60, action='store')
 parser.add_argument('--strategy', help='Strategy used by the IDS',
-                    choices=['critical', 'normal'], default='critical')
+                    choices=['critical', 'normal'], default='normal')
 parser.add_argument('--varfile', help='Physical process description',
                     type=str, default='requirements.yml')
 args = parser.parse_args()
@@ -230,6 +230,7 @@ def main():
     malicious = args.malicious
     strategy = args.strategy
     varfile = args.varfile
+    nb_iter = args.nb_iter
 
     kwargs =  {"sw_path" : args.behavioral_exe,
                "json_path" : args.json,
@@ -323,7 +324,7 @@ def main():
                 modbus_servers.append(ip)
                 if auto:
                     print "Starting PLC %s" % (variable_process[n])
-                    mod = 'python '+ phys_name +"/plcs/" + variable_process[n] + ' --ip 10.0.%d0.%d --port 5020 --store %s --duration %s --export %s --create --period %s&' % ((sub_id + 1), (n+1), store, DURATION, export_dir, PLC_PERIOD )
+                    mod = 'python '+ phys_name +"/plcs/" + variable_process[n] + ' --ip 10.0.%d0.%d --port 5020 --store %s --duration %s --export %s --create --period %s&' % ((sub_id + 1), (n+1), store, nb_iter, export_dir, PLC_PERIOD )
                     print mod
                     capt = 'tcpdump -i eth0 -w ' + cur_dir + '/capture/' + name + '.pcap&' 
                     output = h.cmd(mod)
@@ -392,20 +393,20 @@ def main():
         ids.cmd(comd)
         comd = "python " + cur_dir +"/spec_ids/gen-py/IDSControllerPy/ids.py --varfile " + phys_name + "/" + varfile + " --strategy " + strategy +"&"
         ids.cmd(comd)
-        sleep(1)
+        sleep(2)
 
         # Run Modbus Client
         print "Starting Master Terminal Unit"
-        comd = "python " + phys_name + "/script_mtu.py --ip 10.0.10.1 --port 3000 --duration %s --import %s&" % (DURATION, export_dir)
+        comd = "python " + phys_name + "/script_mtu.py --ip 10.0.10.1 --port 3000 --duration %s --import %s&" % (nb_iter, export_dir)
         mtu.cmd(comd)
         mtu.cmd("tcpdump -i eth0 -w " + cur_dir + "/capture/mtu.pcap tcp&")
 
         if malicious:
-
+            sleep(5)
             # Attacker machine
             print "Starting Attack Machine"
             attack_machine = net.get("s2-h1")
-            comd = "python " + phys_name + "/script_attack.py --ip 10.0.30.1 --port 4000 --duration %s --import %s --period 0.5 &" % (DURATION, export_dir)
+            comd = "python " + phys_name + "/script_attack.py --ip 10.0.30.1 --port 4000 --duration %s --import %s --period 0.5 &" % (nb_iter, export_dir)
             attack_machine.cmd(comd)
             attack_machine.cmd("tcpdump -i eth0 -w " + cur_dir + "/capture/attack.pcap tcp&")
 
