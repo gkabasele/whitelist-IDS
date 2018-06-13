@@ -9,9 +9,9 @@ def is_int(s):
         return s
 
 def alphanum_key(s):
-    """ Convert String to a list of string  "z23a" -> ["z", 23, "a"] 
+    """ Convert String to a list of string  "z23a" -> ["z", 23, "a"]
     """
-    return [ is_int(c) for c in re.split('([0-9]+)', s) ]
+    return [is_int(c) for c in re.split('([0-9]+)', s)]
 
 def sort_numeric(l):
     """ alphanumeric and not lexicographic"""
@@ -19,13 +19,13 @@ def sort_numeric(l):
     return l
 
 
-def distance_time():
+def distance_time(input_dir, output_dir):
     tests = []
 
-    for filename in sort_numeric(os.listdir("scal_test")):
+    for filename in sort_numeric(os.listdir(input_dir)):
         if filename.endswith(".yml"):
             test = '''
-s = State('scal_test/%s')
+s = State('%s/%s')
 
 T1 = "tank1"
 VT = "valvecharcoal"
@@ -45,8 +45,8 @@ s.var[M1].value = 0
 s.var[M2].value = 0
 s.var[S2].value = 0
 
-s.get_req_distance()
-            ''' % (filename)
+s.get_max_distance()
+            ''' % (input_dir, filename)
             tests.append((filename, test))
     setup_code = '''
 from stateCompute import State
@@ -54,7 +54,7 @@ from stateCompute import State
 
     cur_dir = os.getcwd()
     index = cur_dir.find('spec_ids')
-    filename = cur_dir[:index] + "measurements/performance_test.csv"
+    filename = cur_dir[:index] + output_dir
 
     with open(filename, 'w') as f:
         f.write("#Number Requirement,Time(s)\n")
@@ -66,7 +66,5 @@ from stateCompute import State
             num_var = tests[i][0].replace('req_', '').replace('.yml', '')
             f.write('%s,%s\n' % (num_var, sum(times)/len(times)))
 
-if __name__=="__main__":
-    distance_time()
-
-
+if __name__ == "__main__":
+    distance_time("scal_test/size_requirement", "measurements/performance_test_size.csv")

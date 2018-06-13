@@ -1,0 +1,69 @@
+variables:
+    - variable:
+        name: tank1
+        host: 10.0.20.7
+        port: 5020
+        type: hr
+        address: 0
+        size: 1
+
+    - variable:
+        name: valvecharcoal
+        host: 10.0.20.15
+        port: 5020
+        type: co
+        address: 0
+        size: 1
+    
+    - variable:
+        name: wagoncar
+        host: 10.0.20.13
+        port: 5020
+        type: hr
+        address: 0
+        size: 1
+
+    - variable:
+        name: wagonend
+        host: 10.0.20.14
+        port: 5020
+        type: co
+        address: 0
+        size: 1
+
+    - variable:
+        name: tankfinal
+        host: 10.0.20.21
+        port: 5020
+        type: hr
+        address: 0
+        size: 1
+
+    - variable:
+        name: motor1
+        host: 10.0.20.4
+        port: 5020
+        type: co
+        address: 0
+        size: 1
+
+    - variable:
+        name: motor2
+        host: 10.0.20.9
+        port: 5020
+        type: co
+        address: 0
+        size: 1
+
+    - variable:
+        name: silo2
+        host: 10.0.20.19
+        port: 5020
+        type: hr
+        address: 0
+        size: 1
+
+requirements:
+    
+    - requirement: ( valvecharcoal = 1 & wagonend = 1) & ( tankfinal <= 40 ) & ( wagonend = 1 & motor1 = 1) & ( motor1 = 1 & motor2 = 1) & ( wagonend = 1 & motor1 = 1) 
+    
