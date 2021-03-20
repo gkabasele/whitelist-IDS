@@ -1,0 +1,302 @@
+pkg_info {
+  arch: "v1model"
+}
+tables {
+  preamble {
+    id: 33574068
+    name: "MyIngress.ipv4_lpm"
+    alias: "ipv4_lpm"
+  }
+  match_fields {
+    id: 1
+    name: "hdr.ipv4.dstAddr"
+    bitwidth: 32
+    match_type: LPM
+  }
+  action_refs {
+    id: 16799317
+  }
+  action_refs {
+    id: 16805608
+  }
+  action_refs {
+    id: 16800567
+  }
+  size: 1024
+}
+tables {
+  preamble {
+    id: 33599945
+    name: "MyIngress.flow_exact"
+    alias: "flow_exact"
+  }
+  match_fields {
+    id: 1
+    name: "hdr.ipv4.srcAddr"
+    bitwidth: 32
+    match_type: EXACT
+  }
+  match_fields {
+    id: 2
+    name: "hdr.tcp.srcPort"
+    bitwidth: 16
+    match_type: EXACT
+  }
+  match_fields {
+    id: 3
+    name: "hdr.ipv4.dstAddr"
+    bitwidth: 32
+    match_type: EXACT
+  }
+  match_fields {
+    id: 4
+    name: "hdr.tcp.dstPort"
+    bitwidth: 16
+    match_type: EXACT
+  }
+  match_fields {
+    id: 5
+    name: "hdr.ipv4.protocol"
+    bitwidth: 8
+    match_type: EXACT
+  }
+  action_refs {
+    id: 16841701
+  }
+  action_refs {
+    id: 16805608
+  }
+  size: 1024
+}
+tables {
+  preamble {
+    id: 33593494
+    name: "MyIngress.metaRetrans_exact"
+    alias: "metaRetrans_exact"
+  }
+  match_fields {
+    id: 1
+    name: "meta.isRetrans"
+    bitwidth: 1
+    match_type: EXACT
+  }
+  match_fields {
+    id: 2
+    name: "hdr.ipv4.srcAddr"
+    bitwidth: 32
+    match_type: EXACT
+  }
+  match_fields {
+    id: 3
+    name: "hdr.tcp.srcPort"
+    bitwidth: 16
+    match_type: EXACT
+  }
+  match_fields {
+    id: 4
+    name: "hdr.ipv4.dstAddr"
+    bitwidth: 32
+    match_type: EXACT
+  }
+  match_fields {
+    id: 5
+    name: "hdr.tcp.dstPort"
+    bitwidth: 16
+    match_type: EXACT
+  }
+  match_fields {
+    id: 6
+    name: "hdr.ipv4.protocol"
+    bitwidth: 8
+    match_type: EXACT
+  }
+  action_refs {
+    id: 16788414
+  }
+  action_refs {
+    id: 16800567
+  }
+  size: 1024
+}
+tables {
+  preamble {
+    id: 33570422
+    name: "MyIngress.metaTermination_exact"
+    alias: "metaTermination_exact"
+  }
+  match_fields {
+    id: 1
+    name: "meta.isTerminated"
+    bitwidth: 1
+    match_type: EXACT
+  }
+  match_fields {
+    id: 2
+    name: "hdr.ipv4.srcAddr"
+    bitwidth: 32
+    match_type: EXACT
+  }
+  match_fields {
+    id: 3
+    name: "hdr.tcp.srcPort"
+    bitwidth: 16
+    match_type: EXACT
+  }
+  match_fields {
+    id: 4
+    name: "hdr.ipv4.dstAddr"
+    bitwidth: 32
+    match_type: EXACT
+  }
+  match_fields {
+    id: 5
+    name: "hdr.tcp.dstPort"
+    bitwidth: 16
+    match_type: EXACT
+  }
+  match_fields {
+    id: 6
+    name: "hdr.ipv4.protocol"
+    bitwidth: 8
+    match_type: EXACT
+  }
+  action_refs {
+    id: 16804610
+  }
+  action_refs {
+    id: 16800567
+  }
+  size: 1024
+}
+actions {
+  preamble {
+    id: 16800567
+    name: "NoAction"
+    alias: "NoAction"
+  }
+}
+actions {
+  preamble {
+    id: 16841701
+    name: "MyIngress.update_stats"
+    alias: "update_stats"
+  }
+  params {
+    id: 1
+    name: "flow_id"
+    bitwidth: 32
+  }
+}
+actions {
+  preamble {
+    id: 16805608
+    name: "MyIngress.drop"
+    alias: "drop"
+  }
+}
+actions {
+  preamble {
+    id: 16788414
+    name: "MyIngress.update_retrans_counter"
+    alias: "update_retrans_counter"
+  }
+  params {
+    id: 1
+    name: "flow_id"
+    bitwidth: 32
+  }
+}
+actions {
+  preamble {
+    id: 16804610
+    name: "MyIngress.update_terminated_counter"
+    alias: "update_terminated_counter"
+  }
+  params {
+    id: 1
+    name: "flow_id"
+    bitwidth: 32
+  }
+}
+actions {
+  preamble {
+    id: 16799317
+    name: "MyIngress.ipv4_forward"
+    alias: "ipv4_forward"
+  }
+  params {
+    id: 1
+    name: "dstAddr"
+    bitwidth: 48
+  }
+  params {
+    id: 2
+    name: "port"
+    bitwidth: 9
+  }
+}
+counters {
+  preamble {
+    id: 302049573
+    name: "MyIngress.ingressPktStats"
+    alias: "ingressPktStats"
+  }
+  spec {
+    unit: BOTH
+  }
+  size: 1024
+}
+counters {
+  preamble {
+    id: 302020788
+    name: "MyIngress.retransCount"
+    alias: "retransCount"
+  }
+  spec {
+    unit: PACKETS
+  }
+  size: 1024
+}
+counters {
+  preamble {
+    id: 302047123
+    name: "MyIngress.terminatedCount"
+    alias: "terminatedCount"
+  }
+  spec {
+    unit: PACKETS
+  }
+  size: 1024
+}
+registers {
+  preamble {
+    id: 369121362
+    name: "MyIngress.curSeqno"
+    alias: "curSeqno"
+  }
+  type_spec {
+    bitstring {
+      bit {
+        bitwidth: 32
+      }
+    }
+  }
+  size: 1024
+}
+registers {
+  preamble {
+    id: 369111974
+    name: "MyIngress.curlen"
+    alias: "curlen"
+  }
+  type_spec {
+    bitstring {
+      bit {
+        bitwidth: 16
+      }
+    }
+  }
+  size: 1024
+}
+type_info {
+}

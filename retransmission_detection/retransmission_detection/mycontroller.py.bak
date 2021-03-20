@@ -1,0 +1,370 @@
+#!/usr/bin/env python2
+import argparse
+import grpc
+import os
+import sys
+from time import sleep
+import pdb
+
+# Import P4Runtime lib from parent utils dir
+# Probably there's a better way of doing this.
+sys.path.append(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                 '../utils/'))
+import p4runtime_lib.bmv2
+from p4runtime_lib.error_utils import printGrpcError
+from p4runtime_lib.switch import ShutdownAllSwitchConnections
+import p4runtime_lib.helper
+
+SWITCH_TO_HOST_PORT = 1
+S1_S2_PORT = 2
+S1_S3_PORT = 3
+
+S2_S1_PORT = 2
+S2_S3_PORT = 3
+
+S3_S1_PORT = 2
+S3_S2_PORT = 3
+
+class Flow(object):
+
+    def __init__(self, saddr, sport, daddr, dport, proto, backup=None):
+        self.saddr = saddr
+        self.sport = sport
+        self.daddr = daddr
+        self.dport = dport
+        self.proto = proto
+        self.backup = backup
+    
+    def get_rev(self):
+        if self.backup is None:
+            return Flow(self.daddr, self.dport, self.saddr, self.sport,
+                        self.proto, self.backup)
+        return Flow(self.daddr, self.dport, self.saddr, self.sport,
+                    self.proto, self.backup.get_rev())
+
+def writeMetaRules(p4info_helper, ingress_sw, src_addr, src_port,
+                    dst_addr, dst_port, protocol, flow_id):
+    table_entry = p4info_helper.buildTableEntry(
+    table_name="MyIngress.metaRetrans_exact",
+    match_fields={
+        "meta.isRetrans": 1,
+        "hdr.ipv4.srcAddr": src_addr,
+        "hdr.tcp.srcPort":  src_port,
+        "hdr.ipv4.dstAddr": dst_addr,
+        "hdr.tcp.dstPort":  dst_port,
+        "hdr.ipv4.protocol": protocol
+    },
+    action_name="MyIngress.update_retrans_counter",
+    action_params={
+        "flow_id": flow_id
+    })
+    ingress_sw.WriteTableEntry(table_entry)
+    print "Installed ingress meta rule on %s" % ingress_sw.name
+
+    table_entry = p4info_helper.buildTableEntry(
+    table_name="MyIngress.metaTermination_exact",
+    match_fields={
+        "meta.isTerminated": 1,
+        "hdr.ipv4.srcAddr": src_addr,
+        "hdr.tcp.srcPort":  src_port,
+        "hdr.ipv4.dstAddr": dst_addr,
+        "hdr.tcp.dstPort":  dst_port,
+        "hdr.ipv4.protocol": protocol
+    },
+    action_name="MyIngress.update_terminated_counter",
+    action_params={
+        "flow_id": flow_id
+    })
+    ingress_sw.WriteTableEntry(table_entry)
+    print "Installed ingress meta rule on %s" % ingress_sw.name
+
+
+def writeFlowRules(p4info_helper, ingress_sw, src_addr, src_port,
+                    dst_addr, dst_port, protocol, flow_id):
+
+    table_entry = p4info_helper.buildTableEntry(
+    table_name="MyIngress.flow_exact",
+    match_fields={
+        "hdr.ipv4.srcAddr": src_addr,
+        "hdr.tcp.srcPort":  src_port,
+        "hdr.ipv4.dstAddr": dst_addr,
+        "hdr.tcp.dstPort":  dst_port,
+        "hdr.ipv4.protocol": protocol
+    },
+    action_name="MyIngress.update_stats",
+    action_params={
+        "flow_id": flow_id
+    })
+    ingress_sw.WriteTableEntry(table_entry)
+    print "Installed ingress flow rule on %s" % ingress_sw.name
+
+
+def writeIPForwardRules(p4info_helper, ingress_sw,
+                        dst_eth_addr, dst_ip_addr, out_port):
+    """
+    Installs three rules:
+    1) An tunnel ingress rule on the ingress switch in the ipv4_lpm table that
+       encapsulates traffic into a tunnel with the specified ID
+    2) A transit rule on the ingress switch that forwards traffic based on
+       the specified ID
+    3) An tunnel egress rule on the egress switch that decapsulates traffic
+       with the specified ID and sends it to the host
+
+    :param p4info_helper: the P4Info helper
+    :param ingress_sw: the ingress switch connection
+    :param egress_sw: the egress switch connection
+    :param tunnel_id: the specified tunnel ID
+    :param dst_eth_addr: the destination IP to match in the ingress rule
+    :param dst_ip_addr: the destination Ethernet address to write in the
+                        egress rule
+    """
+    table_entry = p4info_helper.buildTableEntry(
+        table_name="MyIngress.ipv4_lpm",
+        match_fields={
+            "hdr.ipv4.dstAddr": (dst_ip_addr, 32)
+        },
+        action_name="MyIngress.ipv4_forward",
+        action_params={
+            "dstAddr": dst_eth_addr,
+            "port" : out_port
+        })
+    ingress_sw.WriteTableEntry(table_entry)
+    print "Installed ingress rule on %s" % ingress_sw.name
+
+def readTableRules(p4info_helper, sw):
+    """
+    Reads the table entries from all tables on the switch.
+
+    :param p4info_helper: the P4Info helper
+    :param sw: the switch connection
+    """
+    print '\n----- Reading tables rules for %s -----' % sw.name
+    for response in sw.ReadTableEntries():
+        for entity in response.entities:
+            entry = entity.table_entry
+            # TODO For extra credit, you can use the p4info_helper to translate
+            #      the IDs in the entry to names
+            table_name = p4info_helper.get_tables_name(entry.table_id)
+            print '%s: ' % table_name,
+            for m in entry.match:
+                print p4info_helper.get_match_field_name(table_name, m.field_id),
+                print '%r' % (p4info_helper.get_match_field_value(m),),
+            action = entry.action.action
+            action_name = p4info_helper.get_actions_name(action.action_id)
+            print "->", action_name,
+            for p in action.params:
+                print p4info_helper.get_action_param_name(action_name, p.param_id),
+                print '%r' % p.value,
+
+
+def printCounter(p4info_helper, sw, counter_name, index):
+    """
+    Reads the specified counter at the specified index from the switch. In our
+    program, the index is the tunnel ID. If the index is 0, it will return all
+    values from the counter.
+
+    :param p4info_helper: the P4Info helper
+    :param sw:  the switch connection
+    :param counter_name: the name of the counter from the P4 program
+    :param index: the counter index (in our case, the tunnel ID)
+    """
+    counters = list()
+    for response in sw.ReadCounters(p4info_helper.get_counters_id(counter_name), index):
+        for entity in response.entities:
+            counter = entity.counter_entry
+            print "%s %s %d: %d packets (%d bytes)" % (
+                sw.name, counter_name, index,
+                counter.data.packet_count, counter.data.byte_count
+            )
+            counters.append(counter.data.packet_count)
+    return counters[0]
+
+def handle_retrans(p4info_helper, counter, map_retrans, map_switch_flow, flow_id,
+                   last_flow_id, switches, backup_flow):
+
+    if counter > map_retrans[flow_id][0]:
+        map_retrans[flow_id] = (counter, map_retrans[flow_id][1])
+
+    if (counter % 5) == 0 and not map_retrans[flow_id][1]:
+        backup_flow_id = last_flow_id + 1
+        backup_flow_id_rev = backup_flow_id + 1
+        map_retrans[backup_flow_id] = (0, False)
+        map_retrans[backup_flow_id_rev] = (0, False)
+
+        for sw in switches:
+            map_switch_flow[sw].append(backup_flow_id)
+            map_switch_flow[sw].append(backup_flow_id_rev)
+            
+            writeFlowRules(p4info_helper, sw, backup_flow.saddr, backup_flow.sport,
+                      backup_flow.daddr, backup_flow.dport, backup_flow.proto, backup_flow_id)
+            writeFlowRules(p4info_helper, sw, backup_flow.daddr, backup_flow.dport,
+                      backup_flow.saddr, backup_flow.sport, backup_flow.proto, backup_flow_id_rev)
+            writeMetaRules(p4info_helper, sw, backup_flow.saddr, backup_flow.sport,
+                           backup_flow.daddr, backup_flow.dport, backup_flow.proto, backup_flow_id)
+            writeMetaRules(p4info_helper, sw, backup_flow.daddr, backup_flow.dport,
+                           backup_flow.saddr, backup_flow.sport, backup_flow.proto, backup_flow_id_rev)
+                
+        map_retrans[flow_id] = (counter,True)
+        return backup_flow_id, backup_flow_id_rev
+    return 0, 0
+
+def main(p4info_file_path, bmv2_file_path):
+    # Instantiate a P4Runtime helper from the p4info file
+    p4info_helper = p4runtime_lib.helper.P4InfoHelper(p4info_file_path)
+
+    try:
+        # Create a switch connection object for s1 and s2;
+        # this is backed by a P4Runtime gRPC connection.
+        # Also, dump all P4Runtime messages sent to switch to given txt files.
+        s1 = p4runtime_lib.bmv2.Bmv2SwitchConnection(
+            name='s1',
+            address='127.0.0.1:50051',
+            device_id=0,
+            proto_dump_file='logs/s1-p4runtime-requests.txt')
+        s2 = p4runtime_lib.bmv2.Bmv2SwitchConnection(
+            name='s2',
+            address='127.0.0.1:50052',
+            device_id=1,
+            proto_dump_file='logs/s2-p4runtime-requests.txt')
+        s3 = p4runtime_lib.bmv2.Bmv2SwitchConnection(
+            name='s3',
+            address='127.0.0.1:50053',
+            device_id=2,
+            proto_dump_file='logs/s3-p4runtime-requests.txt')
+
+        # Send master arbitration update message to establish this controller as
+        # master (required by P4Runtime before performing any other write operation)
+        s1.MasterArbitrationUpdate()
+        s2.MasterArbitrationUpdate()
+        s3.MasterArbitrationUpdate()
+
+        h1_mac = "08:00:00:00:01:11"
+        h1_ip = "10.0.1.1"
+        h2_mac = "08:00:00:00:02:22"
+        h2_ip = "10.0.2.2"
+        h3_mac = "08:00:00:00:03:33"
+        h3_ip = "10.0.3.3"
+
+        # Install the P4 program on the switches
+        s1.SetForwardingPipelineConfig(p4info=p4info_helper.p4info,
+                                       bmv2_json_file_path=bmv2_file_path)
+        print "Installed P4 Program using SetForwardingPipelineConfig on s1"
+        s2.SetForwardingPipelineConfig(p4info=p4info_helper.p4info,
+                                       bmv2_json_file_path=bmv2_file_path)
+        print "Installed P4 Program using SetForwardingPipelineConfig on s2"
+
+        s3.SetForwardingPipelineConfig(p4info=p4info_helper.p4info,
+                                       bmv2_json_file_path=bmv2_file_path)
+        print "Installed P4 Program using SetForwardingPipelineConfig on s3"
+
+        # Write the rules that tunnel traffic from h1 to h2
+
+        writeFlowRules(p4info_helper, s1, "10.0.1.1", 3333, "10.0.2.2", 1234, 6, 1)
+        writeFlowRules(p4info_helper, s1, "10.0.2.2", 1234, "10.0.1.1", 3333, 6, 2)
+
+        writeIPForwardRules(p4info_helper, s1, h1_mac, h1_ip, SWITCH_TO_HOST_PORT)
+        writeIPForwardRules(p4info_helper, s1, h2_mac, h2_ip, S1_S2_PORT)
+        writeIPForwardRules(p4info_helper, s1, h3_mac, h3_ip, S1_S3_PORT)
+
+        writeMetaRules(p4info_helper, s1, "10.0.1.1", 3333, "10.0.2.2", 1234, 6, 1)
+        writeMetaRules(p4info_helper, s1, "10.0.2.2", 1234, "10.0.1.1", 3333, 6, 2)
+
+        #writeTunnelRules(p4info_helper, ingress_sw=s1, egress_sw=s2, tunnel_id=100,
+        #                 dst_eth_addr="08:00:00:00:02:22", dst_ip_addr="10.0.2.2")
+
+        # Write the rules that tunnel traffic from h2 to h1
+        writeFlowRules(p4info_helper, s2, "10.0.1.1", 3333, "10.0.2.2", 1234, 6, 1)
+        writeFlowRules(p4info_helper, s2, "10.0.2.2", 1234, "10.0.1.1", 3333, 6, 2)
+
+        writeIPForwardRules(p4info_helper, s2, h1_mac, h1_ip, S2_S1_PORT)
+        writeIPForwardRules(p4info_helper, s2, h2_mac, h2_ip, SWITCH_TO_HOST_PORT)
+        writeIPForwardRules(p4info_helper, s2, h3_mac, h3_ip, S2_S3_PORT)
+
+        writeMetaRules(p4info_helper, s2, "10.0.1.1", 3333, "10.0.2.2", 1234, 6, 1)
+        writeMetaRules(p4info_helper, s2, "10.0.2.2", 1234, "10.0.1.1", 3333, 6, 2)
+
+        writeIPForwardRules(p4info_helper, s3, h1_mac, h1_ip, S3_S1_PORT)
+        writeIPForwardRules(p4info_helper, s3, h2_mac, h2_ip, S3_S2_PORT)
+        writeIPForwardRules(p4info_helper, s3, h3_mac, h3_ip, SWITCH_TO_HOST_PORT)
+        #writeTunnelRules(p4info_helper, ingress_sw=s2, egress_sw=s1, tunnel_id=200,
+        #                 dst_eth_addr="08:00:00:00:01:11", dst_ip_addr="10.0.1.1")
+
+        # TODO Uncomment the following two lines to read table entries from s1 and s2
+        readTableRules(p4info_helper, s1)
+        readTableRules(p4info_helper, s2)
+        readTableRules(p4info_helper, s3)
+        # Print the tunnel counters every 2 seconds
+        map_switches_flows = {s1: [1, 2], s2: [1, 2], s3: []}
+        # flow_id -> nbr_retran, backup_installed
+        map_flow_retrans = {1: (0, False), 2:(0, False)}
+        flow_terminated = list()
+
+        f1 = Flow(h1_ip, 3333, h2_ip, 1234, 6)
+        bf1 = Flow(h1_ip, 3334, h3_ip, 1234, 6)
+        f1.backup = bf1
+        f1r = f1.get_rev()
+        bf1r = bf1.get_rev()
+        map_id_flow = {1: f1, 2: f1r}
+        map_id_backup_sw = {1:[s1, s3], 2:[s3, s1]}
+        while True:
+            sleep(2)
+            '''
+            print '\n----- Reading counters -----'
+            printCounter(p4info_helper, s1, "MyIngress.ingressPktStats", 1)
+            printCounter(p4info_helper, s2, "MyIngress.ingressPktStats", 2)
+            '''
+
+            print '\n----- Reading counters Retransmission -----'
+            for k, v in map_switches_flows.iteritems():
+                for flow_id in v:
+                    nb_terminated = printCounter(p4info_helper, k,
+                                                "MyIngress.terminatedCount", flow_id)
+                    if nb_terminated > 0:
+                        flow_terminated.append(flow_id)
+
+                    nb_retrans = printCounter(p4info_helper, k,
+                                           "MyIngress.retransCount", flow_id)
+                    flow = map_id_flow[flow_id]
+                    backup_flow = flow.backup
+                    if nb_retrans > 0 and backup_flow is not None:
+                        new_id, new_id_rev = handle_retrans(p4info_helper, nb_retrans, 
+                                                map_flow_retrans, map_switches_flows,
+                                                flow_id, 2, map_id_backup_sw[flow_id], 
+                                                backup_flow)
+                        if new_id != 0:
+                            map_id_flow[new_id] = backup_flow
+                            map_id_flow[new_id_rev] = backup_flow.get_rev()
+            '''
+            printCounter(p4info_helper, s1, "MyIngress.retransCount", 1)   
+            printCounter(p4info_helper, s1, "MyIngress.retransCount", 2)    
+            printCounter(p4info_helper, s2, "MyIngress.retransCount", 1)   
+            printCounter(p4info_helper, s2, "MyIngress.retransCount", 2)    
+            '''
+
+    except KeyboardInterrupt:
+        print " Shutting down."
+    except grpc.RpcError as e:
+        printGrpcError(e)
+
+    ShutdownAllSwitchConnections()
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='P4Runtime Controller')
+    parser.add_argument('--p4info', help='p4info proto in text format from p4c',
+                        type=str, action="store", required=False,
+                        default='./build/basic.p4.p4info.txt')
+    parser.add_argument('--bmv2-json', help='BMv2 JSON file from p4c',
+                        type=str, action="store", required=False,
+                        default='./build/basic.json')
+    args = parser.parse_args()
+
+    if not os.path.exists(args.p4info):
+        parser.print_help()
+        print "\np4info file not found: %s\nHave you run 'make'?" % args.p4info
+        parser.exit(1)
+    if not os.path.exists(args.bmv2_json):
+        parser.print_help()
+        print "\nBMv2 JSON file not found: %s\nHave you run 'make'?" % args.bmv2_json
+        parser.exit(1)
+    main(args.p4info, args.bmv2_json)
