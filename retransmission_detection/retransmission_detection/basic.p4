@@ -2,6 +2,7 @@
 #include <core.p4>
 #include <v1model.p4>
 
+const bit<16> TYPE_SRTAG = 0x1212;
 const bit<16> TYPE_IPV4 = 0x800;
 const bit<8>  TYPE_TCP = 0x06;
 
@@ -18,6 +19,11 @@ header ethernet_t {
     macAddr_t srcAddr;
     bit<16>   etherType;
 }
+
+header srtag_t {
+    bit<16> proto_id;
+    bit<16> dst_id;
+ }
 
 header ipv4_t {
     bit<4>    version;
@@ -62,6 +68,7 @@ struct metadata {
 
 struct headers {
     ethernet_t   ethernet;
+    srtag_t      srtag;
     ipv4_t       ipv4;
 	tcp_t		 tcp;
 }
@@ -83,8 +90,18 @@ parser MyParser(packet_in packet,
 		packet.extract(hdr.ethernet);
 		transition select(hdr.ethernet.etherType) {
 	    	TYPE_IPV4: parse_ipv4;
+            TYPE_SRTAG: parse_srtag,
         	default: accept;
 		}
+    }
+
+    state parse_srtag {
+        packet.extract(hdr.srtag);
+        transition select(hdr.srtag.proto_id) {
+            TYPE_IPV4: parse_ipv4;
+            default: accept;
+        }
+
     }
 
     state parse_ipv4 {
@@ -160,6 +177,14 @@ control MyIngress(inout headers hdr,
         terminatedCount.count(flow_id);
         meta.isTerminated = 0;
     }
+
+    action change_to_srtag(){
+
+    }
+
+    action srtag_forward(egressSpect_t port) {
+        standard_metadata.egress_spec = port;
+    }
     
     action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
         /* TODO: fill out code in action body */
@@ -199,6 +224,13 @@ control MyIngress(inout headers hdr,
 		size = 1024;
 		default_action = drop();
 	}
+
+    table srtag_exact {
+        key = {
+            hdr.srtag.dst_id: exatc;
+        }
+
+    }
 
     table metaRetrans_exact {
         key = {

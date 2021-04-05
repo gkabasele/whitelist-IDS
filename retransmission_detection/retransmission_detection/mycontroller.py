@@ -227,12 +227,13 @@ class Controller(object):
     def handle_flow_request(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
         server_address = (self.ip, self.port)
-        socket.bind(server_address)
+        sock.bind(server_address)
 
         while True:
             data, address = sock.recvfrom(4096)
             if data:
-                new_flow = pickle.dumps(data)
+                self.lock.acquire()
+                new_flow = pickle.loads(data)
                 print("Request for new flow: {}".format(new_flow))
                 new_flow.flow_id = self.flow_id 
                 self.flow_id += 1
@@ -257,6 +258,15 @@ class Controller(object):
                     self.writeFlowRules(sw, new_flow_rev)
                     self.writeMetaRules(sw, new_flow)
                     self.writeMetaRules(sw, new_flow_rev)
+                    self.map_flow_map_switches_flows[sw].append(new_flow.flow_id)
+                    self.map_flow_map_switches_flows[sw].append(new_flow_rev.flow_id)
+                    self.map_flow_retrans[new_flow.flow_id] = (0, False)
+                    self.map_flow_retrans[new_flow_rev.flow_id] = (0, False)
+
+                sock.sendto("{}".format(new_flow.flow_id), address)
+                self.lock.release()
+
+        sock.close()
                     
                 
     
@@ -351,6 +361,8 @@ class Controller(object):
             s3.SetForwardingPipelineConfig(p4info=self.p4info_helper.p4info,
                                            bmv2_json_file_path=self.bmv2_file_path)
             print("Installed P4 Program using SetForwardingPipelineConfig on s3")
+
+            self.lock.acquire()
     
             # Write the rules that tunnel traffic from h1 to h2
             f1 = self.create_flow(h1_ip, client_port, h2_ip, server_port, 6)
@@ -395,6 +407,8 @@ class Controller(object):
             # flow_id -> nbr_retran, backup_installed
             self.map_flow_retrans = {1: (0, False), 2:(0, False)}
             flow_terminated = list()
+
+            self.lock.release()
     
             while True:
                 sleep(2)
