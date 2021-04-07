@@ -90,7 +90,7 @@ parser MyParser(packet_in packet,
 		packet.extract(hdr.ethernet);
 		transition select(hdr.ethernet.etherType) {
 	    	TYPE_IPV4: parse_ipv4;
-            TYPE_SRTAG: parse_srtag,
+//          TYPE_SRTAG: parse_srtag,
         	default: accept;
 		}
     }
@@ -178,13 +178,19 @@ control MyIngress(inout headers hdr,
         meta.isTerminated = 0;
     }
 
-    action change_to_srtag(){
-
-    }
-
-    action srtag_forward(egressSpect_t port) {
+    action srtag_forward(egressSpec_t port) {
         standard_metadata.egress_spec = port;
     }
+
+    action change_to_srtag() {
+        hdr.ethernet.etherType = TYPE_SRTAG;
+    }
+
+    action change_to_ip_and_forward(egressSpec_t port){
+        standard_metadata.egress_spec = port;
+        hdr.ethernet.etherType = TYPE_IPV4;
+    }
+
     
     action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
         /* TODO: fill out code in action body */
@@ -220,17 +226,25 @@ control MyIngress(inout headers hdr,
 		actions = {
 			update_stats;
 			drop;
+            change_to_srtag();
 		}
 		size = 1024;
-		default_action = drop();
+		default_action = change_to_srtag();
 	}
 
     table srtag_exact {
         key = {
-            hdr.srtag.dst_id: exatc;
+            hdr.ethernet.etherType: exact;
         }
-
+        actions = {
+            srtag_forward;
+            change_to_ip_and_forward;
+            drop;
+        }
+        size = 1024;
+        default_action = drop();
     }
+
 
     table metaRetrans_exact {
         key = {
@@ -268,17 +282,26 @@ control MyIngress(inout headers hdr,
         /* TODO: fix ingress control logic
          *  - ipv4_lpm should be applied only when IPv4 header is valid
          */
+        if(hdr.ipv4.isValid()){
+            ipv4_lpm.apply();
 
-		if(hdr.tcp.isValid()){
-			flow_exact.apply();
-            metaRetrans_exact.apply();
-            metaTermination_exact.apply();
-		}
+		    if(hdr.tcp.isValid()){
+			    if (flow_exact.apply().hit) {
+                    metaRetrans_exact.apply();
+                    metaTermination_exact.apply();
+                } else {
+                    srtag_exact.apply(); 
+                }
+            
+       	    } 
+        } else {
 
-		if(hdr.ipv4.isValid()){
-        	ipv4_lpm.apply();
-		}
+            srtag_exact.apply();
+        }   
+
     }
+
+
 }
 
 /*************************************************************************

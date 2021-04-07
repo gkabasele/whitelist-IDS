@@ -2,11 +2,45 @@ import socket
 import sys
 import pickle
 
-from my_controller import Flow
+from mycontroller import Flow
 
 from scapy.all import *
 
 flows_requested = set()
+
+def never_respond():
+    chain = iptc.Chain(iptc.Table(iptc.Table.FILTER), "OUTPUT")
+    rule = iptc.Rule()
+    rule.out_interface = "eth0"
+    rule.dst = "10.0.0.0/255.255.0.0"
+    rule.protocol = "tcp"
+    target = iptc.Target(rule, "DROP")
+    rule.target = target
+    chain.insert_rule(rule)
+
+    chain = iptc.Chain(iptc.Table(iptc.Table.FILTER), "OUTPUT")
+    rule = iptc.Rule()
+    rule.out_interface = "eth0"
+    rule.dst = "10.0.0.0/255.255.0.0"
+    rule.protocol = "udp"
+    target = iptc.Target(rule, "DROP")
+    rule.target = target
+    chain.insert_rule(rule)
+
+def test_flow(saddr, sport, daddr, dport, proto):
+    flow = pickle.dumps(Flow(saddr, sport, daddr, dport, proto))
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_address = ("172.0.10.2", 3000)
+
+    try:
+        print("Sending " + str(flow))
+        sent = sock.sendto(flow, server_address) 
+        print("Waiting response")
+        received = sock.recvfrom(4096)
+        print("Flow created with id : {}".format(received))
+    finally:
+        sock.close()
 
 def send_request(pkt):
 
@@ -18,23 +52,27 @@ def send_request(pkt):
         proto = 6
         flow = Flow(saddr, sport, daddr, dport, proto)
         flow_rev = Flow(daddr, dport, saddr, sport, proto)
-        if flow not in flows_requested and flow_rev not in flows_requested:
+        if (flow not in flows_requested
+            and flow_rev not in flows_requested):
+
             flows_requested.add(flow)    
             flows_requested.add(flow_rev)    
-            flow = pickle.dumps()
+            flow = pickle.dumps(flow)
 
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            server_address = ("localhost", 3000)
+            server_address = ("172.0.10.1", 3000)
 
             try:
                 print("Sending {}".format(flow))
-                sent = sock.sendto(message, server_address) 
+                sent = sock.sendto(flow, server_address) 
                 print("Waiting response")
-                received = sock.revcfrom(4096)
+                received = sock.recvfrom(4096)
                 print("Flow created with id : {}".format(received))
             finally:
                 sock.close()
         else:
             print("Flow already exists")
-    
-sniff(filter="ip", prn=send_request)
+
+#test_flow("10.0.1.1",3000, "10.0.2.3", 3344, 6)    
+
+sniff(iface="eth0", filter="ip", prn=send_request)

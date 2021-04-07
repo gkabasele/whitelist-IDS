@@ -93,13 +93,28 @@ class ExerciseTopo(Topo):
 
         for link in host_links:
             host_name = link['node1']
-            sw_name, sw_port = self.parse_switch_node(link['node2'])
             host_ip = hosts[host_name]['ip']
             host_mac = hosts[host_name]['mac']
-            self.addHost(host_name, ip=host_ip, mac=host_mac)
-            self.addLink(host_name, sw_name,
-                         delay=link['latency'], bw=link['bandwidth'],
-                         port2=sw_port)
+            host_namespace = hosts[host_name]['inNamespace']
+            self.addHost(host_name, ip=host_ip, mac=host_mac,
+                         inNamespace=host_namespace)
+
+            if link['node2'][0] == "s":
+                sw_name, sw_port = self.parse_switch_node(link['node2'])
+                self.addLink(host_name, sw_name,
+                delay=link['latency'], bw=link['bandwidth'],
+                port2=sw_port)
+
+            else:
+                peer_name = link['node2']
+                peer_ip = hosts[peer_name]['ip']
+                peer_intf_ip = hosts[peer_name]['peer']
+                peer_mac = hosts[peer_name]['mac']
+                peer_namespace = hosts[peer_name]['inNamespace']
+                self.addHost(peer_name, ip=peer_ip, mac=peer_mac,
+                             inNamespace=peer_namespace)
+                self.addLink(host_name, peer_name, params1={"ip":(peer_intf_ip)})
+                
 
         for link in switch_links:
             sw1_name, sw1_port = self.parse_switch_node(link['node1'])
@@ -228,8 +243,8 @@ class ExerciseRunner:
             if len(link) > 3:
                 link_dict['bandwidth'] = link[3]
 
-            if link_dict['node1'][0] == 'h':
-                assert link_dict['node2'][0] == 's', 'Hosts should be connected to switches, not ' + str(link_dict['node2'])
+            #if link_dict['node1'][0] == 'h':
+               # assert link_dict['node2'][0] == 's', 'Hosts should be connected to switches, not ' + str(link_dict['node2'])
             links.append(link_dict)
         return links
 

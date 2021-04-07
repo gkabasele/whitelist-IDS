@@ -7,7 +7,7 @@ HOST = '10.0.2.2'
 DPORT = 1234
 SPORT = 3333
 
-BACKUP_HOST = '10.0.3.3'
+BACKUP_HOST = '10.0.2.3'
 BACKUP_SPORT = 3334
 
 def run(host, sport, dport):
