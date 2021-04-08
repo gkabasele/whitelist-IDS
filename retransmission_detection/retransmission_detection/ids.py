@@ -1,6 +1,7 @@
 import socket
 import sys
 import pickle
+from netfilterqueue import NetfilterQueue
 
 from mycontroller import Flow
 
@@ -26,6 +27,11 @@ def never_respond():
     target = iptc.Target(rule, "DROP")
     rule.target = target
     chain.insert_rule(rule)
+
+def print_and_accept(pkt):
+    print(pkt)
+    print(pkt.get_payload_len())
+    pkt.accept()
 
 def test_flow(saddr, sport, daddr, dport, proto):
     flow = pickle.dumps(Flow(saddr, sport, daddr, dport, proto))
@@ -75,4 +81,13 @@ def send_request(pkt):
 
 #test_flow("10.0.1.1",3000, "10.0.2.3", 3344, 6)    
 
-sniff(iface="eth0", filter="ip", prn=send_request)
+#sniff(iface="eth0", filter="ip", prn=send_request)
+
+nfqueue = NetfilterQueue()
+nfqueue.bind(1, print_and_accept)
+try:
+    nfqueue.run()
+except KeyboardInterrupt:
+    print(" ")
+
+nfqueue.unbind()

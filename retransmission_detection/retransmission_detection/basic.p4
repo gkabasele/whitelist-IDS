@@ -3,6 +3,7 @@
 #include <v1model.p4>
 
 const bit<16> TYPE_SRTAG = 0x1212;
+const bit<16> TYPE_SRTAGIDS = 0x1213;
 const bit<16> TYPE_IPV4 = 0x800;
 const bit<8>  TYPE_TCP = 0x06;
 
@@ -90,7 +91,8 @@ parser MyParser(packet_in packet,
 		packet.extract(hdr.ethernet);
 		transition select(hdr.ethernet.etherType) {
 	    	TYPE_IPV4: parse_ipv4;
-//          TYPE_SRTAG: parse_srtag,
+            TYPE_SRTAG: parse_ipv4;
+            TYPE_SRTAGIDS: parse_ipv4;
         	default: accept;
 		}
     }
@@ -186,20 +188,30 @@ control MyIngress(inout headers hdr,
         hdr.ethernet.etherType = TYPE_SRTAG;
     }
 
-    action change_to_ip_and_forward(egressSpec_t port){
+    action change_to_ip_and_forward(macAddr_t dstAddr, egressSpec_t port){
+        macAddr_t tmp;
         standard_metadata.egress_spec = port;
         hdr.ethernet.etherType = TYPE_IPV4;
+        tmp = hdr.ethernet.dstAddr;
+        hdr.ethernet.dstAddr = dstAddr;
+        hdr.ethernet.srcAddr = tmp;
     }
+
+    action change_to_srtag_ids(egressSpec_t port) {
+        hdr.ethernet.etherType = TYPE_SRTAGIDS;
+        standard_metadata.egress_spec = port;
+    }
+
 
     
     action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
         /* TODO: fill out code in action body */
-	standard_metadata.egress_spec = port;
-	macAddr_t tmp;
-	tmp = hdr.ethernet.dstAddr;
-	hdr.ethernet.dstAddr = dstAddr;
-	hdr.ethernet.srcAddr = tmp;
-	hdr.ipv4.ttl = hdr.ipv4.ttl-1;
+	    standard_metadata.egress_spec = port;
+	    macAddr_t tmp;
+	    tmp = hdr.ethernet.dstAddr;
+	    hdr.ethernet.dstAddr = dstAddr;
+	    hdr.ethernet.srcAddr = tmp;
+	    hdr.ipv4.ttl = hdr.ipv4.ttl-1;
     }
     
     table ipv4_lpm {
@@ -226,7 +238,7 @@ control MyIngress(inout headers hdr,
 		actions = {
 			update_stats;
 			drop;
-            change_to_srtag();
+            change_to_srtag;
 		}
 		size = 1024;
 		default_action = change_to_srtag();
@@ -239,6 +251,32 @@ control MyIngress(inout headers hdr,
         actions = {
             srtag_forward;
             change_to_ip_and_forward;
+            drop;
+        }
+        size = 1024;
+        default_action = drop();
+    }
+
+    table ids_verification {
+        key = {
+            standard_metadata.ingress_port: exact;
+            hdr.ipv4.dstAddr : exact;
+        }
+        actions = {
+            change_to_srtag_ids;
+            NoAction;
+        }
+        size = 16;
+        default_action = NoAction();
+    }
+
+    table ids_clear{
+        key = {
+            hdr.ethernet.etherType: exact;
+            hdr.ipv4.dstAddr: exact;
+        }
+        actions = {
+            change_to_ip_and_forward; 
             drop;
         }
         size = 1024;
@@ -282,26 +320,24 @@ control MyIngress(inout headers hdr,
         /* TODO: fix ingress control logic
          *  - ipv4_lpm should be applied only when IPv4 header is valid
          */
-        if(hdr.ipv4.isValid()){
-            ipv4_lpm.apply();
-
-		    if(hdr.tcp.isValid()){
-			    if (flow_exact.apply().hit) {
-                    metaRetrans_exact.apply();
-                    metaTermination_exact.apply();
-                } else {
-                    srtag_exact.apply(); 
+        if (!(ids_verification.apply().hit)){
+            if (hdr.ethernet.etherType == TYPE_SRTAG){
+                srtag_exact.apply();
+            } else if (hdr.ethernet.etherType == TYPE_SRTAGIDS){
+                ids_clear.apply();
+            } else if (hdr.ipv4.isValid()){
+                ipv4_lpm.apply();
+		        if(hdr.tcp.isValid()){
+		            if (flow_exact.apply().hit) {
+                        metaRetrans_exact.apply();
+                        metaTermination_exact.apply();
+                    } else {
+                        srtag_exact.apply(); 
+                    }
                 }
-            
-       	    } 
-        } else {
-
-            srtag_exact.apply();
-        }   
-
-    }
-
-
+            }
+        }
+   }
 }
 
 /*************************************************************************

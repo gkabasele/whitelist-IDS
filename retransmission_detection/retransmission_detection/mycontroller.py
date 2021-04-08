@@ -31,6 +31,7 @@ S3_S1_PORT = 2
 S3_S2_PORT = 3
 
 SRTAG_TYPE = 0x1212
+SRTAGIDS_TYPE = 0x1213
 
 class Flow(object):
 
@@ -100,11 +101,11 @@ class Controller(object):
                     return newpath
         return None
 
-    def writeRedirectRules(self, sw, etherType, out_port):
+    def writeRedirectRules(self, sw, ether_type, out_port):
         table_entry = self.p4info_helper.buildTableEntry(
         table_name="MyIngress.srtag_exact",
         match_fields={
-            "hdr.ethernet.etherType": etherType
+            "hdr.ethernet.etherType": ether_type
         },
         action_name="MyIngress.srtag_forward",
         action_params={
@@ -113,18 +114,50 @@ class Controller(object):
         sw.WriteTableEntry(table_entry)
         print("Install redirection rule on %s" % sw.name)
         
-    def writeLastRedirectRules(self, sw, etherType, out_port):
+    def writeLastRedirectRules(self, sw, ether_type, eth_dst, out_port):
         table_entry = self.p4info_helper.buildTableEntry(
         table_name="MyIngress.srtag_exact",
         match_fields={
-            "hdr.ethernet.etherType": etherType
+            "hdr.ethernet.etherType": ether_type
         },
         action_name="MyIngress.change_to_ip_and_forward",
         action_params={
+            "dstAddr": eth_dst,
             "port": out_port 
         })
         sw.WriteTableEntry(table_entry)
         print("Install redirection rule on %s" % sw.name)
+
+    def writeIDSVerificationRules(self, sw, dst_addr, in_port, out_port):
+        table_entry = self.p4info_helper.buildTableEntry(
+        table_name="MyIngress.ids_verification",
+        match_fields={
+            "standard_metadata.ingress_port": in_port,
+            "hdr.ipv4.dstAddr": dst_addr
+        },
+        action_name="MyIngress.change_to_srtag_ids",
+        action_params={
+            "port": out_port
+        })
+        sw.WriteTableEntry(table_entry)
+        print("Install ids verification rule on %s" % sw.name)
+
+    def writeIDSClearRules(self, sw, ether_type, dst_ip, eth_dst, out_port):
+        table_entry = self.p4info_helper.buildTableEntry(
+        table_name="MyIngress.ids_clear",
+        match_fields={
+            "hdr.ethernet.etherType": ether_type,
+            "hdr.ipv4.dstAddr": dst_ip
+        },
+        action_name="MyIngress.change_to_ip_and_forward",
+        action_params={
+            "dstAddr": eth_dst,
+            "port": out_port 
+        })
+        sw.WriteTableEntry(table_entry)
+        print("Install ids clear rule on %s" % sw.name)
+
+
     
     def writeMetaRules(self, ingress_sw, flow):
         table_entry = self.p4info_helper.buildTableEntry(
@@ -395,6 +428,9 @@ class Controller(object):
             self.writeIPForwardRules(s1, h2_mac, h2_ip, S1_S2_PORT)
             self.writeIPForwardRules(s1, h3_mac, h3_ip, S1_S2_PORT)
             self.writeIPForwardRules(s1, ids_mac, ids_ip, S1_S3_PORT)
+
+            self.writeIDSClearRules(s1, SRTAGIDS_TYPE, h1_ip,
+                                    h1_mac, SWITCH_TO_HOST_PORT)
     
             self.writeMetaRules(s1, f1)
             self.writeMetaRules(s1, f2)
@@ -411,6 +447,10 @@ class Controller(object):
             self.writeIPForwardRules(s2, h3_mac, h3_ip, SWITCH_TO_HOST_PORT_MUL)
             self.writeIPForwardRules(s2, ids_mac, ids_ip, S2_S3_PORT)
     
+            self.writeIDSClearRules(s2, SRTAGIDS_TYPE, h2_ip,
+                                    h2_mac, SWITCH_TO_HOST_PORT)
+            self.writeIDSClearRules(s2, SRTAGIDS_TYPE, h3_ip,
+                                    h3_mac, SWITCH_TO_HOST_PORT_MUL)
             self.writeMetaRules(s2, f1)
             self.writeMetaRules(s2, f2)
     
@@ -423,7 +463,10 @@ class Controller(object):
 
             self.writeRedirectRules(s1, SRTAG_TYPE, S1_S3_PORT) 
             self.writeRedirectRules(s2, SRTAG_TYPE, S2_S3_PORT) 
-            self.writeLastRedirectRules(s3, SRTAG_TYPE, SWITCH_TO_HOST_PORT) 
+            self.writeLastRedirectRules(s3, SRTAG_TYPE, ids_mac, SWITCH_TO_HOST_PORT) 
+            self.writeIDSVerificationRules(s3, h1_ip, SWITCH_TO_HOST_PORT, S3_S1_PORT)
+            self.writeIDSVerificationRules(s3, h2_ip, SWITCH_TO_HOST_PORT, S3_S2_PORT)
+            self.writeIDSVerificationRules(s3, h3_ip, SWITCH_TO_HOST_PORT, S3_S2_PORT)
     
             # TODO Uncomment the following two lines to read table entries from s1 and s2
             self.readTableRules(s1)
