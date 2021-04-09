@@ -317,7 +317,7 @@ class Controller(object):
                     self.map_flow_retrans[new_flow_rev.flow_id] = (0, False)
                     self.readTableRules(sw) 
 
-                sock.sendto("{}".format(new_flow.flow_id), address)
+                sock.sendto("{}-{}".format(new_flow.flow_id, new_flow), address)
                 self.lock.release()
 
         sock.close()
@@ -526,12 +526,14 @@ class Controller(object):
 
     def run(self):
         #TODO ADD lock
-        t1 = threading.Thread(target=self.start)
-        t2 = threading.Thread(target=self.handle_flow_request)
+        #t1 = threading.Thread(target=self.start, daemon=True)
+        t1 = threading.Thread(target=self.handle_flow_request)
+        t1.setDaemon(True)
         t1.start()
-        t2.start()
-        t1.join()
-        t2.join()
+        self.start()
+        #t2.start()
+        #t1.join()
+        #t2.join()
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='P4Runtime Controller')
@@ -552,5 +554,5 @@ if __name__ == '__main__':
         print("\nBMv2 JSON file not found: %s\nHave you run 'make'?" % args.bmv2_json)
         parser.exit(1)
 
-    controller = Controller("10.0.2.15",3000, args.p4info, args.bmv2_json)
+    controller = Controller("172.0.10.2",3000, args.p4info, args.bmv2_json)
     controller.run()
