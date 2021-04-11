@@ -42,6 +42,8 @@ class Flow(object):
         self.dport = dport
         self.proto = proto
         self.flow_id = flow_id
+        self.nb_retrans = 0
+        self.is_terminated = False
     
     def get_rev(self):
         return Flow(self.daddr, self.dport, self.saddr, self.sport,
@@ -60,6 +62,12 @@ class Flow(object):
                                            self.daddr, self.dport, self.proto)
     def __repr__(self):
         return self.__str__()
+
+    def crash_flow(self):
+        return self.nb_retrans >= 5 or self.is_terminated
+
+    def compare_flow(self, other):
+        return other.saddr == self.saddr and other.dport == self.dport
 
 class Controller(object):
 
@@ -274,8 +282,16 @@ class Controller(object):
                 ))
                 counters.append(counter.data.packet_count)
         return counters[0]
-    
-    
+
+
+    def verify_new_flow(self, flow):
+        res = False
+        for f in self.flows.values():
+            if f.compare_flow(flow) and f.crash_flow():
+                res = True 
+                break
+        return res
+            
     def handle_flow_request(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
         server_address = (self.ip, self.port)
@@ -287,37 +303,42 @@ class Controller(object):
                 self.lock.acquire()
                 new_flow = pickle.loads(data)
                 print("Request for new flow: {}".format(new_flow))
-                new_flow.flow_id = self.flow_id 
-                self.flow_id += 1
-                new_flow_rev = self.create_flow(new_flow.daddr, new_flow.dport,
-                                                new_flow.saddr, new_flow.sport, 
-                                                new_flow.proto)
 
-                #TODO test flow information
+                if self.verify_new_flow(new_flow): 
+                    new_flow.flow_id = self.flow_id 
+                    self.flows[self.flow_id] = new_flow
+                    self.flow_id += 1
+                    new_flow_rev = self.create_flow(new_flow.daddr, new_flow.dport,
+                                                    new_flow.saddr, new_flow.sport, 
+                                                    new_flow.proto)
 
-                start = self.topo[new_flow.saddr]["sw"]
-                end = self.topo[new_flow.daddr]["sw"]
-                path = self.get_switch_path_from_flow(start, end, list())
-                print("Path for new flow {}".format([sw.name for sw in path]))
+                    #TODO test flow information
 
-                #self.writeIPForwardRules(start, self.topo[new_flow.saddr]["mac"],
-                #                         new_flow.saddr, self.topo[new_flow.saddr]["sw_port"])
+                    start = self.topo[new_flow.saddr]["sw"]
+                    end = self.topo[new_flow.daddr]["sw"]
+                    path = self.get_switch_path_from_flow(start, end, list())
+                    print("Path for new flow {}".format([sw.name for sw in path]))
 
-                #self.writeIPForwardRules(end, self.topo[new_flow.daddr]["mac"],
-                #                         new_flow.daddr, self.topo[new_flow.daddr]["sw_port"])
+                    #self.writeIPForwardRules(start, self.topo[new_flow.saddr]["mac"],
+                    #                         new_flow.saddr, self.topo[new_flow.saddr]["sw_port"])
 
-                for sw in path:
-                    self.writeFlowRules(sw, new_flow)
-                    self.writeFlowRules(sw, new_flow_rev)
-                    self.writeMetaRules(sw, new_flow)
-                    self.writeMetaRules(sw, new_flow_rev)
-                    self.map_switches_flows[sw].append(new_flow.flow_id)
-                    self.map_switches_flows[sw].append(new_flow_rev.flow_id)
-                    self.map_flow_retrans[new_flow.flow_id] = (0, False)
-                    self.map_flow_retrans[new_flow_rev.flow_id] = (0, False)
-                    self.readTableRules(sw) 
+                    #self.writeIPForwardRules(end, self.topo[new_flow.daddr]["mac"],
+                    #                         new_flow.daddr, self.topo[new_flow.daddr]["sw_port"])
 
-                sock.sendto("{}-{}".format(new_flow.flow_id, new_flow), address)
+                    for sw in path:
+                        self.writeFlowRules(sw, new_flow)
+                        self.writeFlowRules(sw, new_flow_rev)
+                        self.writeMetaRules(sw, new_flow)
+                        self.writeMetaRules(sw, new_flow_rev)
+                        self.map_switches_flows[sw].append(new_flow.flow_id)
+                        self.map_switches_flows[sw].append(new_flow_rev.flow_id)
+                        self.map_flow_retrans[new_flow.flow_id] = (0, False)
+                        self.map_flow_retrans[new_flow_rev.flow_id] = (0, False)
+                        self.readTableRules(sw) 
+
+                    sock.sendto("{}-{}".format(new_flow.flow_id, new_flow), address)
+                else:
+                    sock.sendto("-1", address)
                 self.lock.release()
 
         sock.close()
@@ -395,7 +416,7 @@ class Controller(object):
             h2_mac = "08:00:00:00:02:22"
             h2_ip = "10.0.2.2"
 
-            h3_mac = "08:00:00:00:02:44"
+            h3_mac = "08:00:00:00:02:23"
             h3_ip = "10.0.2.3"
 
             #IDS
@@ -476,7 +497,7 @@ class Controller(object):
             self.map_switches_flows = {s1: [1, 2], s2: [1, 2], s3: []}
             # flow_id -> nbr_retran, backup_installed
             self.map_flow_retrans = {1: (0, False), 2:(0, False)}
-            flow_terminated = list()
+            flow_terminated = set()
 
             self.lock.release()
     
@@ -494,10 +515,17 @@ class Controller(object):
                         nb_terminated = self.printCounter(k,
                                                     "MyIngress.terminatedCount", flow_id)
                         if nb_terminated > 0:
-                            flow_terminated.append(flow_id)
+                            flow = self.flows[flow_id]
+                            flow.is_terminated = True
+                            flow_terminated.add(flow_id)
+                            
     
                         nb_retrans = self.printCounter(k,
                                                "MyIngress.retransCount", flow_id)
+                        if nb_retrans > 0:
+                            flow = self.flows[flow_id]
+                            flow.nb_retrans += 1
+
                         '''
                         flow = map_id_flow[flow_id]
                         backup_flow = flow.backup
