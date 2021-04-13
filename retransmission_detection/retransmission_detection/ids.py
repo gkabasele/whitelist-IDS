@@ -18,7 +18,7 @@ def is_new_flow(flow, flow_rev):
 
 def is_attempting_flow(flow, flow_rev):
     return ((flow not in flows_mul_req or flows_mul_req[flow] < 3) 
-            and (flow_rev not in flows_mul_req or flows_mul_req[flow_req] < 3))
+            and (flow_rev not in flows_mul_req or flows_mul_req[flow_rev] < 3))
 
 def is_candidate_flow(flow, flow_rev):
     return is_new_flow(flow, flow_rev) and is_attempting_flow(flow, flow_rev) 
@@ -38,8 +38,8 @@ def threading_sending(ip, port, flow, lock):
 
         try:
             print("Sending {}".format(flow))
-            flow = pickle.dumps(flow)
-            sent = sock.sendto(flow, server_address) 
+            flow_data = pickle.dumps(flow)
+            sent = sock.sendto(flow_data, server_address) 
             print("Waiting response")
             data, address = sock.recvfrom(4096)
             if data != "-1":
@@ -50,12 +50,13 @@ def threading_sending(ip, port, flow, lock):
                 if flow in flows_mul_req:
                     flows_mul_req[flow] += 1
                 else:
+                    print("Multiple requester for {}".format(flow))
                     flows_mul_req[flow] = 1
                 
         finally:
             sock.close()
     else:
-            print("Flow already exists")
+            print("Flow {} already exists".format(flow))
     lock.release()
 
 

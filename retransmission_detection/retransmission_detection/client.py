@@ -1,33 +1,39 @@
 #!/usr/bin/env python
 
 import socket
+import argparse
+import random
+import threading
 from time import sleep
+
 
 HOST = '10.0.2.2'
 DPORT = 1234
+DUMBPORT = 1235
 SPORT = 3333
 
 BACKUP_HOST = '10.0.2.3'
 BACKUP_SPORT = 3334
 
-def run(host, sport, dport):
+def run(host, dport, crash, nb_pkt, sport=None):
     error = False
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(3)
-        s.bind(('', sport))
+        s.settimeout(1)
+        if sport is not None:
+            s.bind(('', sport))
         s.connect((host, dport))
-        for _ in range(15):
+        for _ in range(nb_pkt):
             nbr_timeout = 0
             while True:
                 s.sendall(b'Hello, world')
                 try:
                     data = s.recv(1024)
-                    print('Received', repr(data))
+                    print('Received from {}:{}'.format(host, dport), repr(data))
                     break
                 except socket.timeout:
                     print("Didn't receive data! [Timeout]")
                     nbr_timeout += 1
-                    if nbr_timeout >= 5:
+                    if nbr_timeout >= crash:
                         error = True
                         break
             if error:
@@ -36,6 +42,27 @@ def run(host, sport, dport):
             sleep(1)
     return error
 
-if run(HOST, SPORT, DPORT):
-    print("Contacting backup server")
-    run(BACKUP_HOST, BACKUP_SPORT, DPORT)
+def main(server, dport, sport, bserver, dumb_port, crash, nb_pkt): 
+     
+    if run(server, dport, crash, nb_pkt, sport):
+        print("Contacting backup server")
+        t1 = threading.Thread(target=run, args=(bserver, dport, crash, nb_pkt))
+        print("Creating dumb flow")
+        t2 = threading.Thread(target=run, args=(bserver, dumb_port, crash, nb_pkt))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dport", action="store", type=int, default=DPORT, dest="dport")
+    parser.add_argument("--sport", action="store", type=int, default=SPORT, dest="sport")
+    parser.add_argument("--server", action="store", type=str, default=HOST, dest="server")
+    parser.add_argument("--bserver", action="store", type=str, default=BACKUP_HOST, dest="bserver")
+    parser.add_argument("--dumbport", action="store", type=int, default=DUMBPORT, dest="dumb_port")
+    parser.add_argument("--crash", action="store", type=int, default=3, dest="crash")
+    parser.add_argument("--nb", action="store", type=int, default=15, dest="nb_pkt")
+    args = parser.parse_args()
+    main(args.server, args.dport, args.sport,
+         args.bserver,args.dumb_port, args.crash, args.nb_pkt)

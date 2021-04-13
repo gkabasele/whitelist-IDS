@@ -43,6 +43,7 @@ class Flow(object):
         self.proto = proto
         self.flow_id = flow_id
         self.nb_retrans = 0
+        self.retrans = False
         self.is_terminated = False
     
     def get_rev(self):
@@ -64,7 +65,9 @@ class Flow(object):
         return self.__str__()
 
     def crash_flow(self):
-        return self.nb_retrans >= 5 or self.is_terminated
+        return (self.nb_retrans >= 3
+                or self.is_terminated
+                or self.retrans)
 
     def compare_flow(self, other):
         return other.saddr == self.saddr and other.dport == self.dport
@@ -74,6 +77,7 @@ class Controller(object):
     def __init__(self, ip, port, p4info_file_path, bmv2_file_path):
 
         self.flows = dict()
+        self.flows_id = dict()
         self.ip = ip
         self.port = port
         self.flow_id = 1
@@ -91,6 +95,7 @@ class Controller(object):
         f = Flow(saddr, sport, daddr, dport, proto, self.flow_id)
         if self.flow_id not in self.flows:
             self.flows[self.flow_id] = f
+            self.flows_id[f] = self.flow_id
         else:
             raise ValueError("Flow {}  with id {} already exist".format(f, f.flow_id))
         self.flow_id += 1
@@ -304,9 +309,15 @@ class Controller(object):
                 new_flow = pickle.loads(data)
                 print("Request for new flow: {}".format(new_flow))
 
-                if self.verify_new_flow(new_flow): 
+                if new_flow in self.flows_id:
+                    f = self.flows_id[new_flow]
+                    f.retrans = True
+                    sock.sendto("{}-{}".format(new_flow.flow_id, new_flow), address)
+
+                elif self.verify_new_flow(new_flow): 
                     new_flow.flow_id = self.flow_id 
                     self.flows[self.flow_id] = new_flow
+                    self.flows_id[new_flow] = self.flow_id
                     self.flow_id += 1
                     new_flow_rev = self.create_flow(new_flow.daddr, new_flow.dport,
                                                     new_flow.saddr, new_flow.sport, 
@@ -334,10 +345,10 @@ class Controller(object):
                         self.map_switches_flows[sw].append(new_flow_rev.flow_id)
                         self.map_flow_retrans[new_flow.flow_id] = (0, False)
                         self.map_flow_retrans[new_flow_rev.flow_id] = (0, False)
-                        self.readTableRules(sw) 
 
                     sock.sendto("{}-{}".format(new_flow.flow_id, new_flow), address)
                 else:
+                    print("Invalid flow, not installed")
                     sock.sendto("-1", address)
                 self.lock.release()
 
@@ -502,7 +513,7 @@ class Controller(object):
             self.lock.release()
     
             while True:
-                sleep(2)
+                sleep(0.5)
                 '''
                 print '\n----- Reading counters -----'
                 printCounter(p4info_helper, s1, "MyIngress.ingressPktStats", 1)
