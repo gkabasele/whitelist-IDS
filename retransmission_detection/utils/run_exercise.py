@@ -204,6 +204,8 @@ class ExerciseRunner:
             and starts the mininet CLI. This is the main method to run after
             initializing the object.
         """
+
+        os.system("rm s1_merged.pcap")
         # Initialize mininet with the topology specified by the config
         self.create_network()
         self.net.start()
@@ -216,9 +218,19 @@ class ExerciseRunner:
         # wait for that to finish. Not sure how to do this better
         sleep(1)
 
+        # wait
+        print("Running the controller")
+        self.run_controller()
+
+        sleep(1)
+        # run client
+        print("Running the client")
+        self.program_client("60", "h1") 
+
         self.do_net_cli()
         # stop right after the CLI is exited
         self.net.stop()
+        os.system("mergecap pcaps/s1-eth1_in.pcap pcaps/s1-eth1_out.pcap -w s1_merged.pcap")
 
 
     def parse_links(self, unparsed_links):
@@ -327,6 +339,15 @@ class ExerciseRunner:
                 for cmd in host_info["commands"]:
                     h.cmd(cmd)
 
+    def program_client(self, nb_pkt, host_name):
+        """ Execute command to run the client
+        """
+        h = self.net.get(host_name)
+        h.cmd("python3 client.py --nb {}".format(nb_pkt))
+
+    def run_controller(self):
+        s.system("./mycontroller.py&")
+
 
     def do_net_cli(self):
         """ Starts up the mininet CLI and prints some helpful output.
@@ -383,7 +404,7 @@ def get_args():
     parser.add_argument('-p', '--pcap-dir', type=str, required=False, default=default_pcaps)
     parser.add_argument('-j', '--switch_json', type=str, required=False)
     parser.add_argument('-b', '--behavioral-exe', help='Path to behavioral executable',
-                                type=str, required=False, default='simple_switch')
+                                type=str, required=False, default='/home/vagrant/behavioral-model/targets/simple_switch/simple_switch')
     return parser.parse_args()
 
 

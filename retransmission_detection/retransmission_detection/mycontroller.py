@@ -5,6 +5,7 @@ import os
 import threading
 import socket
 import pickle
+import logging
 import sys
 from time import sleep
 import pdb
@@ -97,6 +98,7 @@ class Controller(object):
             self.flows[self.flow_id] = f
             self.flows_id[f] = self.flow_id
         else:
+            logging.error("Flow {} with id {} already exist".format(f, f.flow_id))
             raise ValueError("Flow {}  with id {} already exist".format(f, f.flow_id))
         self.flow_id += 1
         return f
@@ -114,6 +116,18 @@ class Controller(object):
                     return newpath
         return None
 
+    def writeCloneRules(self, sw, ip_addr): 
+        table_entry = self.p4info_helper.buildTableEntry(
+        table_name="MyIngress.clone_exact",
+        match_fields={
+            "hdr.ipv4.srcAddr": ip_addr
+        },
+        action_name="MyIngress.change_to_srtag",
+        action_params={})
+        sw.WriteTableEntry(table_entry)
+        print("Install clone rule on %s" % sw.name)
+        logging.debug("Install clone rule on %s" % sw.name)
+
     def writeRedirectRules(self, sw, ether_type, out_port):
         table_entry = self.p4info_helper.buildTableEntry(
         table_name="MyIngress.srtag_exact",
@@ -126,6 +140,7 @@ class Controller(object):
         })
         sw.WriteTableEntry(table_entry)
         print("Install redirection rule on %s" % sw.name)
+        logging.debug("Install redirection rule on %s" % sw.name)
         
     def writeLastRedirectRules(self, sw, ether_type, eth_dst, out_port):
         table_entry = self.p4info_helper.buildTableEntry(
@@ -140,6 +155,7 @@ class Controller(object):
         })
         sw.WriteTableEntry(table_entry)
         print("Install redirection rule on %s" % sw.name)
+        logging.debug("Install redirection rule on %s" % sw.name)
 
     def writeIDSVerificationRules(self, sw, dst_addr, in_port, out_port):
         table_entry = self.p4info_helper.buildTableEntry(
@@ -154,6 +170,7 @@ class Controller(object):
         })
         sw.WriteTableEntry(table_entry)
         print("Install ids verification rule on %s" % sw.name)
+        logging.debug("Install ids verification rule on %s" % sw.name)
 
     def writeIDSClearRules(self, sw, ether_type, dst_ip, eth_dst, out_port):
         table_entry = self.p4info_helper.buildTableEntry(
@@ -169,9 +186,8 @@ class Controller(object):
         })
         sw.WriteTableEntry(table_entry)
         print("Install ids clear rule on %s" % sw.name)
+        logging.debug("Install ids clear rule on %s" % sw.name)
 
-
-    
     def writeMetaRules(self, ingress_sw, flow):
         table_entry = self.p4info_helper.buildTableEntry(
         table_name="MyIngress.metaRetrans_exact",
@@ -189,6 +205,7 @@ class Controller(object):
         })
         ingress_sw.WriteTableEntry(table_entry)
         print("Installed ingress meta rule on %s" % ingress_sw.name)
+        logging.debug("Installed ingress meta rule on %s" % ingress_sw.name)
     
         table_entry = self.p4info_helper.buildTableEntry(
         table_name="MyIngress.metaTermination_exact",
@@ -206,6 +223,7 @@ class Controller(object):
         })
         ingress_sw.WriteTableEntry(table_entry)
         print("Installed ingress meta rule on %s" % ingress_sw.name)
+        logging.debug("Installed ingress meta rule on %s" % ingress_sw.name)
     
     
     def writeFlowRules(self, ingress_sw,flow):
@@ -225,6 +243,7 @@ class Controller(object):
         })
         ingress_sw.WriteTableEntry(table_entry)
         print("Installed ingress flow rule on %s" % ingress_sw.name)
+        logging.debug("Installed ingress flow rule on %s" % ingress_sw.name)
     
     
     def writeIPForwardRules(self, ingress_sw,
@@ -241,6 +260,7 @@ class Controller(object):
             })
         ingress_sw.WriteTableEntry(table_entry)
         print("Installed ingress rule on %s" % ingress_sw.name)
+        logging.debug("Installed ingress rule on %s" % ingress_sw.name)
     
     def readTableRules(self, sw):
         """
@@ -250,20 +270,27 @@ class Controller(object):
         :param sw: the switch connection
         """
         print('\n----- Reading tables rules for %s -----' % sw.name)
+        logging.debug('\n----- Reading tables rules for %s -----' % sw.name)
         for response in sw.ReadTableEntries():
             for entity in response.entities:
                 entry = entity.table_entry
                 table_name = self.p4info_helper.get_tables_name(entry.table_id)
                 print('%s: ' % table_name)
+                logging.debug('%s: ' % table_name)
                 for m in entry.match:
                     print(self.p4info_helper.get_match_field_name(table_name, m.field_id))
+                    logging.debug(self.p4info_helper.get_match_field_name(table_name, m.field_id))
                     print('%r' % (self.p4info_helper.get_match_field_value(m),))
+                    logging.debug('%r' % (self.p4info_helper.get_match_field_value(m),))
                 action = entry.action.action
                 action_name = self.p4info_helper.get_actions_name(action.action_id)
                 print("->", action_name)
+                logging.debug("->", action_name)
                 for p in action.params:
                     print(self.p4info_helper.get_action_param_name(action_name, p.param_id))
+                    logging.debug(self.p4info_helper.get_action_param_name(action_name, p.param_id))
                     print('%r' % p.value)
+                    logging.debug('%r' % p.value)
     
     
     def printCounter(self, sw, counter_name, index):
@@ -281,10 +308,15 @@ class Controller(object):
         for response in sw.ReadCounters(self.p4info_helper.get_counters_id(counter_name), index):
             for entity in response.entities:
                 counter = entity.counter_entry
-                print("%s %s %d: %d packets (%d bytes)" % (
+                #print("%s %s %d: %d packets (%d bytes)" % (
+                #    sw.name, counter_name, index,
+                #    counter.data.packet_count, counter.data.byte_count
+                #))
+                logging.debug("%s %s %d: %d packets (%d bytes)" % (
                     sw.name, counter_name, index,
                     counter.data.packet_count, counter.data.byte_count
                 ))
+
                 counters.append(counter.data.packet_count)
         return counters[0]
 
@@ -308,13 +340,19 @@ class Controller(object):
                 self.lock.acquire()
                 new_flow = pickle.loads(data)
                 print("Request for new flow: {}".format(new_flow))
+                logging.debug("Request for new flow: {}".format(new_flow))
 
                 if new_flow in self.flows_id:
+                    print("Flow already exist")
+                    logging.debug("Flow already exist")
                     f = self.flows_id[new_flow]
+                    f = self.flows[f]
                     f.retrans = True
                     sock.sendto("{}-{}".format(new_flow.flow_id, new_flow), address)
 
                 elif self.verify_new_flow(new_flow): 
+                    print("Creating new flow")
+                    logging.debug("Creating new flow")
                     new_flow.flow_id = self.flow_id 
                     self.flows[self.flow_id] = new_flow
                     self.flows_id[new_flow] = self.flow_id
@@ -329,6 +367,7 @@ class Controller(object):
                     end = self.topo[new_flow.daddr]["sw"]
                     path = self.get_switch_path_from_flow(start, end, list())
                     print("Path for new flow {}".format([sw.name for sw in path]))
+                    logging.debug("Path for new flow {}".format([sw.name for sw in path]))
 
                     #self.writeIPForwardRules(start, self.topo[new_flow.saddr]["mac"],
                     #                         new_flow.saddr, self.topo[new_flow.saddr]["sw_port"])
@@ -349,12 +388,15 @@ class Controller(object):
                     sock.sendto("{}-{}".format(new_flow.flow_id, new_flow), address)
                 else:
                     print("Invalid flow, not installed")
+                    logging.debug("Invalid flow, not installed")
                     sock.sendto("-1", address)
                 self.lock.release()
 
         sock.close()
                     
                 
+    def add_mirror(self, port, cmd): 
+        os.system("sudo simple_switch_CLI --thrift-port={} < {}".format(port, cmd))
     
     def start(self):
         # Instantiate a P4Runtime helper from the p4info file
@@ -378,6 +420,10 @@ class Controller(object):
                 address='127.0.0.1:50053',
                 device_id=2,
                 proto_dump_file='logs/s3-p4runtime-requests.txt')
+
+            # Add mirror for server
+            self.add_mirror(9090, "cmd_s1.txt")
+            self.add_mirror(9091, "cmd_s2.txt")
     
             # Send master arbitration update message to establish this controller as
             # master (required by P4Runtime before performing any other write operation)
@@ -439,13 +485,16 @@ class Controller(object):
             s1.SetForwardingPipelineConfig(p4info=self.p4info_helper.p4info,
                                            bmv2_json_file_path=self.bmv2_file_path)
             print("Installed P4 Program using SetForwardingPipelineConfig on s1")
+            logging.debug("Installed P4 Program using SetForwardingPipelineConfig on s1")
             s2.SetForwardingPipelineConfig(p4info=self.p4info_helper.p4info,
                                            bmv2_json_file_path=self.bmv2_file_path)
             print("Installed P4 Program using SetForwardingPipelineConfig on s2")
+            logging.debug("Installed P4 Program using SetForwardingPipelineConfig on s2")
     
             s3.SetForwardingPipelineConfig(p4info=self.p4info_helper.p4info,
                                            bmv2_json_file_path=self.bmv2_file_path)
             print("Installed P4 Program using SetForwardingPipelineConfig on s3")
+            logging.debug("Installed P4 Program using SetForwardingPipelineConfig on s3")
 
             self.lock.acquire()
     
@@ -466,6 +515,7 @@ class Controller(object):
     
             self.writeMetaRules(s1, f1)
             self.writeMetaRules(s1, f2)
+            self.writeCloneRules(s1, h1_ip)
     
             #writeTunnelRules(p4info_helper, ingress_sw=s1, egress_sw=s2, tunnel_id=100,
             #                 dst_eth_addr="08:00:00:00:02:22", dst_ip_addr="10.0.2.2")
@@ -485,6 +535,8 @@ class Controller(object):
                                     h3_mac, SWITCH_TO_HOST_PORT_MUL)
             self.writeMetaRules(s2, f1)
             self.writeMetaRules(s2, f2)
+            self.writeCloneRules(s2, h2_ip)
+            self.writeCloneRules(s2, h3_ip)
     
             self.writeIPForwardRules(s3, h1_mac, h1_ip, S3_S1_PORT)
             self.writeIPForwardRules(s3, h2_mac, h2_ip, S3_S2_PORT)
@@ -499,11 +551,12 @@ class Controller(object):
             self.writeIDSVerificationRules(s3, h1_ip, SWITCH_TO_HOST_PORT, S3_S1_PORT)
             self.writeIDSVerificationRules(s3, h2_ip, SWITCH_TO_HOST_PORT, S3_S2_PORT)
             self.writeIDSVerificationRules(s3, h3_ip, SWITCH_TO_HOST_PORT, S3_S2_PORT)
+            self.writeCloneRules(s3, ids_ip)
     
             # TODO Uncomment the following two lines to read table entries from s1 and s2
-            self.readTableRules(s1)
-            self.readTableRules(s2)
-            self.readTableRules(s3)
+            #self.readTableRules(s1)
+            #self.readTableRules(s2)
+            #self.readTableRules(s3)
             # Print the tunnel counters every 2 seconds
             self.map_switches_flows = {s1: [1, 2], s2: [1, 2], s3: []}
             # flow_id -> nbr_retran, backup_installed
@@ -513,14 +566,9 @@ class Controller(object):
             self.lock.release()
     
             while True:
-                sleep(0.5)
-                '''
-                print '\n----- Reading counters -----'
-                printCounter(p4info_helper, s1, "MyIngress.ingressPktStats", 1)
-                printCounter(p4info_helper, s2, "MyIngress.ingressPktStats", 2)
-                '''
-    
-                print('\n----- Reading counters Retransmission -----')
+                sleep(1)
+                #print('\n----- Reading counters Retransmission -----')
+                logging.debug('\n----- Reading counters Retransmission -----')
                 for k, v in self.map_switches_flows.items():
                     for flow_id in v:
                         nb_terminated = self.printCounter(k,
@@ -537,28 +585,12 @@ class Controller(object):
                             flow = self.flows[flow_id]
                             flow.nb_retrans += 1
 
-                        '''
-                        flow = map_id_flow[flow_id]
-                        backup_flow = flow.backup
-                        if nb_retrans > 0 and backup_flow is not None:
-                            new_id, new_id_rev = self.handle_retrans(p4info_helper, nb_retrans, 
-                                                    map_flow_retrans, map_switches_flows,
-                                                    flow_id, 2, map_id_backup_sw[flow_id], 
-                                                    backup_flow)
-                            if new_id != 0:
-                                map_id_flow[new_id] = backup_flow
-                                map_id_flow[new_id_rev] = backup_flow.get_rev()
-                        '''
-                '''
-                printCounter(p4info_helper, s1, "MyIngress.retransCount", 1)   
-                printCounter(p4info_helper, s1, "MyIngress.retransCount", 2)    
-                printCounter(p4info_helper, s2, "MyIngress.retransCount", 1)   
-                printCounter(p4info_helper, s2, "MyIngress.retransCount", 2)    
-                '''
-    
+                            
         except KeyboardInterrupt:
             print(" Shutting down.")
+            logging.debug(" Shutting down.")
         except grpc.RpcError as e:
+            logging.error(printGrpcError(e))
             printGrpcError(e)
     
         ShutdownAllSwitchConnections()
@@ -575,6 +607,8 @@ class Controller(object):
         #t2.join()
     
 if __name__ == '__main__':
+    logging.basicConfig(filename="logs/controller.log", encoding="utf-8", level=logging.DEBUG)
+
     parser = argparse.ArgumentParser(description='P4Runtime Controller')
     parser.add_argument('--p4info', help='p4info proto in text format from p4c',
                         type=str, action="store", required=False,
