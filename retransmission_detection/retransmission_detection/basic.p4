@@ -7,6 +7,13 @@ const bit<16> TYPE_SRTAGIDS = 0x1213;
 const bit<16> TYPE_IPV4 = 0x800;
 const bit<8>  TYPE_TCP = 0x06;
 
+const bit<32> BMV2_V1_MODEL_INSTANCE_TYPE_INGRESS_CLONE=1;
+const bit<32> BMV2_V1_MODEL_INSTANCE_TYPE_RESUBMIT=6;
+const bit<32> I2E_CLONE_SESSION_ID = 5;
+
+#define IS_I2E_CLONE(std_meta) (std_meta.instance_type == BMV2_V1_MODEL_INSTANCE_TYPE_INGRESS_CLONE)
+#define IS_RESUBMITTED(std_meta) (std_meta.instance_type == BMV2_V1_MODEL_INSTANCE_TYPE_RESUBMIT)
+
 /*************************************************************************
 *********************** H E A D E R S  ***********************************
 *************************************************************************/
@@ -14,6 +21,7 @@ const bit<8>  TYPE_TCP = 0x06;
 typedef bit<9>  egressSpec_t;
 typedef bit<48> macAddr_t;
 typedef bit<32> ip4Addr_t;
+
 
 header ethernet_t {
     macAddr_t dstAddr;
@@ -172,11 +180,15 @@ control MyIngress(inout headers hdr,
 
     action update_retrans_counter(bit<32> flow_id) {
         retransCount.count(flow_id);
+        //clone3(CloneType.I2E, I2E_CLONE_SESSION_ID, standard_metadata);
+        clone(CloneType.I2E, I2E_CLONE_SESSION_ID);
         meta.isRetrans = 0;
     }
 
     action update_terminated_counter(bit<32> flow_id) {
         terminatedCount.count(flow_id);
+        //clone3(CloneType.I2E, I2E_CLONE_SESSION_ID, standard_metadata);
+        clone(CloneType.I2E, I2E_CLONE_SESSION_ID);
         meta.isTerminated = 0;
     }
 
@@ -315,12 +327,28 @@ control MyIngress(inout headers hdr,
         }
         default_action = NoAction();
     }
+
+    table clone_exact {
+        key = {
+            hdr.ipv4.srcAddr : exact;
+        }
+        actions = {
+           drop;
+           change_to_srtag; 
+        }
+        size = 1024;
+        default_action = drop();
+    }
     
     apply {
         /* TODO: fix ingress control logic
          *  - ipv4_lpm should be applied only when IPv4 header is valid
          */
-        if (!(ids_verification.apply().hit)){
+        if (IS_I2E_CLONE(standard_metadata)){
+            clone_exact.apply();
+            srtag_exact.apply();
+
+        } else if (!(ids_verification.apply().hit)){
             if (hdr.ethernet.etherType == TYPE_SRTAG){
                 srtag_exact.apply();
             } else if (hdr.ethernet.etherType == TYPE_SRTAGIDS){

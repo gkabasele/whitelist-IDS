@@ -206,6 +206,7 @@ class ExerciseRunner:
         """
 
         os.system("rm s1_merged.pcap")
+        os.system("rm client.pcap")
         # Initialize mininet with the topology specified by the config
         self.create_network()
         self.net.start()
@@ -343,7 +344,8 @@ class ExerciseRunner:
         """ Execute command to run the client
         """
         h = self.net.get(host_name)
-        h.cmd("python3 client.py --nb {}".format(nb_pkt))
+        h.cmd("python3 client.py --nb {}&".format(nb_pkt))
+        h.cmd("tcpdump -i eth0 -w client.pcap&")
 
     def run_controller(self):
         s.system("./mycontroller.py&")
