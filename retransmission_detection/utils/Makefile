@@ -11,6 +11,10 @@ ifndef TOPO
 TOPO = topology.json
 endif
 
+ifdef MANUAL
+run_args += -m 
+endif
+
 source = $(wildcard *.p4)
 compiled_json := $(source:.p4=.json)
 

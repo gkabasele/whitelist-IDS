@@ -150,6 +150,7 @@ class ExerciseRunner:
 
             topo : Topo object   // The mininet topology instance
             net : Mininet object // The mininet instance
+            manual    : bool      //determines if we run the controller manually
 
     """
     def logger(self, *items):
@@ -165,7 +166,7 @@ class ExerciseRunner:
 
 
     def __init__(self, topo_file, log_dir, pcap_dir,
-                       switch_json, bmv2_exe='simple_switch', quiet=False):
+                       switch_json, manual, bmv2_exe='simple_switch', quiet=False):
         """ Initializes some attributes and reads the topology json. Does not
             actually run the exercise. Use run_exercise() for that.
 
@@ -177,9 +178,11 @@ class ExerciseRunner:
                 switch_json : string  // Path to a compiled p4 json for bmv2
                 bmv2_exe    : string  // Path to the p4 behavioral binary
                 quiet : bool          // Enable/disable script debug messages
+                manual : bool          // Enable/disable automatic controller
         """
 
         self.quiet = quiet
+        self.manual = manual
         self.logger('Reading topology file.')
         with open(topo_file, 'r') as f:
             topo = json.load(f)
@@ -219,14 +222,15 @@ class ExerciseRunner:
         # wait for that to finish. Not sure how to do this better
         sleep(1)
 
-        # wait
-        print("Running the controller")
-        self.run_controller()
+        if not self.manual:
+            # wait
+            print("Running the controller")
+            self.run_controller()
 
-        sleep(1)
-        # run client
-        print("Running the client")
-        self.program_client("60", "h1") 
+            sleep(1)
+            # run client
+            print("Running the client")
+            self.program_client("60", "h1") 
 
         self.do_net_cli()
         # stop right after the CLI is exited
@@ -348,7 +352,7 @@ class ExerciseRunner:
         h.cmd("tcpdump -i eth0 -w client.pcap&")
 
     def run_controller(self):
-        s.system("./mycontroller.py&")
+        os.system("./mycontroller.py&")
 
 
     def do_net_cli(self):
@@ -407,6 +411,7 @@ def get_args():
     parser.add_argument('-j', '--switch_json', type=str, required=False)
     parser.add_argument('-b', '--behavioral-exe', help='Path to behavioral executable',
                                 type=str, required=False, default='/home/vagrant/behavioral-model/targets/simple_switch/simple_switch')
+    parser.add_argument('-m', '--manual', action='store_true', dest='manual',help='manual run of the experiment')
     return parser.parse_args()
 
 
@@ -416,7 +421,8 @@ if __name__ == '__main__':
 
     args = get_args()
     exercise = ExerciseRunner(args.topo, args.log_dir, args.pcap_dir,
-                              args.switch_json, args.behavioral_exe, args.quiet)
+                              args.switch_json, args.manual,
+                              args.behavioral_exe, args.quiet)
 
     exercise.run_exercise()
 

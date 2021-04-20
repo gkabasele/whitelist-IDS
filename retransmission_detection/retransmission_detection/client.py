@@ -29,8 +29,8 @@ def run(host, dport, crash, nb_pkt, sport=None):
                 s.sendall(b'Hello, world')
                 try:
                     data = s.recv(1024)
-                    print('Received from {}:{}'.format(host, dport), repr(data))
-                    logging.debug('Received from {}:{}'.format(host, dport), repr(data))
+                    print('Received from {}:{}'.format(host, dport))
+                    logging.debug('Received from {}:{}'.format(host, dport))
                     break
                 except socket.timeout:
                     print("Didn't receive data! [Timeout]")

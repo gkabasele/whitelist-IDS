@@ -75,7 +75,7 @@ class Flow(object):
 
 class Controller(object):
 
-    def __init__(self, ip, port, p4info_file_path, bmv2_file_path):
+    def __init__(self, ip, port, backup, p4info_file_path, bmv2_file_path):
 
         self.flows = dict()
         self.flows_id = dict()
@@ -91,6 +91,8 @@ class Controller(object):
 
         self.p4info_helper = p4runtime_lib.helper.P4InfoHelper(p4info_file_path)
         self.bmv2_file_path = bmv2_file_path
+
+        self.backup = backup
 
     def create_flow(self, saddr, sport, daddr, dport, proto):
         f = Flow(saddr, sport, daddr, dport, proto, self.flow_id)
@@ -115,6 +117,91 @@ class Controller(object):
                 if newpath:
                     return newpath
         return None
+
+    def deleteBackUpInitFirstRules(self, sw, saddr, daddr, dport):
+        table_entry = self.p4info_helper.buildTableEntry(
+        table_name="MyIngress.backup_init_flow_exact",
+        match_fields={
+            "hdr.ipv4.srcAddr": saddr,
+            "hdr.ipv4.dstAddr": daddr,
+            "hdr.tcp.dstPort": dport
+        },
+        action_name="MyIngress.clone_for_ids",
+        action_params={})
+        sw.DeleteTableEntry(table_entry)
+        print("Delete backup init first rule on %s" % sw.name)
+        logging.debug("Delete backup init first rule on %s" % sw.name)
+
+
+    def writeBackUpInitFirstRules(self, sw, saddr, daddr, dport):
+        table_entry = self.p4info_helper.buildTableEntry(
+        table_name="MyIngress.backup_init_flow_exact",
+        match_fields={
+            "hdr.ipv4.srcAddr": saddr,
+            "hdr.ipv4.dstAddr": daddr,
+            "hdr.tcp.dstPort": dport
+        },
+        action_name="MyIngress.clone_for_ids",
+        action_params={})
+        sw.WriteTableEntry(table_entry)
+        print("Install backup init first rule on %s" % sw.name)
+        logging.debug("Install backup init first rule on %s" % sw.name)
+
+    def deleteBackUpInitRules(self, sw, saddr, daddr, dport):
+        table_entry = self.p4info_helper.buildTableEntry(
+        table_name="MyIngress.backup_init_flow_exact",
+        match_fields={
+            "hdr.ipv4.srcAddr": saddr,
+            "hdr.ipv4.dstAddr": daddr,
+            "hdr.tcp.dstPort": dport
+        },
+        action_name="MyIngress.do_nothing",
+        action_params={})
+        sw.DeleteTableEntry(table_entry)
+        print("Delete backup init rule on %s" % sw.name)
+        logging.debug("Delete backup init rule on %s" % sw.name)
+
+    def writeBackUpInitRules(self, sw, saddr, daddr, dport):
+        table_entry = self.p4info_helper.buildTableEntry(
+        table_name="MyIngress.backup_init_flow_exact",
+        match_fields={
+            "hdr.ipv4.srcAddr": saddr,
+            "hdr.ipv4.dstAddr": daddr,
+            "hdr.tcp.dstPort": dport
+        },
+        action_name="MyIngress.do_nothing",
+        action_params={})
+        sw.WriteTableEntry(table_entry)
+        print("Install backup init rule on %s" % sw.name)
+        logging.debug("Install backup init rule on %s" % sw.name)
+
+    def deleteBackUpRules(self, sw, saddr, daddr, dport):
+        table_entry = self.p4info_helper.buildTableEntry(
+        table_name="MyIngress.backup_flow_exact",
+        match_fields={
+            "hdr.ipv4.dstAddr": daddr,
+            "hdr.ipv4.srcAddr": saddr,
+            "hdr.tcp.srcPort": dport
+        },
+        action_name="MyIngress.do_nothing",
+        action_params={})
+        sw.DeleteTableEntry(table_entry)
+        print("Delete backup rule on %s" % sw.name)
+        logging.debug("Delete init rule on %s" % sw.name)
+
+    def writeBackUpRules(self, sw, saddr, daddr, dport):
+        table_entry = self.p4info_helper.buildTableEntry(
+        table_name="MyIngress.backup_flow_exact",
+        match_fields={
+            "hdr.ipv4.dstAddr": daddr,
+            "hdr.ipv4.srcAddr": saddr,
+            "hdr.tcp.srcPort": dport
+        },
+        action_name="MyIngress.do_nothing",
+        action_params={})
+        sw.WriteTableEntry(table_entry)
+        print("Install backup rule on %s" % sw.name)
+        logging.debug("Install init rule on %s" % sw.name)
 
     def writeCloneRules(self, sw, ip_addr): 
         table_entry = self.p4info_helper.buildTableEntry(
@@ -285,7 +372,7 @@ class Controller(object):
                 action = entry.action.action
                 action_name = self.p4info_helper.get_actions_name(action.action_id)
                 print("->", action_name)
-                logging.debug("->", action_name)
+                logging.debug("->{}".format(action_name))
                 for p in action.params:
                     print(self.p4info_helper.get_action_param_name(action_name, p.param_id))
                     logging.debug(self.p4info_helper.get_action_param_name(action_name, p.param_id))
@@ -328,12 +415,45 @@ class Controller(object):
                 res = True 
                 break
         return res
-            
+
+    def install_proactive_rule(self, flow):
+        backup_addr = self.backup[flow.daddr]
+        start = self.topo[flow.saddr]["sw"]
+        end = self.topo[backup_addr]["sw"]
+        path = self.get_switch_path_from_flow(start, end, list())
+        logging.debug("Path for adding proactive flow {}".format([sw.name for sw in path]))
+        #TODO get all connection to the crash server
+        print("Path for adding proactive flow {}".format([sw.name for sw in path]))
+        for i, sw in enumerate(path):
+            if i != 0:
+                self.writeBackUpInitRules(sw, flow.saddr, backup_addr,
+                flow.dport)
+            else:
+                self.writeBackUpInitFirstRules(sw, flow.saddr, backup_addr, flow.dport)
+
+            self.writeBackUpRules(sw, backup_addr, flow.saddr, flow.dport) 
+
+    def remove_proactive_rule(self, flow):
+        start = self.topo[flow.saddr]["sw"]
+        end = self.topo[flow.daddr]["sw"]
+        path = self.get_switch_path_from_flow(start, end, list())
+        logging.debug("Path for removing proactive flow {}".format([sw.name for sw in path]))
+        print("Path for removing proactive flow {}".format([sw.name for sw in path]))
+        for i, sw in enumerate(path):
+            if i != 0:
+                self.deleteBackUpInitRules(sw, flow.saddr, flow.daddr,
+                flow.dport)
+            else:
+                self.deleteBackUpInitFirstRules(sw, flow.saddr, flow.daddr, flow.dport)
+
+            self.deleteBackUpRules(sw, flow.daddr, flow.saddr, flow.dport) 
+
+        
     def handle_flow_request(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
         server_address = (self.ip, self.port)
         sock.bind(server_address)
-
+        
         while True:
             data, address = sock.recvfrom(4096)
             if data:
@@ -345,10 +465,12 @@ class Controller(object):
                 if new_flow in self.flows_id:
                     print("Flow already exist")
                     logging.debug("Flow already exist")
+                    #TODO Verify number of retransmission on switch
                     f = self.flows_id[new_flow]
                     f = self.flows[f]
                     f.retrans = True
-                    sock.sendto("{}-{}".format(new_flow.flow_id, new_flow), address)
+                    self.install_proactive_rule(f)
+                    sock.sendto("{}-{}".format(f.flow_id, new_flow), address)
 
                 elif self.verify_new_flow(new_flow): 
                     print("Creating new flow")
@@ -369,12 +491,6 @@ class Controller(object):
                     print("Path for new flow {}".format([sw.name for sw in path]))
                     logging.debug("Path for new flow {}".format([sw.name for sw in path]))
 
-                    #self.writeIPForwardRules(start, self.topo[new_flow.saddr]["mac"],
-                    #                         new_flow.saddr, self.topo[new_flow.saddr]["sw_port"])
-
-                    #self.writeIPForwardRules(end, self.topo[new_flow.daddr]["mac"],
-                    #                         new_flow.daddr, self.topo[new_flow.daddr]["sw_port"])
-
                     for sw in path:
                         self.writeFlowRules(sw, new_flow)
                         self.writeFlowRules(sw, new_flow_rev)
@@ -386,6 +502,9 @@ class Controller(object):
                         self.map_flow_retrans[new_flow_rev.flow_id] = (0, False)
 
                     sock.sendto("{}-{}".format(new_flow.flow_id, new_flow), address)
+                    self.remove_proactive_rule(new_flow)
+
+                    
                 else:
                     print("Invalid flow, not installed")
                     logging.debug("Invalid flow, not installed")
@@ -626,6 +745,6 @@ if __name__ == '__main__':
         parser.print_help()
         print("\nBMv2 JSON file not found: %s\nHave you run 'make'?" % args.bmv2_json)
         parser.exit(1)
-
-    controller = Controller("172.0.10.2",3000, args.p4info, args.bmv2_json)
+    backup = {"10.0.2.2" : "10.0.2.3"}
+    controller = Controller("172.0.10.2", 3000, backup, args.p4info, args.bmv2_json)
     controller.run()

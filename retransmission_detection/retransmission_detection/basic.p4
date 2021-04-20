@@ -214,8 +214,6 @@ control MyIngress(inout headers hdr,
         standard_metadata.egress_spec = port;
     }
 
-
-    
     action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
         /* TODO: fill out code in action body */
 	    standard_metadata.egress_spec = port;
@@ -224,6 +222,14 @@ control MyIngress(inout headers hdr,
 	    hdr.ethernet.dstAddr = dstAddr;
 	    hdr.ethernet.srcAddr = tmp;
 	    hdr.ipv4.ttl = hdr.ipv4.ttl-1;
+    }
+
+    action clone_for_ids() {
+        clone(CloneType.I2E, I2E_CLONE_SESSION_ID);
+    }
+
+    action do_nothing(){
+        //Do nothing
     }
     
     table ipv4_lpm {
@@ -339,31 +345,64 @@ control MyIngress(inout headers hdr,
         size = 1024;
         default_action = drop();
     }
+
+    table backup_init_flow_exact {
+        key = {
+            hdr.ipv4.srcAddr: exact;
+            hdr.ipv4.dstAddr: exact;
+            hdr.tcp.dstPort: exact;
+        }
+        actions = {
+            NoAction;
+            clone_for_ids;
+            do_nothing;
+        }
+        size = 1024;
+        default_action = NoAction();
+    }
+
+    table backup_flow_exact {
+        key = {
+            hdr.ipv4.dstAddr: exact;
+            hdr.ipv4.srcAddr: exact;
+            hdr.tcp.srcPort: exact;
+        }
+        actions = {
+            NoAction;
+            do_nothing;
+        }
+        size = 1024;
+        default_action = NoAction();
+    }
     
     apply {
+   
         /* TODO: fix ingress control logic
          *  - ipv4_lpm should be applied only when IPv4 header is valid
          */
+        if (hdr.ipv4.isValid()){
+            ipv4_lpm.apply();     
+        }
+        
         if (IS_I2E_CLONE(standard_metadata)){
             clone_exact.apply();
             srtag_exact.apply();
 
+        } else if (backup_init_flow_exact.apply().hit ||
+            backup_flow_exact.apply().hit){
         } else if (!(ids_verification.apply().hit)){
-            if (hdr.ethernet.etherType == TYPE_SRTAG){
-                srtag_exact.apply();
-            } else if (hdr.ethernet.etherType == TYPE_SRTAGIDS){
-                ids_clear.apply();
-            } else if (hdr.ipv4.isValid()){
-                ipv4_lpm.apply();
-		        if(hdr.tcp.isValid()){
-		            if (flow_exact.apply().hit) {
-                        metaRetrans_exact.apply();
-                        metaTermination_exact.apply();
-                    } else {
-                        srtag_exact.apply(); 
-                    }
-                }
-            }
+                  if (hdr.ethernet.etherType == TYPE_SRTAG){
+                      srtag_exact.apply();
+                  } else if (hdr.ethernet.etherType == TYPE_SRTAGIDS){
+                      ids_clear.apply();
+                  } else if(hdr.tcp.isValid()){
+		                  if (flow_exact.apply().hit) {
+                              metaRetrans_exact.apply();
+                              metaTermination_exact.apply();
+                          } else {
+                              srtag_exact.apply(); 
+                          }
+                  }
         }
    }
 }
