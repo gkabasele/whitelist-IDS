@@ -2,9 +2,9 @@
 #include <core.p4>
 #include <v1model.p4>
 
-const bit<16> TYPE_SRTAG = 0x1212;
-const bit<16> TYPE_SRTAGIDS = 0x1213;
 const bit<16> TYPE_IPV4 = 0x800;
+const bit<8> TYPE_SRTAG = 0xC8; //200
+const bit<8> TYPE_IDSTAG = 0xC9; //201
 const bit<8>  TYPE_TCP = 0x06;
 
 const bit<32> BMV2_V1_MODEL_INSTANCE_TYPE_INGRESS_CLONE=1;
@@ -30,9 +30,16 @@ header ethernet_t {
 }
 
 header srtag_t {
-    bit<16> proto_id;
-    bit<16> dst_id;
+    bit<32> origAddr;    // original destination
+    bit<16> switch_id;  // id of the switch causing redirection
+    bit<8>  proto;      // original transport protocol
+    bit<8>  padding;    //padding
  }
+
+header idstag_t {
+    bit<64> val;        // value set by the IDS to specify that the packet has been inspected
+    bit<8> proto;       // original transport protocol
+}
 
 header ipv4_t {
     bit<4>    version;
@@ -47,6 +54,8 @@ header ipv4_t {
     bit<16>   hdrChecksum;
     ip4Addr_t srcAddr;
     ip4Addr_t dstAddr;
+    // options
+    // lenght : 4 * ihl;
 }
 
 header tcp_t {
@@ -72,11 +81,13 @@ header tcp_t {
 struct metadata {
     bit<1> isRetrans;
     bit<1> isTerminated;
+    bit<1> markForIDS; // flag to identify miss flow
     /* empty */
 }
 
 struct headers {
     ethernet_t   ethernet;
+    idstag_t     idstag;
     srtag_t      srtag;
     ipv4_t       ipv4;
 	tcp_t		 tcp;
@@ -99,27 +110,35 @@ parser MyParser(packet_in packet,
 		packet.extract(hdr.ethernet);
 		transition select(hdr.ethernet.etherType) {
 	    	TYPE_IPV4: parse_ipv4;
-            TYPE_SRTAG: parse_ipv4;
-            TYPE_SRTAGIDS: parse_ipv4;
         	default: accept;
 		}
-    }
-
-    state parse_srtag {
-        packet.extract(hdr.srtag);
-        transition select(hdr.srtag.proto_id) {
-            TYPE_IPV4: parse_ipv4;
-            default: accept;
-        }
-
     }
 
     state parse_ipv4 {
 		packet.extract(hdr.ipv4);
 		transition select(hdr.ipv4.protocol) {
 			TYPE_TCP: parse_tcp;
+            TYPE_SRTAG: parse_srtag;
+            TYPE_IDSTAG: parse_idstag;
 			default: accept;
 		}
+    }
+
+
+    state parse_srtag {
+        packet.extract(hdr.srtag);
+        transition select(hdr.srtag.proto) {
+            TYPE_TCP: parse_tcp;
+            default: accept;
+        }
+    }
+
+    state parse_idstag {
+        packet.extract(hdr.idstag);
+        transition select(hdr.idstag.proto){
+            TYPE_TCP: parse_tcp;
+            default: accept;
+        }
     }
 
 	state parse_tcp {
@@ -192,12 +211,48 @@ control MyIngress(inout headers hdr,
         meta.isTerminated = 0;
     }
 
-    action srtag_forward(egressSpec_t port) {
-        standard_metadata.egress_spec = port;
+    action mark_for_ids(){
+        meta.markForIDS = 1;
     }
 
-    action change_to_srtag() {
-        hdr.ethernet.etherType = TYPE_SRTAG;
+    action add_miss_tag(bit<16> switch_id, bit<32> ids_addr, egressSpec_t port) {
+        hdr.srtag.switch_id = switch_id;
+        hdr.srtag.origAddr = hdr.ipv4.dstAddr;
+        hdr.srtag.proto = hdr.ipv4.protocol;
+        hdr.srtag.padding = 0x0000;
+        
+        // increment length by the size of the tag
+        hdr.ipv4.protocol = TYPE_SRTAG;
+        hdr.ipv4.totalLen = hdr.ipv4.totalLen + 8;
+        hdr.ipv4.dstAddr = ids_addr;
+
+        standard_metadata.egress_spec = port; 
+
+        //Adding the header is done in the deparser, you need to set valid first
+        hdr.srtag.setValid();
+        meta.markForIDS = 0;
+    }
+
+    action add_ids_tag( bit<64> val){
+        hdr.idstag.proto = hdr.ipv4.protocol;
+        hdr.idstag.val = val;
+        hdr.ipv4.protocol  = TYPE_IDSTAG;
+        hdr.ipv4.totalLen = hdr.ipv4.totalLen + 9;
+        hdr.idstag.setValid();
+    }
+
+    action remove_ids_tag(){
+        hdr.idstag.proto = hdr.ipv4.protocol;
+        hdr.ipv4.totalLen = hdr.ipv4.totalLen - 9;
+        hdr.idstag.setInvalid();
+    }
+
+    action remove_miss_tag(egressSpec_t port){
+        hdr.ipv4.dstAddr = hdr.srtag.origAddr;
+        hdr.ipv4.protocol = hdr.srtag.proto;
+        hdr.ipv4.totalLen = hdr.ipv4.totalLen - 8;
+        standard_metadata.egress_spec = port; 
+        hdr.srtag.setInvalid();
     }
 
     action change_to_ip_and_forward(macAddr_t dstAddr, egressSpec_t port){
@@ -207,11 +262,6 @@ control MyIngress(inout headers hdr,
         tmp = hdr.ethernet.dstAddr;
         hdr.ethernet.dstAddr = dstAddr;
         hdr.ethernet.srcAddr = tmp;
-    }
-
-    action change_to_srtag_ids(egressSpec_t port) {
-        hdr.ethernet.etherType = TYPE_SRTAGIDS;
-        standard_metadata.egress_spec = port;
     }
 
     action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
@@ -256,32 +306,37 @@ control MyIngress(inout headers hdr,
 		actions = {
 			update_stats;
 			drop;
-            change_to_srtag;
+            mark_for_ids;
+            //change_to_srtag;
 		}
 		size = 1024;
-		default_action = change_to_srtag();
+		default_action = mark_for_ids();
 	}
 
     table srtag_exact {
         key = {
-            hdr.ethernet.etherType: exact;
+            hdr.ipv4.protocol: exact;  
+            hdr.ipv4.dstAddr: exact; // remove tag if the swith is close to destination
         }
         actions = {
-            srtag_forward;
-            change_to_ip_and_forward;
+            //srtag_forward;
+            remove_miss_tag;
+            //change_to_ip_and_forward;
             drop;
+            NoAction;
         }
         size = 1024;
         default_action = drop();
     }
 
-    table ids_verification {
+    table ids_verification { // Swith connected to IDS which add nonce
         key = {
             standard_metadata.ingress_port: exact;
-            hdr.ipv4.dstAddr : exact;
+            //hdr.ipv4.dstAddr : exact;
         }
         actions = {
-            change_to_srtag_ids;
+            add_ids_tag;
+            //change_to_srtag_ids;
             NoAction;
         }
         size = 16;
@@ -290,17 +345,30 @@ control MyIngress(inout headers hdr,
 
     table ids_clear{
         key = {
-            hdr.ethernet.etherType: exact;
-            hdr.ipv4.dstAddr: exact;
+            hdr.ipv4.protocol: exact;
+            hdr.idstag.val: exact;
+            hdr.ipv4.dstAddr: exact;// remove tag if the swith is close to destination
+            //standard_metadata.ingress_port: exact;
         }
         actions = {
-            change_to_ip_and_forward; 
+            remove_ids_tag; 
+            NoAction;
             drop;
         }
         size = 1024;
         default_action = drop();
     }
 
+    table marked_flows{
+        key = {
+            meta.markForIDS: exact;
+        }
+        actions = {
+            NoAction;
+            add_miss_tag;
+        }
+        default_action = NoAction();
+    }
 
     table metaRetrans_exact {
         key = {
@@ -333,14 +401,15 @@ control MyIngress(inout headers hdr,
         }
         default_action = NoAction();
     }
-
+    // Special packets are cloned to keep track of connection 
     table clone_exact {
         key = {
             hdr.ipv4.srcAddr : exact;
         }
         actions = {
            drop;
-           change_to_srtag; 
+           //change_to_srtag; 
+            add_miss_tag;
         }
         size = 1024;
         default_action = drop();
@@ -380,30 +449,28 @@ control MyIngress(inout headers hdr,
         /* TODO: fix ingress control logic
          *  - ipv4_lpm should be applied only when IPv4 header is valid
          */
-        if (hdr.ipv4.isValid()){
-            ipv4_lpm.apply();     
-        }
-        
         if (IS_I2E_CLONE(standard_metadata)){
             clone_exact.apply();
-            srtag_exact.apply();
 
         } else if (backup_init_flow_exact.apply().hit ||
             backup_flow_exact.apply().hit){
-                //NOTHING TO DO
+            // PASS
         } else if (!(ids_verification.apply().hit)){
-                  if (hdr.ethernet.etherType == TYPE_SRTAG){
-                      srtag_exact.apply();
-                  } else if (hdr.ethernet.etherType == TYPE_SRTAGIDS){
+                  if (hdr.ipv4.protocol == TYPE_IDSTAG){
                       ids_clear.apply();
+                  } else if (hdr.ipv4.protocol == TYPE_SRTAG){
+                      srtag_exact.apply();
                   } else if(hdr.tcp.isValid()){
 		                  if (flow_exact.apply().hit) {
                               metaRetrans_exact.apply();
                               metaTermination_exact.apply();
-                          } else {
-                              srtag_exact.apply(); 
                           }
+                          marked_flows.apply();
                   }
+        }
+
+        if (hdr.ipv4.isValid()){
+            ipv4_lpm.apply();     
         }
    }
 }
@@ -452,6 +519,8 @@ control MyDeparser(packet_out packet, in headers hdr) {
         /* TODO: add deparser logic */
 	packet.emit(hdr.ethernet);
 	packet.emit(hdr.ipv4);
+    packet.emit(hdr.srtag);
+    packet.emit(hdr.idstag); // emit serializes header if valid
 	packet.emit(hdr.tcp);
     }
 }
