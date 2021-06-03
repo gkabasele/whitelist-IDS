@@ -82,6 +82,7 @@ struct metadata {
     bit<1> isRetrans;
     bit<1> isTerminated;
     bit<1> markForIDS; // flag to identify miss flow
+    bit<1> ignoreIP;
     /* empty */
 }
 
@@ -216,10 +217,14 @@ control MyIngress(inout headers hdr,
     }
 
     action add_miss_tag(bit<16> switch_id, bit<32> ids_addr, egressSpec_t port) {
+
+        //Adding the header is done in the deparser, you need to set valid first
+        hdr.srtag.setValid();
+
         hdr.srtag.switch_id = switch_id;
         hdr.srtag.origAddr = hdr.ipv4.dstAddr;
         hdr.srtag.proto = hdr.ipv4.protocol;
-        hdr.srtag.padding = 0x0000;
+        hdr.srtag.padding = 0;
         
         // increment length by the size of the tag
         hdr.ipv4.protocol = TYPE_SRTAG;
@@ -227,18 +232,15 @@ control MyIngress(inout headers hdr,
         hdr.ipv4.dstAddr = ids_addr;
 
         standard_metadata.egress_spec = port; 
-
-        //Adding the header is done in the deparser, you need to set valid first
-        hdr.srtag.setValid();
         meta.markForIDS = 0;
     }
 
     action add_ids_tag( bit<64> val){
+        hdr.idstag.setValid();
         hdr.idstag.proto = hdr.ipv4.protocol;
         hdr.idstag.val = val;
         hdr.ipv4.protocol  = TYPE_IDSTAG;
         hdr.ipv4.totalLen = hdr.ipv4.totalLen + 9;
-        hdr.idstag.setValid();
     }
 
     action remove_ids_tag(){
@@ -247,11 +249,15 @@ control MyIngress(inout headers hdr,
         hdr.idstag.setInvalid();
     }
 
-    action remove_miss_tag(egressSpec_t port){
+    action remove_miss_tag(macAddr_t dstAddr, egressSpec_t port){
+        meta.ignoreIP = 1;
         hdr.ipv4.dstAddr = hdr.srtag.origAddr;
         hdr.ipv4.protocol = hdr.srtag.proto;
         hdr.ipv4.totalLen = hdr.ipv4.totalLen - 8;
         standard_metadata.egress_spec = port; 
+        macAddr_t tmp = hdr.ethernet.dstAddr;
+        hdr.ethernet.srcAddr = tmp; 
+        hdr.ethernet.dstAddr = dstAddr;
         hdr.srtag.setInvalid();
     }
 
@@ -266,12 +272,14 @@ control MyIngress(inout headers hdr,
 
     action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
         /* TODO: fill out code in action body */
-	    standard_metadata.egress_spec = port;
-	    macAddr_t tmp;
-	    tmp = hdr.ethernet.dstAddr;
-	    hdr.ethernet.dstAddr = dstAddr;
-	    hdr.ethernet.srcAddr = tmp;
+        if (meta.ignoreIP == 0)
+            standard_metadata.egress_spec = port;
+	        macAddr_t tmp;
+	        tmp = hdr.ethernet.dstAddr;
+	        hdr.ethernet.dstAddr = dstAddr;
+	        hdr.ethernet.srcAddr = tmp;
 	    hdr.ipv4.ttl = hdr.ipv4.ttl-1;
+        meta.ignoreIP = 0;
     }
 
     action clone_for_ids() {

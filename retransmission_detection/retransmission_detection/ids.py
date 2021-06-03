@@ -2,6 +2,7 @@ import socket
 import sys
 import pickle
 import threading
+import copy
 import logging
 from netfilterqueue import NetfilterQueue
 
@@ -9,6 +10,16 @@ from mycontroller import Flow
 
 from scapy.all import *
 
+class SRTag(Packet):
+    name = "SRTag"
+    fields_desc=[ IPField("dst", None),
+                  ShortField("identifier", None),
+                  ByteField("protocol", None),
+                  ByteField("reason", None)
+                ]
+
+
+SRTAG = "SRTag"
 flows_requested = set()
 flows = set()
 flows_mul_req = dict()
@@ -18,6 +29,7 @@ lock = threading.Lock()
 def is_new_flow(flow, flow_rev):
     return flow not in flows_requested and flow_rev not in flows_requested
 
+# A flow that have been seen multiple time and has not been accepted
 def is_attempting_flow(flow, flow_rev):
     return ((flow not in flows_mul_req or flows_mul_req[flow] < 3) 
             and (flow_rev not in flows_mul_req or flows_mul_req[flow_rev] < 3))
@@ -97,9 +109,21 @@ def test_flow(saddr, sport, daddr, dport, proto):
     finally:
         sock.close()
 
+def strip_tag(packet):
+    orig_proto = packet[SRTAG].protocol
+    orig_daddr = packet[SRTAG].dst 
+    payload = packet.getlayer(SRTAG).payload
+    packet.getlayer(IP).remove_payload()
+    packet[IP].proto = orig_proto 
+    packet[IP].dst = orig_addr
+    pacekt[IP].chksum = 0 # with 0 the checksum is recomputed
+    new_p = Ether()/packet[IP]/payload
+    return new_p
+
 def send_request(packet):
-    pkt = IP(packet.get_payload())
     print(packet)
+    pkt = strip_tag(IP(packet.get_payload()))
+    print(pkt)
     logging.debug(packet)
     drop = False
 
@@ -114,10 +138,13 @@ def send_request(packet):
         t = threading.Thread(target=threading_sending, args=("172.0.10.2", 3000, flow, lock))
         t.start()
         drop = flow in flows
-    if not drop:
-        packet.accept()
-    else:
         packet.drop()
+    if not drop:
+        #packet.accept()
+        sendp(pkt,iface="eth0") 
+    else:
+        pass
+        #packet.drop()
 
 f1 = Flow("10.0.1.1", 3333, "10.0.2.2", 1234, 6)
 f2 = Flow("10.0.2.2", 1234, "10.0.1.1", 3333, 6)
