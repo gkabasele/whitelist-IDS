@@ -76,8 +76,8 @@ def threading_sending(ip, port, flow, lock):
         finally:
             sock.close()
     else:
-            print("Flow {} already exists".format(flow))
-            logging.debug("Flow {} already exists".format(flow))
+            print("Flow {} has already been requested".format(flow))
+            logging.debug("Flow {} has already been requested".format(flow))
     lock.release()
 
 
@@ -122,8 +122,7 @@ def strip_tag(packet):
 
 def send_request(packet):
     print(packet)
-    pkt = strip_tag(IP(packet.get_payload()))
-    print(pkt)
+    pkt = IP(packet.get_payload())
     logging.debug(packet)
     drop = False
 
@@ -137,14 +136,12 @@ def send_request(packet):
         flow_rev = Flow(daddr, dport, saddr, sport, proto)
         t = threading.Thread(target=threading_sending, args=("172.0.10.2", 3000, flow, lock))
         t.start()
+        t.join()
         drop = flow in flows
-        packet.drop()
     if not drop:
-        #packet.accept()
-        sendp(pkt,iface="eth0") 
+        packet.accept()
     else:
-        pass
-        #packet.drop()
+        packet.drop()
 
 f1 = Flow("10.0.1.1", 3333, "10.0.2.2", 1234, 6)
 f2 = Flow("10.0.2.2", 1234, "10.0.1.1", 3333, 6)

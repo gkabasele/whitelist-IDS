@@ -37,8 +37,9 @@ header srtag_t {
  }
 
 header idstag_t {
-    bit<64> val;        // value set by the IDS to specify that the packet has been inspected
+    bit<16> val;        // value set by the IDS to specify that the packet has been inspected
     bit<8> proto;       // original transport protocol
+    bit<8> padding;
 }
 
 header ipv4_t {
@@ -235,17 +236,18 @@ control MyIngress(inout headers hdr,
         meta.markForIDS = 0;
     }
 
-    action add_ids_tag( bit<64> val){
+    action add_ids_tag( bit<16> val){
         hdr.idstag.setValid();
         hdr.idstag.proto = hdr.ipv4.protocol;
         hdr.idstag.val = val;
+        hdr.idstag.padding = 0;
         hdr.ipv4.protocol  = TYPE_IDSTAG;
-        hdr.ipv4.totalLen = hdr.ipv4.totalLen + 9;
+        hdr.ipv4.totalLen = hdr.ipv4.totalLen + 4;
     }
 
     action remove_ids_tag(){
-        hdr.idstag.proto = hdr.ipv4.protocol;
-        hdr.ipv4.totalLen = hdr.ipv4.totalLen - 9;
+        hdr.ipv4.protocol = hdr.idstag.proto;
+        hdr.ipv4.totalLen = hdr.ipv4.totalLen - 4;
         hdr.idstag.setInvalid();
     }
 
@@ -272,12 +274,13 @@ control MyIngress(inout headers hdr,
 
     action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
         /* TODO: fill out code in action body */
-        if (meta.ignoreIP == 0)
+        if (meta.ignoreIP == 0){
             standard_metadata.egress_spec = port;
 	        macAddr_t tmp;
 	        tmp = hdr.ethernet.dstAddr;
 	        hdr.ethernet.dstAddr = dstAddr;
 	        hdr.ethernet.srcAddr = tmp;
+        }
 	    hdr.ipv4.ttl = hdr.ipv4.ttl-1;
         meta.ignoreIP = 0;
     }
@@ -409,19 +412,7 @@ control MyIngress(inout headers hdr,
         }
         default_action = NoAction();
     }
-    // Special packets are cloned to keep track of connection 
-    table clone_exact {
-        key = {
-            hdr.ipv4.srcAddr : exact;
-        }
-        actions = {
-           drop;
-           //change_to_srtag; 
-            add_miss_tag;
-        }
-        size = 1024;
-        default_action = drop();
-    }
+    
 
     table backup_init_flow_exact {
         key = {
@@ -457,11 +448,12 @@ control MyIngress(inout headers hdr,
         /* TODO: fix ingress control logic
          *  - ipv4_lpm should be applied only when IPv4 header is valid
          */
-        if (IS_I2E_CLONE(standard_metadata)){
-            clone_exact.apply();
-
-        } else if (backup_init_flow_exact.apply().hit ||
+        
+        if (backup_init_flow_exact.apply().hit ||
             backup_flow_exact.apply().hit){
+            if(hdr.ipv4.protocol == TYPE_IDSTAG){
+                ids_clear.apply(); 
+            }
             // PASS
         } else if (!(ids_verification.apply().hit)){
                   if (hdr.ipv4.protocol == TYPE_IDSTAG){
@@ -490,7 +482,51 @@ control MyIngress(inout headers hdr,
 control MyEgress(inout headers hdr,
                  inout metadata meta,
                  inout standard_metadata_t standard_metadata) {
-    apply {  }
+
+    action add_miss_tag(bit<16> switch_id, bit<32> ids_addr, egressSpec_t port) {
+
+        //Adding the header is done in the deparser, you need to set valid first
+        hdr.srtag.setValid();
+
+        hdr.srtag.switch_id = switch_id;
+        hdr.srtag.origAddr = hdr.ipv4.dstAddr;
+        hdr.srtag.proto = hdr.ipv4.protocol;
+        hdr.srtag.padding = 0;
+        
+        // increment length by the size of the tag
+        hdr.ipv4.protocol = TYPE_SRTAG;
+        hdr.ipv4.totalLen = hdr.ipv4.totalLen + 8;
+        hdr.ipv4.dstAddr = ids_addr;
+
+        standard_metadata.egress_spec = port; 
+        meta.markForIDS = 0;
+    }
+
+    action drop() {
+        mark_to_drop(standard_metadata);
+    }
+
+
+    // Special packets are cloned to keep track of connection 
+    table clone_exact {
+        key = {
+            hdr.ipv4.srcAddr : exact;
+        }
+        actions = {
+           drop;
+           //change_to_srtag; 
+           add_miss_tag;
+        }
+        size = 1024;
+        default_action = drop();
+    }
+
+
+    apply { 
+        if (IS_I2E_CLONE(standard_metadata)){
+            clone_exact.apply();
+        }
+    }
 }
 
 /*************************************************************************

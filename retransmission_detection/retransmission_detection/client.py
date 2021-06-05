@@ -66,10 +66,14 @@ if __name__ == "__main__":
     parser.add_argument("--dport", action="store", type=int, default=DPORT, dest="dport")
     parser.add_argument("--sport", action="store", type=int, default=SPORT, dest="sport")
     parser.add_argument("--server", action="store", type=str, default=HOST, dest="server")
-    parser.add_argument("--bserver", action="store", type=str, default=BACKUP_HOST, dest="bserver")
-    parser.add_argument("--dumbport", action="store", type=int, default=DUMBPORT, dest="dumb_port")
-    parser.add_argument("--crash", action="store", type=int, default=3, dest="crash")
-    parser.add_argument("--nb", action="store", type=int, default=15, dest="nb_pkt")
+    parser.add_argument("--bserver", action="store", type=str, default=BACKUP_HOST, dest="bserver",
+                        help="ip of the backup server")
+    parser.add_argument("--dumbport", action="store", type=int, default=DUMBPORT, dest="dumb_port",
+                        help="non whitelisted port")
+    parser.add_argument("--crash", action="store", type=int, default=3, dest="crash",
+                        help="number of retrans before calling a crash")
+    parser.add_argument("--nb", action="store", type=int, default=15, dest="nb_pkt",
+                        help="number of packet to send")
 
     logging.basicConfig(filename="logs/client.log", level=logging.DEBUG)
     args = parser.parse_args()

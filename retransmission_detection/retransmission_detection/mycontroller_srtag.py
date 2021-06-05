@@ -10,6 +10,7 @@ import sys
 from time import sleep
 import pdb
 import uuid
+import random
 
 # Import P4Runtime lib from parent utils dir
 # Probably there's a better way of doing this.
@@ -34,6 +35,8 @@ S3_S2_PORT = 3
 
 SRTAG_TYPE = 0xC8
 IDSTAG_TYPE = 0xC9
+
+SECRET = random.randint(0, (2**16)-1)
 
 class Flow(object):
 
@@ -208,11 +211,11 @@ class Controller(object):
 
     def writeCloneRules(self, sw, sw_id, dst_addr, out_port, ip_addr): 
         table_entry = self.p4info_helper.buildTableEntry(
-        table_name="MyIngress.clone_exact",
+        table_name="MyEgress.clone_exact",
         match_fields={
             "hdr.ipv4.srcAddr": ip_addr
         },
-        action_name="MyIngress.add_miss_tag",
+        action_name="MyEgress.add_miss_tag",
         action_params={
             "switch_id": sw_id,
             "ids_addr": dst_addr,
@@ -289,7 +292,7 @@ class Controller(object):
             "hdr.idstag.val": val,
             "hdr.ipv4.dstAddr": dst_ip 
         },
-        action_name="MyIngress.NoAction",
+        action_name="NoAction",
         action_params={
         })
         sw.WriteTableEntry(table_entry)
@@ -501,6 +504,18 @@ class Controller(object):
                 new_flow = pickle.loads(data)
                 print("Request for new flow: {}".format(new_flow))
                 logging.debug("Request for new flow: {}".format(new_flow))
+                """
+                if self.sw_ids is not None:
+                    nonce = random.randint(0, (2**16)-1) 
+                    print("Generating nonce: {}".format(nonce))
+                    logging.debug("Generating nonce: {}".format(nonce))
+                    self.writeIDSVerificationRules(self.sw_ids,
+                                                   SWITCH_TO_HOST_PORT,
+                                                   nonce)
+                else:
+                    raise ValueError("The switch IDS is not initialized")
+                """
+
 
                 if new_flow in self.flows_id:
                     print("Flow already exist")
@@ -531,18 +546,15 @@ class Controller(object):
                     print("Path for new flow {}".format([sw.name for sw in path]))
                     logging.debug("Path for new flow {}".format([sw.name for sw in path]))
                     
-                    if self.sw_ids is not None:
-                        nonce = uuid.uuid1().int >> 64
-                        self.writeIDSVerificationRules(self.sw_ids, 0, nonce)
-                    else:
-                        raise ValueError("The switch IDS is not initialized")
-                    
+                                        
 
                     for i, sw in enumerate(path):
+                        """
                         if i != len(path)-1:
                             sw.writeIDSClearRules(sw, IDSTAG_TYPE, new_flow.daddr, nonce)
                         else:
                             sw.writeLastIDSClearRules(sw, IDSTAG_TYPE, new_flow.daddr, nonce) 
+                        """
 
                         self.writeFlowRules(sw, new_flow)
                         self.writeFlowRules(sw, new_flow_rev)
@@ -554,6 +566,8 @@ class Controller(object):
                         self.map_flow_retrans[new_flow_rev.flow_id] = (0, False)
 
                     sock.sendto("{}-{}".format(new_flow.flow_id, new_flow), address)
+
+                    
                     self.remove_proactive_rule(new_flow)
 
                     
@@ -683,8 +697,11 @@ class Controller(object):
             self.writeIPForwardRules(s1, h3_mac, h3_ip, S1_S2_PORT)
             self.writeIPForwardRules(s1, ids_mac, ids_ip, S1_S3_PORT)
 
-            #self.writeIDSClearRules(s1, SRTAGIDS_TYPE, h1_ip,
-            #                        h1_mac, SWITCH_TO_HOST_PORT)
+            
+            self.writeIDSClearRules(s1, IDSTAG_TYPE, h2_ip, SECRET) 
+            self.writeIDSClearRules(s1, IDSTAG_TYPE, h3_ip, SECRET) 
+            self.writeLastIDSClearRules(s1, IDSTAG_TYPE, h1_ip,
+                                        SECRET)
             self.writeMarkFlowRules(s1, s1.device_id, ids_ip, S1_S3_PORT) 
             self.writeMetaRules(s1, f1)
             self.writeMetaRules(s1, f2)
@@ -701,11 +718,14 @@ class Controller(object):
             self.writeIPForwardRules(s2, h2_mac, h2_ip, SWITCH_TO_HOST_PORT)
             self.writeIPForwardRules(s2, h3_mac, h3_ip, SWITCH_TO_HOST_PORT_MUL)
             self.writeIPForwardRules(s2, ids_mac, ids_ip, S2_S3_PORT)
+
+            self.writeIDSClearRules(s2, IDSTAG_TYPE, h1_ip, SECRET) 
+
     
-            #self.writeIDSClearRules(s2, SRTAGIDS_TYPE, h2_ip,
-            #                        h2_mac, SWITCH_TO_HOST_PORT)
-            #self.writeIDSClearRules(s2, SRTAGIDS_TYPE, h3_ip,
-            #                        h3_mac, SWITCH_TO_HOST_PORT_MUL)
+            self.writeLastIDSClearRules(s2, IDSTAG_TYPE, h2_ip,
+                                    SECRET)
+            self.writeLastIDSClearRules(s2, IDSTAG_TYPE, h3_ip,
+                                    SECRET)
 
             
             self.writeMarkFlowRules(s2, s2.device_id, ids_ip, S2_S3_PORT) 
@@ -725,6 +745,8 @@ class Controller(object):
             self.writeRedirectRules(s2, SRTAG_TYPE, ids_ip) 
 
             self.writeLastRedirectRules(s3, SRTAG_TYPE, ids_ip, ids_mac, SWITCH_TO_HOST_PORT) 
+
+            self.writeIDSVerificationRules(s3, SWITCH_TO_HOST_PORT, SECRET) 
 
             #self.writeIDSVerificationRules(s3, h1_ip, SWITCH_TO_HOST_PORT, S3_S1_PORT)
             #self.writeIDSVerificationRules(s3, h2_ip, SWITCH_TO_HOST_PORT, S3_S2_PORT)
