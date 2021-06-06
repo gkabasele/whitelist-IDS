@@ -352,7 +352,7 @@ class ExerciseRunner:
         h.cmd("tcpdump -i eth0 -w client.pcap&")
 
     def run_controller(self):
-        os.system("./mycontroller.py&")
+        os.system("./mycontroller_srtag.py&")
 
 
     def do_net_cli(self):

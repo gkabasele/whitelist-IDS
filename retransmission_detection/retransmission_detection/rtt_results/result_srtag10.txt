@@ -1,0 +1,15 @@
+	host a:        10.0.2.2:1234
+	host b:        10.0.1.1:3333
+     RTT min:                10.1 ms        RTT min:                54.7 ms   
+     RTT max:                55.3 ms        RTT max:               142.9 ms   
+     RTT avg:                13.8 ms        RTT avg:                82.7 ms   
+	host c:        10.0.1.1:58348
+	host d:        10.0.2.3:1234
+     RTT min:                53.8 ms        RTT min:                10.1 ms   
+     RTT max:               122.7 ms        RTT max:                28.3 ms   
+     RTT avg:                73.6 ms        RTT avg:                11.8 ms   
+	host e:        10.0.1.1:35022
+	host f:        10.0.2.3:1235
+     RTT min:               132.6 ms        RTT min:                10.1 ms   
+     RTT max:               250.1 ms        RTT max:                65.9 ms   
+     RTT avg:               169.4 ms        RTT avg:                15.1 ms   

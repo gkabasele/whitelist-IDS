@@ -23,6 +23,10 @@ SRTAG = "SRTag"
 flows_requested = set()
 flows = set()
 flows_mul_req = dict()
+flows_backup = set()
+backups = {"10.0.2.2" : "10.0.2.3"}
+server_port = set()
+server_port.add(1234)
 
 lock = threading.Lock()
 
@@ -59,6 +63,15 @@ def threading_sending(ip, port, flow, lock):
             logging.debug("Waiting response")
             data, address = sock.recvfrom(4096)
             if data != "-1":
+                if flow in flows:
+                    try:
+                        flows_backup.add((flow.saddr,
+                                      backups[flow.daddr],
+                                      flow.dport))    
+                    except KeyError:
+                        print("No backup for {}".format(flow.daddr))
+                        logging.debug("No backup for {}".format(flow.daddr))
+
                 print("Flow created with id : {}".format(data))
                 logging.debug("Flow created with id : {}".format(data))
                 flows_requested.add(flow)    
@@ -138,7 +151,13 @@ def send_request(packet):
         t.start()
         t.join()
         drop = flow in flows
-    if not drop:
+        try:
+            in_backups = ((flow.saddr, backups[flow.daddr],
+                         flow.dport) in flows_backup)
+        except KeyError:
+            in_backups = False
+
+    if not drop and not in_backups :
         packet.accept()
     else:
         packet.drop()

@@ -1,0 +1,8 @@
+	host a:        10.0.1.1:3333
+	host b:        10.0.2.2:1234
+     RTT min:                 0.0 ms        RTT min:                 0.0 ms   
+     RTT max:                 0.0 ms        RTT max:                 0.0 ms   
+     RTT avg:                 0.0 ms        RTT avg:                 0.0 ms   
+     RTT min (last):         59.8 ms        RTT min (last):          0.0 ms   
+     RTT max (last):         59.8 ms        RTT max (last):          0.0 ms   
+     RTT avg (last):         59.8 ms        RTT avg (last):          0.0 ms   
