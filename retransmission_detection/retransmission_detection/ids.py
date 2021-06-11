@@ -149,7 +149,7 @@ def send_request(packet):
         flow_rev = Flow(daddr, dport, saddr, sport, proto)
         t = threading.Thread(target=threading_sending, args=("172.0.10.2", 3000, flow, lock))
         t.start()
-        t.join()
+        #t.join()
         drop = flow in flows
         try:
             in_backups = ((flow.saddr, backups[flow.daddr],

@@ -79,7 +79,8 @@ class Flow(object):
 
 class Controller(object):
 
-    def __init__(self, ip, port, backup, p4info_file_path, bmv2_file_path):
+    def __init__(self, ip, port, backup, p4info_file_path, bmv2_file_path,
+                 proactive, retrans_nbr):
 
         self.flows = dict()
         self.flows_id = dict()
@@ -97,8 +98,13 @@ class Controller(object):
         self.bmv2_file_path = bmv2_file_path
 
         self.backup = backup
+        self.proactive = proactive
+
+        self.retrans_nbr = retrans_nbr
 
         self.sw_ids = None
+
+        self.paths = dict()
 
     def create_flow(self, saddr, sport, daddr, dport, proto):
         f = Flow(saddr, sport, daddr, dport, proto, self.flow_id)
@@ -456,12 +462,22 @@ class Controller(object):
                 break
         return res
 
+    def check_if_path_known(self, src, dst):
+        path = None
+        if (src, dst)  in self.paths:
+            path = self.paths[(src, dst)]
+        elif (dst, src) in self.paths:
+            path = self.paths[(dst, src)]
+        return path 
+
     def install_proactive_rule(self, flow):
         # We install backup rule when we suspect that a flow might crash
         backup_addr = self.backup[flow.daddr]
-        start = self.topo[flow.saddr]["sw"]
-        end = self.topo[backup_addr]["sw"]
-        path = self.get_switch_path_from_flow(start, end, list())
+        path = self.check_if_path_known(flow.saddr,backup_addr)
+        if path is None:
+            start = self.topo[flow.saddr]["sw"]
+            end = self.topo[backup_addr]["sw"]
+            path = self.get_switch_path_from_flow(start, end, list())
         logging.debug("Path for adding proactive flow {}".format([sw.name for sw in path]))
         #TODO get all connection to the crash server
         print("Path for adding proactive flow {}".format([sw.name for sw in path]))
@@ -475,9 +491,11 @@ class Controller(object):
             self.writeBackUpRules(sw, backup_addr, flow.saddr, flow.dport) 
 
     def remove_proactive_rule(self, flow):
-        start = self.topo[flow.saddr]["sw"]
-        end = self.topo[flow.daddr]["sw"]
-        path = self.get_switch_path_from_flow(start, end, list())
+        path = self.check_if_path_known(flow.saddr, flow.daddr)
+        if path is None:
+            start = self.topo[flow.saddr]["sw"]
+            end = self.topo[flow.daddr]["sw"]
+            path = self.get_switch_path_from_flow(start, end, list())
         logging.debug("Path for removing proactive flow {}".format([sw.name for sw in path]))
         print("Path for removing proactive flow {}".format([sw.name for sw in path]))
         # We remove the rule in the backup flow table since the flow has been added to the main
@@ -520,11 +538,13 @@ class Controller(object):
                 if new_flow in self.flows_id:
                     print("Flow already exist")
                     logging.debug("Flow already exist")
-                    #TODO Verify number of retransmission on switch
+                    #TODO Clear counter periodically
                     f = self.flows_id[new_flow]
                     f = self.flows[f]
-                    f.retrans = True
-                    self.install_proactive_rule(f)
+                    if ((self.map_flow_retrans[f.flow_id][0] >= self.retrans_nbr)
+                        and self.proactive):
+                        f.retrans = True
+                        self.install_proactive_rule(f)
                     sock.sendto("{}-{}".format(f.flow_id, new_flow), address)
 
                 elif self.verify_new_flow(new_flow): 
@@ -542,7 +562,10 @@ class Controller(object):
 
                     start = self.topo[new_flow.saddr]["sw"]
                     end = self.topo[new_flow.daddr]["sw"]
-                    path = self.get_switch_path_from_flow(start, end, list())
+                    path = self.check_if_path_known(new_flow.saddr, new_flow.daddr)
+                    if path is None:
+                        print("Passing here")
+                        path = self.get_switch_path_from_flow(start, end, list())
                     print("Path for new flow {}".format([sw.name for sw in path]))
                     logging.debug("Path for new flow {}".format([sw.name for sw in path]))
                     
@@ -565,10 +588,10 @@ class Controller(object):
                         self.map_flow_retrans[new_flow.flow_id] = (0, False)
                         self.map_flow_retrans[new_flow_rev.flow_id] = (0, False)
 
-                    sock.sendto("{}-{}".format(new_flow.flow_id, new_flow), address)
 
-                    
-                    self.remove_proactive_rule(new_flow)
+                    sock.sendto("{}-{}".format(new_flow.flow_id, new_flow), address)
+                    if self.proactive: 
+                        self.remove_proactive_rule(new_flow)
 
                     
                 else:
@@ -684,6 +707,9 @@ class Controller(object):
             logging.debug("Installed P4 Program using SetForwardingPipelineConfig on s3")
 
             self.lock.acquire()
+
+            self.paths[(h1_ip, h2_ip)] = [s1, s2]
+            self.paths[(h1_ip, h3_ip)] = [s1, s2]
     
             # Write the rules that tunnel traffic from h1 to h2
             f1 = self.create_flow(h1_ip, client_port, h2_ip, server_port, 6)
@@ -816,6 +842,12 @@ if __name__ == '__main__':
     parser.add_argument('--bmv2-json', help='BMv2 JSON file from p4c',
                         type=str, action="store", required=False,
                         default='./build/basic_srtag.json')
+    parser.add_argument('--proactive', action="store_false", required=False,
+                        dest="proactive",
+                        help="do not install proactive for retransmission")
+    parser.add_argument('--retrans-nbr', action="store", required=False,
+                        type=int, default=1, dest="retrans_nbr",
+                        help="number of retransmission before crash")
     args = parser.parse_args()
 
     if not os.path.exists(args.p4info):
@@ -827,5 +859,7 @@ if __name__ == '__main__':
         print("\nBMv2 JSON file not found: %s\nHave you run 'make'?" % args.bmv2_json)
         parser.exit(1)
     backup = {"10.0.2.2" : "10.0.2.3"}
-    controller = Controller("172.0.10.2", 3000, backup, args.p4info, args.bmv2_json)
+    controller = Controller("172.0.10.2", 3000, backup,
+                            args.p4info, args.bmv2_json,
+                            args.proactive, args.retrans_nbr)
     controller.run()
