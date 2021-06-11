@@ -1,6 +1,7 @@
 import argparse
 import os
 import pdb
+import matplotlib.pyplot as plt
 from scapy.all import *
 
 FIN = 0x01
@@ -40,25 +41,47 @@ def get_conn_time(packets, conns):
                     else:
                         conns[key] = [diff]
             
-
-def main(indir, outfile):
+def get_conn_from_dir(dirname):
     conns = dict()
 
-    for f in os.listdir(indir):
-        filename = os.path.join(indir,f)
+    for f in os.listdir(dirname):
+        filename = os.path.join(dirname,f)
         print(filename)
         packets = rdpcap(filename)
         get_conn_time(packets, conns)
 
-    print(conns)
+    return conns
 
+def main(proactive_dir,
+         no_proactive_dir,
+         outfile):
+    
+    conns_proactive = get_conn_from_dir(proactive_dir)
+    conns_no_proactive = get_conn_from_dir(no_proactive_dir)
+
+    backup_flow = ("10.0.1.1", "10.0.2.3", 1234)
+    redirected_flow = ("10.0.1.1", "10.0.2.3", 1235)
+
+    proactive_backup = conns_proactive[backup_flow]
+    no_proactive_backup = conns_no_proactive[backup_flow]
+    no_proactive_redirected = conns_no_proactive[redirected_flow]
+    
+    fig1, ax1 = plt.subplots()
+    ax1.set_title("Connection establishment time")
+    ax1.boxplot([proactive_backup, no_proactive_backup, no_proactive_redirected])
+   
+    plt.show() 
+
+    
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", type=str, action="store",
-                        dest="indir")
+    parser.add_argument("-p", type=str, action="store",
+                        dest="proactive_dir")
+    parser.add_argument("-n", type=str, action="store",
+                        dest="no_proactive_dir")
 
     parser.add_argument("-o", type=str, action="store",
                         dest="outfile")
 
     args = parser.parse_args()
-    main(args.indir, args.outfile)
+    main(args.proactive_dir, args.no_proactive_dir, args.outfile)
