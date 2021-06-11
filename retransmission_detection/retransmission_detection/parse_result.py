@@ -51,7 +51,9 @@ def main(inputdir, outputfile):
             back_up_flows_rtt.append(infos[BACKUP])
             other_flows_rtt.append(infos[OTHER])
     fig1, ax1 = plt.subplots()
-    ax1.set_title("Basic Plot")
+    ax1.set_ylabel("ms")
+    ax1.set_xlabel("Type of Flow(left:back up, right:normal)")
+    ax1.set_title("RTT average")
     ax1.boxplot([back_up_flows_rtt, other_flows_rtt])
     plt.show()
     
