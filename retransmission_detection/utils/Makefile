@@ -15,6 +15,10 @@ ifdef MANUAL
 run_args += -m 
 endif
 
+ifdef PROACTIVE
+run_args += -r
+endif
+
 source = $(wildcard *.p4)
 compiled_json := $(source:.p4=.json)
 

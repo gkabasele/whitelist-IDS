@@ -166,7 +166,8 @@ class ExerciseRunner:
 
 
     def __init__(self, topo_file, log_dir, pcap_dir,
-                       switch_json, manual, bmv2_exe='simple_switch', quiet=False):
+                       switch_json, manual, not_proactive,
+                       bmv2_exe='simple_switch', quiet=False):
         """ Initializes some attributes and reads the topology json. Does not
             actually run the exercise. Use run_exercise() for that.
 
@@ -179,10 +180,12 @@ class ExerciseRunner:
                 bmv2_exe    : string  // Path to the p4 behavioral binary
                 quiet : bool          // Enable/disable script debug messages
                 manual : bool          // Enable/disable automatic controller
+                retrans_proactive : bool  // Enable/disable proactive backup rules
         """
 
         self.quiet = quiet
         self.manual = manual
+        self.not_proactive = not_proactive
         self.logger('Reading topology file.')
         with open(topo_file, 'r') as f:
             topo = json.load(f)
@@ -352,7 +355,10 @@ class ExerciseRunner:
         h.cmd("tcpdump -i eth0 -w client.pcap&")
 
     def run_controller(self):
-        os.system("./mycontroller_srtag.py&")
+        if self.not_proactive:
+            os.system("./mycontroller_srtag.py --proactive&")
+        else:
+            os.system("./mycontroller_srtag.py&")
 
 
     def do_net_cli(self):
@@ -412,6 +418,7 @@ def get_args():
     parser.add_argument('-b', '--behavioral-exe', help='Path to behavioral executable',
                                 type=str, required=False, default='/home/vagrant/behavioral-model/targets/simple_switch/simple_switch')
     parser.add_argument('-m', '--manual', action='store_true', dest='manual',help='manual run of the experiment')
+    parser.add_argument('-r', '--retrans_proactive', action='store_true', dest='retrans_proactive',help='install or not proactive rule')
     return parser.parse_args()
 
 
@@ -422,6 +429,7 @@ if __name__ == '__main__':
     args = get_args()
     exercise = ExerciseRunner(args.topo, args.log_dir, args.pcap_dir,
                               args.switch_json, args.manual,
+                              args.retrans_proactive,
                               args.behavioral_exe, args.quiet)
 
     exercise.run_exercise()
